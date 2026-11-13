@@ -66,6 +66,7 @@ class Transition:
 	# Roles allowed to perform it. Empty: system event (``system=True`` or Administrator only).
 	roles: tuple[str, ...] = ()
 	needs_department: bool = False
+	needs_comment: bool = False
 	timestamp_field: str | None = None
 
 	@property
@@ -134,6 +135,7 @@ TRANSITIONS: dict[str, Transition] = {
 		(VISIT_STATUS_IN_CONSULTATION,),
 		VISIT_STATUS_REFERRED,
 		CONSULTING_ROLES,
+		needs_comment=True,
 		timestamp_field="closed_at",
 	),
 }
@@ -157,6 +159,8 @@ REGISTRATION_FIELDS = ("visit_date", "arrived_at", "queue_number", "patient_iden
 PROTECTED_FIELDS = WORKFLOW_FIELDS + REGISTRATION_FIELDS
 # Status log columns that must never change once written (SDD §4.4 audit trail).
 STATUS_LOG_FIELDS = ("from_status", "to_status", "action", "user", "timestamp", "department", "comment")
+# Longest comment kept on a status-log row (NFR-10).
+MAX_COMMENT_LENGTH = 1000
 
 
 def transition(visit: str, action: str, **kwargs):
@@ -177,7 +181,8 @@ def transition(visit: str, action: str, **kwargs):
 
 	system = bool(kwargs.get("system"))
 	department = kwargs.get("department")
-	comment = kwargs.get("comment")
+	comment = (kwargs.get("comment") or "").strip() or None
+	department = (department or "").strip() or None
 	vital_signs = kwargs.get("vital_signs")
 
 	doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)
@@ -191,6 +196,7 @@ def transition(visit: str, action: str, **kwargs):
 			IllegalVisitTransitionError,
 		)
 
+	_validate_comment(rule, comment)
 	from_status = doc.status
 	to_status = _apply(doc, action, rule, department=department)
 
@@ -229,6 +235,23 @@ def _save_from_workflow(doc) -> None:
 		doc.save(ignore_permissions=True)
 	finally:
 		doc.flags.from_workflow = False
+
+
+def _validate_comment(rule: Transition, comment: str | None) -> None:
+	if rule.needs_comment and not comment:
+		frappe.throw(
+			_("Enter a reason for {0}; it is recorded in the visit history.").format(frappe.bold(rule.label)),
+			IllegalVisitTransitionError,
+			title=_("Reason Required"),
+		)
+	if comment and len(comment) > MAX_COMMENT_LENGTH:
+		frappe.throw(
+			_("The comment is {0} characters long; the limit is {1}. Shorten it.").format(
+				len(comment), MAX_COMMENT_LENGTH
+			),
+			IllegalVisitTransitionError,
+			title=_("Comment Too Long"),
+		)
 
 
 def _check_role(doc, action: str, rule: Transition, system: bool) -> None:
@@ -336,6 +359,7 @@ def get_available_actions(doc, user: str | None = None) -> list[dict]:
 				"action": action,
 				"label": rule.label,
 				"needs_department": rule.needs_department,
+				"needs_comment": rule.needs_comment,
 				"is_primary": action in (ACTION_START_TRIAGE, ACTION_ROUTE, ACTION_START_CONSULTATION),
 			}
 		)

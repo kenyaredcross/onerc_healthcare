@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import flt, format_datetime, get_datetime, getdate, now_datetime
 
 from onerc_healthcare.constants import VISIT_CLOSED_STATUSES, VISIT_DOCTYPE, VISIT_STATUS_REGISTERED
 from onerc_healthcare.visit import engine
@@ -17,6 +18,17 @@ from onerc_healthcare.visit.patients import assert_patient_active
 
 class ImplausibleVitalSignsError(frappe.ValidationError):
 	"""A vital sign is not a number or is outside the physiologically plausible range."""
+
+
+class TriageIncompleteError(frappe.ValidationError):
+	"""Triage findings are missing or too long."""
+
+
+# Triage text fields (custom fields from visit/setup.py) and their maximum lengths (NFR-10).
+TRIAGE_TEXT_LIMITS = {"krcs_chief_complaint": 500, "krcs_initial_assessment": 5000}
+# Findings required when triage vital signs linked to a visit are submitted (FR-9).
+TRIAGE_REQUIRED_ON_SUBMIT = ("krcs_triage_level", "krcs_chief_complaint")
+FUTURE_SKEW_MINUTES = 5
 
 
 @dataclass(frozen=True)
@@ -55,7 +67,55 @@ def vital_signs_validate(doc, method=None) -> None:
 		frappe.throw(errors, ImplausibleVitalSignsError, title=_("Check the vital signs"), as_list=True)
 	if doc.bp_systolic and doc.bp_diastolic:
 		doc.bp = f"{doc.bp_systolic}/{doc.bp_diastolic} mmHg"
+	validate_recorded_at(doc)
 	validate_visit_link(doc)
+	errors = check_triage_findings(doc)
+	if errors:
+		frappe.throw(errors, TriageIncompleteError, title=_("Complete the triage"), as_list=True)
+
+
+def validate_recorded_at(doc) -> None:
+	"""Vital signs cannot be recorded in the future (a small clock skew is tolerated)."""
+	if not (doc.signs_date and doc.signs_time):
+		return
+	recorded = get_datetime(f"{getdate(doc.signs_date)} {doc.signs_time}")
+	if recorded > now_datetime() + timedelta(minutes=FUTURE_SKEW_MINUTES):
+		frappe.throw(
+			_("Date and time of the vital signs ({0}) are in the future.").format(
+				frappe.bold(format_datetime(recorded))
+			),
+			ImplausibleVitalSignsError,
+			title=_("Check the date"),
+		)
+
+
+def check_triage_findings(doc) -> list[str]:
+	"""Trim and length-check the triage text; on submit of triage vitals, require the findings (FR-9)."""
+	errors: list[str] = []
+	label = doc.meta.get_label
+	for fieldname, max_length in TRIAGE_TEXT_LIMITS.items():
+		if not doc.meta.has_field(fieldname):
+			continue
+		value = (doc.get(fieldname) or "").strip()
+		doc.set(fieldname, value or None)
+		if len(value) > max_length:
+			errors.append(
+				_("{0} is {1} characters long; the limit is {2}.").format(
+					frappe.bold(_(label(fieldname))), len(value), max_length
+				)
+			)
+	if doc.docstatus == 1 and doc.get("krcs_visit"):
+		for fieldname in TRIAGE_REQUIRED_ON_SUBMIT:
+			if doc.meta.has_field(fieldname) and not doc.get(fieldname):
+				errors.append(
+					_("{0} is required to submit triage vital signs for a visit.").format(
+						frappe.bold(_(label(fieldname)))
+					)
+				)
+		recorded = [f for f in (*(v.fieldname for v in TEXT_VITALS), "weight", "height") if doc.get(f)]
+		if not recorded:
+			errors.append(_("Record at least one vital sign before submitting triage."))
+	return errors
 
 
 def check_vital_signs(doc) -> list[str]:

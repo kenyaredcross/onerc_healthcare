@@ -81,8 +81,22 @@ def make_vital_signs(patient: str, visit: str | None = None, submit: bool = Fals
 	}
 	if visit:
 		values["krcs_visit"] = visit
+		values["krcs_triage_level"] = get_triage_level()
+		values["krcs_chief_complaint"] = "T- cough for three days"
 	values.update(kw)
 	doc = frappe.get_doc(values).insert(ignore_permissions=True)
 	if submit:
 		doc.submit()
 	return doc
+
+
+def get_triage_level() -> str:
+	"""A Triage Level (Marley seeds them; create a T- one if the site has none)."""
+	level = frappe.db.get_value("Triage Level", {}, "name", order_by="priority asc")
+	if level:
+		return level
+	return (
+		frappe.get_doc({"doctype": "Triage Level", "triage_level": "T-Level", "priority": 1})
+		.insert(ignore_permissions=True)
+		.name
+	)

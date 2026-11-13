@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from datetime import timedelta
 
@@ -28,19 +29,26 @@ from onerc_healthcare.constants import (
 	VISIT_STATUS_ROUTED,
 )
 from onerc_healthcare.emr_visit.doctype.patient_visit.patient_visit import VisitStatusLockedError
+from onerc_healthcare.security.matrix import BILLING_DOCTYPES
 from onerc_healthcare.tests.base import EMRTestCase
 from onerc_healthcare.tests.factories import get_facility, make_patient
-from onerc_healthcare.tests.visit_factories import make_visit, make_visit_users, make_vital_signs
-from onerc_healthcare.visit import engine
+from onerc_healthcare.tests.visit_factories import (
+	get_triage_level,
+	make_visit,
+	make_visit_users,
+	make_vital_signs,
+)
+from onerc_healthcare.visit import engine, workspaces
 from onerc_healthcare.visit.engine import (
 	IllegalVisitTransitionError,
 	PharmacyTaskOpenError,
 	apply_action,
 	transition,
 )
-from onerc_healthcare.visit.events import ImplausibleVitalSignsError
+from onerc_healthcare.visit.events import ImplausibleVitalSignsError, TriageIncompleteError
 from onerc_healthcare.visit.patients import MERGED_INTO_FIELD, InactivePatientError
 from onerc_healthcare.visit.queue import get_queue, longest_wait_card, waiting_minutes
+from onerc_healthcare.visit.setup import VISIT_INDEXES
 
 FUTURE = "2099-03-01"
 
@@ -444,8 +452,8 @@ class TestVisitStatusLock(VisitTestCase):
 				doc.save()
 
 	def test_other_fields_still_editable(self):
-		visit = make_visit(is_outreach=1)
-		visit.outreach_session = "T-SESSION-1"
+		visit = make_visit(is_outreach=1, outreach_session="T-SESSION-1")
+		visit.outreach_session = "T-SESSION-2"
 		visit.save(ignore_permissions=True)
 		self.assertEqual(visit.status, VISIT_STATUS_REGISTERED)
 
@@ -735,7 +743,7 @@ class TestTriage(VisitTestCase):
 	def test_vital_signs_submit_starts_triage(self):
 		"""FR-9: submitting triage vital signs moves a Registered visit to In Triage; routing stays manual."""
 		visit = make_visit()
-		level = frappe.db.get_value("Triage Level", {}, "name")
+		level = get_triage_level()
 		vs = make_vital_signs(
 			visit.patient,
 			visit=visit.name,
@@ -749,8 +757,7 @@ class TestTriage(VisitTestCase):
 		visit.reload()
 		self.assertEqual(visit.status, VISIT_STATUS_IN_TRIAGE)
 		self.assertEqual(visit.triage_vital_signs, vs.name)
-		if level:
-			self.assertEqual(visit.triage_level, level)
+		self.assertEqual(visit.triage_level, level)
 		self.assertEqual(visit.status_log[-1].user, self.users["triage"])
 
 		with self.as_user("triage"):
@@ -777,14 +784,214 @@ class TestTriage(VisitTestCase):
 
 
 class TestVisitWorkspaces(VisitTestCase):
-	def test_department_workspaces(self):
-		"""FR-8/BR-3: one workspace per department, restricted to its roles, plus the manager overview."""
-		for dept in DEPARTMENTS:
-			name = f"{dept} Queue"
-			self.assertTrue(frappe.db.exists("Workspace", name), name)
-			ws = frappe.get_doc("Workspace", name)
-			self.assertTrue(ws.roles, name)
-			self.assertTrue(ws.shortcuts, name)
-		overview = frappe.get_doc("Workspace", "Visit Overview")
-		self.assertTrue(overview.number_cards)
-		self.assertTrue(frappe.db.exists("Number Card", "Longest Current Wait"))
+	"""FR-8/BR-3, C-5: department queues live on Marley's Healthcare, Outpatient and Diagnostics pages."""
+
+	def rows(self, workspace: str, child: str) -> list:
+		return frappe.get_all(
+			child, filters={"parenttype": "Workspace", "parent": workspace}, fields=["*"], order_by="idx"
+		)
+
+	def test_old_workspaces_removed(self):
+		for name in workspaces.RETIRED_WORKSPACES:
+			self.assertFalse(frappe.db.exists("Workspace", name), name)
+		self.assertEqual(frappe.get_all("Workspace", filters={"module": "EMR Visit"}), [])
+
+	def test_department_blocks_on_marley_pages(self):
+		for dept, workspace in workspaces.DEPARTMENT_WORKSPACE.items():
+			content = json.loads(frappe.db.get_value("Workspace", workspace, "content"))
+			headers = [b["data"]["text"] for b in content if b["type"] == "header"]
+			self.assertTrue(any(f"{dept} Queue" in h for h in headers), f"{dept} header on {workspace}")
+			quick = {q.label: q for q in self.rows(workspace, "Workspace Quick List")}
+			shortcuts = {r.label for r in self.rows(workspace, "Workspace Shortcut")}
+			block = workspaces.department_block(dept)
+			for ql in block["quick_lists"]:
+				self.assertIn(ql["label"], quick, ql["label"])
+				self.assertEqual(
+					json.loads(quick[ql["label"]].quick_list_filter), json.loads(ql["quick_list_filter"])
+				)
+				self.assertEqual(quick[ql["label"]].document_type, VISIT_DOCTYPE)
+				self.assertIn(ql["label"], [b["data"].get("quick_list_name") for b in content])
+			for sc in block["shortcuts"]:
+				self.assertIn(sc["label"], shortcuts)
+		reception = json.loads(self.rows("Healthcare", "Workspace Quick List")[0].quick_list_filter)
+		self.assertIn([VISIT_DOCTYPE, "status", "=", VISIT_STATUS_REGISTERED], reception)
+		outpatient = {q.label: q for q in self.rows("Outpatient", "Workspace Quick List")}
+		self.assertEqual(
+			json.loads(outpatient[f"{DEPT_MENTAL_HEALTH} Queue"].quick_list_filter),
+			[
+				[VISIT_DOCTYPE, "current_department", "=", DEPT_MENTAL_HEALTH],
+				[VISIT_DOCTYPE, "status", "in", list(VISIT_OPEN_STATUSES)],
+			],
+		)
+		cards = {r.number_card_name for r in self.rows("Healthcare", "Workspace Number Card")}
+		self.assertTrue(set(workspaces.OVERVIEW_CARDS) <= cards)
+
+	def test_no_billing_items(self):
+		"""C-5: no shortcut, link, number card or chart on these pages targets billing."""
+		billing = set(BILLING_DOCTYPES)
+		for workspace in ("Healthcare", "Outpatient", "Diagnostics"):
+			for r in self.rows(workspace, "Workspace Shortcut"):
+				self.assertNotIn(r.link_to, billing, f"{workspace}: {r.label}")
+			for r in self.rows(workspace, "Workspace Link"):
+				self.assertNotIn(r.link_to, billing, f"{workspace}: {r.label}")
+			for r in self.rows(workspace, "Workspace Number Card"):
+				card = frappe.db.get_value(
+					"Number Card", r.number_card_name, ["document_type", "filters_json"], as_dict=True
+				)
+				self.assertNotIn(card.document_type, billing, r.label)
+				self.assertFalse(workspaces.is_billing_filter(card.filters_json), r.label)
+			for r in self.rows(workspace, "Workspace Chart"):
+				chart = frappe.db.get_value(
+					"Dashboard Chart", r.chart_name, ["document_type", "filters_json"], as_dict=True
+				)
+				self.assertNotIn(chart.document_type, billing, r.label)
+				self.assertFalse(workspaces.is_billing_filter(chart.filters_json), r.label)
+			content = json.loads(frappe.db.get_value("Workspace", workspace, "content"))
+			names = [
+				str(b["data"].get("shortcut_name") or b["data"].get("number_card_name")) for b in content
+			]
+			self.assertFalse([n for n in names if "Bill" in n or "Sales Invoice" in n], workspace)
+
+	def test_install_is_idempotent(self):
+		def snapshot():
+			out = {}
+			for workspace in ("Healthcare", "Outpatient", "Diagnostics"):
+				out[workspace] = (
+					frappe.db.get_value("Workspace", workspace, "content"),
+					*(
+						sorted((r.label, r.name) for r in self.rows(workspace, child))
+						for child in ("Workspace Shortcut", "Workspace Quick List", "Workspace Number Card")
+					),
+				)
+			return out
+
+		workspaces.install()
+		before = snapshot()
+		workspaces.install()
+		self.assertEqual(snapshot(), before)
+		for workspace in ("Healthcare", "Outpatient", "Diagnostics"):
+			labels = [r.label for r in self.rows(workspace, "Workspace Shortcut")]
+			self.assertEqual(len(labels), len(set(labels)), workspace)
+
+	def test_reinstall_after_marley_reload(self):
+		"""A Marley update drops our rows and blocks; the next install puts them back once."""
+		frappe.db.delete(
+			"Workspace Quick List",
+			{"parenttype": "Workspace", "parent": "Diagnostics", "label": "Laboratory Queue"},
+		)
+		content = [
+			b
+			for b in json.loads(frappe.db.get_value("Workspace", "Diagnostics", "content"))
+			if not b["id"].startswith(workspaces.BLOCK_PREFIX)
+		]
+		frappe.db.set_value("Workspace", "Diagnostics", "content", json.dumps(content), update_modified=False)
+		workspaces.install()
+		labels = [r.label for r in self.rows("Diagnostics", "Workspace Quick List")]
+		self.assertEqual(labels.count("Laboratory Queue"), 1)
+
+	def test_role_users_load_pages(self):
+		"""Receptionist and Laboratory Technician see their page and its queue widgets."""
+		from frappe.desk.desktop import get_desktop_page, get_workspaces
+
+		for key, workspace, quick in (
+			("reception", "Healthcare", "Reception Queue"),
+			("lab", "Diagnostics", "Laboratory Queue"),
+		):
+			with self.as_user(key):
+				visible = [p["name"] for p in get_workspaces()["pages"]]
+				self.assertIn(workspace, visible, key)
+				page = get_desktop_page(json.dumps({"name": workspace, "title": workspace, "public": 1}))
+				self.assertIn(quick, [q.label for q in page["quick_lists"]["items"]], key)
+				self.assertTrue(page["shortcuts"]["items"], key)
+
+
+class TestVisitValidation(VisitTestCase):
+	"""NFR-10: server-side validation of user-entered visit and triage values, with clear messages."""
+
+	def test_outreach_visit_needs_session(self):
+		with self.assertRaises(frappe.MandatoryError):
+			make_visit(is_outreach=1)
+		with self.assertRaises(frappe.ValidationError):
+			make_visit(is_outreach=1, outreach_session="S" * 141)
+		visit = make_visit(is_outreach=1, outreach_session="  T-SESSION-9  ")
+		self.assertEqual(visit.outreach_session, "T-SESSION-9")
+		facility_visit = make_visit(outreach_session="T-IGNORED")
+		self.assertIsNone(facility_visit.outreach_session)
+
+	def test_mandatory_fields(self):
+		with self.assertRaises(frappe.MandatoryError):
+			frappe.get_doc({"doctype": VISIT_DOCTYPE, "facility": get_facility(0)}).insert(
+				ignore_permissions=True
+			)
+		with self.assertRaises(frappe.ValidationError):
+			frappe.get_doc({"doctype": VISIT_DOCTYPE, "patient": make_patient().name}).insert(
+				ignore_permissions=True
+			)
+
+	def test_referral_needs_reason(self):
+		visit = self.visit_in(VISIT_STATUS_IN_CONSULTATION)
+		for comment in (None, "", "   "):
+			with self.assertRaises(IllegalVisitTransitionError, msg=repr(comment)):
+				self.act(visit, "refer", "clinician", comment=comment)
+		self.assertEqual(
+			frappe.db.get_value(VISIT_DOCTYPE, visit.name, "status"), VISIT_STATUS_IN_CONSULTATION
+		)
+
+	def test_comment_length_limited(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(visit, "route", "triage", department=DEPT_OUTPATIENT, comment="x" * 1001)
+		visit = self.act(visit, "route", "triage", department=DEPT_OUTPATIENT, comment="  Fever  ")
+		self.assertEqual(visit.status_log[-1].comment, "Fever")
+
+	def test_triage_submit_requires_findings(self):
+		"""FR-9: triage vitals for a visit need a triage level, a chief complaint and at least one vital."""
+		for missing in ({"krcs_triage_level": None}, {"krcs_chief_complaint": "  "}):
+			visit = make_visit()
+			vs = make_vital_signs(visit.patient, visit=visit.name, **missing)  # draft save is allowed
+			with self.assertRaises(TriageIncompleteError, msg=str(missing)):
+				vs.submit()
+		visit = make_visit()
+		vs = make_vital_signs(
+			visit.patient,
+			visit=visit.name,
+			temperature="",
+			pulse="",
+			respiratory_rate="",
+			bp_systolic="",
+			bp_diastolic="",
+		)
+		with self.assertRaises(TriageIncompleteError):
+			vs.submit()
+
+	def test_triage_text_length(self):
+		with self.assertRaises(TriageIncompleteError):
+			make_vital_signs(make_patient().name, krcs_chief_complaint="c" * 501)
+		with self.assertRaises(TriageIncompleteError):
+			make_vital_signs(make_patient().name, krcs_initial_assessment="a" * 5001)
+
+	def test_vitals_not_in_future(self):
+		with self.assertRaises(ImplausibleVitalSignsError):
+			make_vital_signs(make_patient().name, signs_date=add_days(today(), 1))
+
+
+class TestVisitIndexes(VisitTestCase):
+	def test_indexes_exist(self):
+		"""NFR-01: queue, workspace and KPI queries are backed by indexes."""
+		table = f"tab{VISIT_DOCTYPE}"
+		for name, columns in VISIT_INDEXES.items():
+			rows = frappe.db.sql(f"SHOW INDEX FROM `{table}` WHERE Key_name=%s", (name,), as_dict=True)
+			self.assertEqual(
+				[r.Column_name for r in sorted(rows, key=lambda r: r.Seq_in_index)], list(columns)
+			)
+		for column in ("patient", "facility", "visit_date", "status", "current_department"):
+			self.assertTrue(frappe.db.get_column_index(table, column, unique=False), column)
+		self.assertTrue(frappe.db.get_column_index("tabVital Signs", "krcs_visit", unique=False))
+
+
+class TestTriageFieldsMarkedMandatory(EMRTestCase):
+	def test_triage_fields_starred_when_linked_to_visit(self):
+		"""FR-9: the form marks Triage Level and Chief Complaint mandatory when vitals belong to a visit."""
+		meta = frappe.get_meta("Vital Signs")
+		for fieldname in ("krcs_triage_level", "krcs_chief_complaint"):
+			self.assertEqual(meta.get_field(fieldname).mandatory_depends_on, "eval:doc.krcs_visit", fieldname)
