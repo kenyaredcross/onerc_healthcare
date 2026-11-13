@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_import": 0,
- "autoname": "format:PV-{YYYY}-{#####}",
+ "autoname": "naming_series:",
  "creation": "2026-11-13 09:00:00.000000",
  "custom": 0,
  "doctype": "DocType",
@@ -9,6 +9,7 @@
  "editable_grid": 0,
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "patient_section",
   "patient",
   "patient_name",
@@ -42,6 +43,18 @@
   "status_log"
  ],
  "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "PV-.YYYY.-",
+   "default": "PV-.YYYY.-",
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
   {
    "fieldname": "patient_section",
    "fieldtype": "Section Break",
@@ -273,11 +286,11 @@
   }
  ],
  "links": [],
- "modified": "2026-11-13 12:00:00.000000",
+ "modified": "2026-11-13 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Visit",
  "name": "Patient Visit",
- "naming_rule": "Expression",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {

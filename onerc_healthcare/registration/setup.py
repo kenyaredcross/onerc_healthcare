@@ -33,7 +33,6 @@ from onerc_healthcare.registration.identifiers import (
 )
 from onerc_healthcare.registration.names import FIRST_NAME_KEY_FIELD, LAST_NAME_KEY_FIELD, name_key
 from onerc_healthcare.registration.residence import ensure_level_options, ensure_residence_root
-from onerc_healthcare.setup.operations import get_operation, get_operation_config
 
 MODULE = "EMR Registration"
 POPULATION_GROUPS = "\nRefugee\nNational\nOther"
@@ -201,7 +200,6 @@ def install() -> None:
 	_apply_seed_updates()
 	create_custom_fields(PATIENT_CUSTOM_FIELDS, ignore_validate=True)
 	set_patient_properties()
-	set_patient_naming_series()
 	backfill_name_keys()
 	ensure_identifier_unique_index()
 	ensure_level_options()
@@ -302,43 +300,6 @@ def set_patient_properties() -> None:
 				"property": "search_fields",
 				"value": ",".join([*search_fields, SEARCH_FIELD]),
 				"property_type": "Data",
-			},
-			validate_fields_for_doctype=False,
-			module=MODULE,
-		)
-
-
-# Marley's Emergency Record names its patients with this series directly, so it must stay an option.
-EMERGENCY_PATIENT_SERIES = "ER-.YYYY.-"
-
-
-def patient_series(abbr: str) -> str:
-	return f"{abbr}-PAT-.YYYY.-"
-
-
-def set_patient_naming_series() -> None:
-	"""Patient IDs carry the operation's abbreviation: KLB-PAT-2026-00001 / DDB-PAT-2026-00001.
-
-	Each operation is its own site and database, so a shared prefix (Marley's HLC-PAT-) would give both
-	sites the same IDs. Applied only while no naming-series property setter exists, so an admin's later
-	choice in Document Naming Settings survives migrate.
-	"""
-	op = get_operation()
-	if not op or _has_property_setter("Patient", "options", "naming_series"):
-		return
-	series = patient_series(get_operation_config(op)["abbr"])
-	for prop, value, ptype in (
-		("options", f"{series}\n{EMERGENCY_PATIENT_SERIES}", "Text"),
-		("default", series, "Text"),
-	):
-		frappe.make_property_setter(
-			{
-				"doctype": "Patient",
-				"doctype_or_field": "DocField",
-				"fieldname": "naming_series",
-				"property": prop,
-				"value": value,
-				"property_type": ptype,
 			},
 			validate_fields_for_doctype=False,
 			module=MODULE,

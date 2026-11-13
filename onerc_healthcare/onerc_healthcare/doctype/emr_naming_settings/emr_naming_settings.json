@@ -1,0 +1,80 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 15:00:00.000000",
+ "custom": 0,
+ "description": "Record ID series per operation (DECISIONS D19).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "prefix_section",
+  "id_prefix",
+  "column_break_prefix",
+  "help",
+  "rules_section",
+  "rules"
+ ],
+ "fields": [
+  {
+   "fieldname": "prefix_section",
+   "fieldtype": "Section Break",
+   "label": "ID Prefix"
+  },
+  {
+   "fieldname": "id_prefix",
+   "fieldtype": "Data",
+   "label": "ID Prefix",
+   "reqd": 1,
+   "description": "2-8 capital letters or digits that start every record ID on this site, e.g. KLB or DDB. Keep it different from the other operation's site."
+  },
+  {
+   "fieldname": "column_break_prefix",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "help",
+   "fieldtype": "HTML",
+   "label": "How it works",
+   "options": "<div class=\"text-muted small\"><p>Each record type gets the series in its row. <code>{prefix}</code> is replaced by the ID Prefix, <code>.YYYY.</code> by the year, and the counter (<code>#####</code>) is added if you leave it out. Counters restart each year.</p><p>Saving applies the rules straight away. <b>Existing records keep their IDs</b>; only new records use the new series. Untick <i>Enabled</i> to leave a record type as it is.</p><p>Walk-in patient identifiers are set separately, in EMR Registration Settings.</p></div>"
+  },
+  {
+   "fieldname": "rules_section",
+   "fieldtype": "Section Break",
+   "label": "Record ID Series"
+  },
+  {
+   "fieldname": "rules",
+   "fieldtype": "Table",
+   "label": "Rules",
+   "options": "EMR Naming Rule"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-13 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Onerc Healthcare",
+ "name": "EMR Naming Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "EMR System Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1,
+   "email": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

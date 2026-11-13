@@ -95,7 +95,7 @@ class TestVisitRegistration(VisitTestCase):
 		self.assertEqual(str(visit.visit_date), today())
 		self.assertTrue(visit.arrived_at)
 		self.assertTrue(visit.company)
-		self.assertTrue(visit.name.startswith("PV-"))
+		self.assertRegex(visit.name, r"^[A-Z0-9]{2,8}-PV-\d{4}-\d{5}$")
 		self.assertEqual(len(visit.status_log), 1)
 		self.assertEqual(visit.status_log[0].to_status, VISIT_STATUS_REGISTERED)
 		self.assertEqual(visit.status_log[0].user, "Administrator")

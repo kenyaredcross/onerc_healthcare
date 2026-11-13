@@ -61,8 +61,13 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 
 **D18. Price lists.** (C-5) Only selling price lists are disabled. Buying price lists stay available for future pharmacy procurement.
 
-**D19. Patient ID series per operation.**
-- Patient records are named `KLB-PAT-.YYYY.-#####` on Kalobeyei and `DDB-PAT-.YYYY.-#####` on Dadaab, so the two sites never issue the same Patient ID. Marley's `HLC-PAT-` series is replaced through a property setter.
-- Marley's Emergency Record still names its patients `ER-.YYYY.-#####`. That series is hard-coded in Marley, so it stays an option.
-- The series is set only while no naming-series property setter exists, so an admin's later choice in Document Naming Settings survives migrate.
-- Set on 2026-11-13, before any patient existed.
+**D19. Record ID series per operation, set in EMR Naming Settings.**
+- Each site is its own database, so Marley's shared prefixes (HLC-PAT-, HLC-ENC-, HLC-VTS-, ...) would give Kalobeyei and Dadaab identical record IDs. Every clinical record type therefore gets a series that starts with the site's **ID Prefix** (KLB / DDB), e.g. `KLB-PAT-2026-00001`, `DDB-ENC-2026-00001`.
+- **EMR Naming Settings** (`/app/emr-naming-settings`, System Manager and EMR System Administrator) holds the prefix and one rule per record type. It covers the 16 record types listed in `onerc_healthcare/naming.py::DEFAULT_RULES`: Patient, Patient Visit, Encounter, Vital Signs, Observation, Sample Collection, Diagnostic Report, Lab Test, Medication Request, Service Request, Clinical Procedure, Inpatient Record, Discharge Summary, Medication Administration, Emergency Record and Patient Appointment.
+- Saving applies the rules as property setters on each record type's `naming_series` field. Existing records keep their IDs.
+- The settings are seeded once per site on install or migrate, after which only the page changes them. Use the page rather than Document Naming Settings, because the page re-applies its own rules.
+- Patient Visit moved from `format:PV-{YYYY}-{#####}` to a naming series so it can be configured too.
+- Marley's Emergency Record names its patients `ER-.YYYY.-` in code, so that option stays available on Patient.
+- Clinical Note is named `{patient}-{reference}-#####`, which already contains the prefixed Patient ID, so it needs no rule.
+- Walk-in identifiers are configured separately in EMR Registration Settings.
+- Set on 2026-11-13, before any clinical record existed.

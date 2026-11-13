@@ -679,17 +679,3 @@ class TestReviewFixes(EMRTestCase):
 		self.assertTrue(
 			frappe.db.exists("Comment", {"reference_name": twin.name, "content": ["like", "%Twin sister%"]})
 		)
-
-
-class TestPatientNaming(EMRTestCase):
-	def test_patient_id_carries_operation_abbreviation(self):
-		"""Patient IDs are prefixed per operation (KLB-PAT- / DDB-PAT-) so the two sites never share IDs."""
-		from onerc_healthcare.registration.setup import EMERGENCY_PATIENT_SERIES, patient_series
-		from onerc_healthcare.setup.operations import get_company_abbr
-
-		series = patient_series(get_company_abbr())
-		field = frappe.get_meta("Patient").get_field("naming_series")
-		self.assertEqual(field.default, series)
-		self.assertIn(EMERGENCY_PATIENT_SERIES, field.options.split("\n"))
-		patient = make_patient()
-		self.assertTrue(patient.name.startswith(f"{get_company_abbr()}-PAT-"), patient.name)

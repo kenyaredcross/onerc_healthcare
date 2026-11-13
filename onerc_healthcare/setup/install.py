@@ -174,6 +174,7 @@ def apply_healthcare_settings() -> None:
 
 def _install_workstreams() -> None:
 	from onerc_healthcare.coding import setup as coding_setup
+	from onerc_healthcare.naming import ensure_naming_settings
 	from onerc_healthcare.registration import setup as registration_setup
 	from onerc_healthcare.security import setup as security_setup
 	from onerc_healthcare.visit import setup as visit_setup
@@ -182,3 +183,4 @@ def _install_workstreams() -> None:
 	visit_setup.install()
 	security_setup.install()
 	coding_setup.install()
+	ensure_naming_settings()
