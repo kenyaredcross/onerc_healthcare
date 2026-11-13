@@ -1,0 +1,97 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 12:00:00.000000",
+ "custom": 0,
+ "description": "Registration configuration (walk-in identifier format, default facility).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "walk_in_section",
+  "walk_in_id_format",
+  "default_registration_facility",
+  "duplicate_section",
+  "similarity_candidate_limit",
+  "seed_version"
+ ],
+ "fields": [
+  {
+   "fieldname": "walk_in_section",
+   "fieldtype": "Section Break",
+   "label": "Walk-in Identifiers (FR-3)"
+  },
+  {
+   "fieldname": "walk_in_id_format",
+   "fieldtype": "Data",
+   "label": "Walk-in Identifier Format",
+   "reqd": 1,
+   "default": "{facility_code}-{YYYY}-{#####}",
+   "description": "Placeholders: {facility_code}, {YYYY}, {YY}, {MM}, and one run of # for the sequence, e.g. {#####}. The counter restarts for every distinct prefix. Format pending OI-13."
+  },
+  {
+   "fieldname": "default_registration_facility",
+   "fieldtype": "Link",
+   "label": "Default Registration Facility",
+   "options": "Healthcare Service Unit",
+   "description": "Used when neither the patient nor the user's default sets a facility."
+  },
+  {
+   "fieldname": "duplicate_section",
+   "fieldtype": "Section Break",
+   "label": "Duplicate Check (FR-2)"
+  },
+  {
+   "fieldname": "similarity_candidate_limit",
+   "fieldtype": "Int",
+   "label": "Similarity Candidate Limit",
+   "default": "500",
+   "description": "How many records matching one name sound are scored, newest first. Exact matches on both names, or on one name with the same date of birth and sex, are always scored."
+  },
+  {
+   "fieldname": "seed_version",
+   "fieldtype": "Int",
+   "label": "Seed Version",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "Internal: version of the one-off seed updates applied by install."
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-13 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Registration",
+ "name": "EMR Registration Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 0,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "HIS Officer",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 0,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

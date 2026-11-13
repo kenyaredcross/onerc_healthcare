@@ -1,0 +1,105 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 12:00:00.000000",
+ "custom": 0,
+ "description": "Identifier held by a Patient (SDD 4.2, 4.3).",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "identifier_type",
+  "identifier_value",
+  "normalised_value",
+  "unique_key",
+  "is_primary",
+  "column_break_verification",
+  "verification_status",
+  "verified_on",
+  "verification_source"
+ ],
+ "fields": [
+  {
+   "fieldname": "identifier_type",
+   "fieldtype": "Link",
+   "label": "Identifier Type",
+   "options": "Patient Identifier Type",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2,
+   "search_index": 1
+  },
+  {
+   "fieldname": "identifier_value",
+   "fieldtype": "Data",
+   "label": "Identifier Value",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "normalised_value",
+   "fieldtype": "Data",
+   "label": "Normalised Value",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Upper case, without spaces or punctuation. Unique per identifier type (FR-2)."
+  },
+  {
+   "fieldname": "unique_key",
+   "fieldtype": "Data",
+   "label": "Unique Key",
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1,
+   "description": "Normalised value when the identifier type is unique, empty otherwise. Carries the DB unique index (FR-2)."
+  },
+  {
+   "fieldname": "is_primary",
+   "fieldtype": "Check",
+   "label": "Primary",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "fetch_from": "identifier_type.is_primary"
+  },
+  {
+   "fieldname": "column_break_verification",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "verification_status",
+   "fieldtype": "Select",
+   "label": "Verification Status",
+   "options": "Unverified\nVerified\nRejected",
+   "default": "Unverified",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "verified_on",
+   "fieldtype": "Date",
+   "label": "Verified On",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "verification_source",
+   "fieldtype": "Data",
+   "label": "Verification Source",
+   "description": "How the identifier was verified, e.g. document sighted, UNHCR proGres, DHA Client Registry."
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-13 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Registration",
+ "name": "Patient Identifier",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

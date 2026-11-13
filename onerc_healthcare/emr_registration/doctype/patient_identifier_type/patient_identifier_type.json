@@ -1,0 +1,185 @@
+{
+ "actions": [],
+ "autoname": "field:identifier_type_name",
+ "creation": "2026-11-13 12:00:00.000000",
+ "custom": 0,
+ "description": "Kinds of patient identifier (UNHCR ID, Proof of Life Number, Alien ID, ...). FR-1, C-6.",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "engine": "InnoDB",
+ "field_order": [
+  "identifier_type_name",
+  "is_primary",
+  "is_unique",
+  "population_group",
+  "column_break_main",
+  "enabled",
+  "value_pattern",
+  "pattern_hint",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "identifier_type_name",
+   "fieldtype": "Data",
+   "label": "Identifier Type Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "is_primary",
+   "fieldtype": "Check",
+   "label": "Is Primary",
+   "default": "0",
+   "in_list_view": 1,
+   "description": "A primary identifier satisfies the rule that every non-walk-in patient has one (FR-1, C-6)."
+  },
+  {
+   "fieldname": "is_unique",
+   "fieldtype": "Check",
+   "label": "Is Unique",
+   "default": "1",
+   "in_list_view": 1,
+   "description": "Each value may belong to only one patient (FR-2). Untick for shared identifiers such as household ration cards."
+  },
+  {
+   "fieldname": "population_group",
+   "fieldtype": "Select",
+   "label": "Default Population Group",
+   "options": "\nRefugee\nNational\nOther",
+   "in_list_view": 1,
+   "description": "Copied to the patient's Population Group when it is left empty."
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "value_pattern",
+   "fieldtype": "Data",
+   "label": "Value Pattern",
+   "description": "Optional regular expression the trimmed, upper-case value must match (NFR-10)."
+  },
+  {
+   "fieldname": "pattern_hint",
+   "fieldtype": "Data",
+   "label": "Pattern Hint",
+   "description": "Example shown in the error message, e.g. KAK-123456."
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-13 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Registration",
+ "name": "Patient Identifier Type",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "HIS Officer",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Nurse Receptionist",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Triage Nurse",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Clinical Officer",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Mental Health Officer",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Laboratory Technician",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Pharmacist",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Outreach Team Member",
+   "read": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "is_primary,population_group",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "identifier_type_name",
+ "track_changes": 1
+}
