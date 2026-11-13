@@ -173,6 +173,8 @@ class TestDeleteGuard(EMRTestCase):
 		for doctype in CLINICAL_DOCTYPES:
 			if frappe.db.exists("DocType", doctype):
 				self.assertTrue(frappe.get_meta(doctype).has_field(ARCHIVED_FIELD), doctype)
+				names = [df.fieldname for df in frappe.get_meta(doctype).fields]
+				self.assertEqual(names[-2:], ["krcs_archive_section", ARCHIVED_FIELD], doctype)
 
 
 class TestRoleMatrix(EMRTestCase):

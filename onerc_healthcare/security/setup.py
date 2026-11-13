@@ -18,6 +18,8 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from onerc_healthcare.constants import ALL_ROLES, CLINICAL_DOCTYPES, ROLE_SYSADMIN, VISIT_DOCTYPE
 from onerc_healthcare.security import matrix
 from onerc_healthcare.security.delete_guard import ARCHIVED_FIELD
+
+ARCHIVE_SECTION_FIELD = "krcs_archive_section"
 from onerc_healthcare.security.permissions import (
 	apply_matrix,
 	clear_perm_cache,
@@ -125,19 +127,45 @@ def apply_fixups() -> None:
 
 
 def add_archived_fields() -> None:
-	"""`krcs_archived` on each clinical DocType that exists (Patient Visit once it is migrated)."""
-	field = {
-		"fieldname": ARCHIVED_FIELD,
-		"label": "Archived",
-		"fieldtype": "Check",
-		"default": "0",
-		"allow_on_submit": 1,
-		"no_copy": 1,
-		"in_standard_filter": 1,
-		"description": "Inactive record kept for retrieval; clinical records are never deleted (NFR-9).",
-	}
-	fields = {dt: [dict(field)] for dt in CLINICAL_DOCTYPES if doctype_exists(dt)}
+	"""`krcs_archived` in its own "Archive" section at the end of each clinical DocType that exists.
+
+	The section is re-anchored after the form's current last field on every run, so it stays at the
+	bottom when Marley or other workstreams add fields later.
+	"""
+	fields = {}
+	for dt in CLINICAL_DOCTYPES:
+		if not doctype_exists(dt):
+			continue
+		last = _last_field(dt)
+		if not last:
+			continue
+		fields[dt] = [
+			{
+				"fieldname": ARCHIVE_SECTION_FIELD,
+				"label": "Archive",
+				"fieldtype": "Section Break",
+				"insert_after": last,
+			},
+			{
+				"fieldname": ARCHIVED_FIELD,
+				"label": "Archived",
+				"fieldtype": "Check",
+				"default": "0",
+				"allow_on_submit": 1,
+				"no_copy": 1,
+				"in_standard_filter": 1,
+				"insert_after": ARCHIVE_SECTION_FIELD,
+				"description": "Inactive record kept for retrieval; clinical records are never deleted (NFR-9).",
+			},
+		]
 	create_custom_fields(fields, ignore_validate=True)
+
+
+def _last_field(doctype: str) -> str | None:
+	"""The form's last field, ignoring our own archive fields."""
+	ours = (ARCHIVE_SECTION_FIELD, ARCHIVED_FIELD)
+	names = [df.fieldname for df in frappe.get_meta(doctype).fields if df.fieldname not in ours]
+	return names[-1] if names else None
 
 
 # ---------------------------------------------------------------------------
