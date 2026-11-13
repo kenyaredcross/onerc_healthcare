@@ -1,7 +1,223 @@
 # Copyright (c) 2026, Lennox Mwita and contributors
 # For license information, please see license.txt
-"""A3 Roles, security, billing lock-down and delete guard install hook. Called by setup/install.py on after_install and after_migrate. Must be idempotent."""
+"""A3 roles, permissions, billing lock-down, delete guard and session security.
+
+Called by setup/install.py on after_install and after_migrate. Idempotent, never commits.
+
+- Every run: Custom DocPerms from security.matrix (missing rows only), delete stripped from the clinical
+  DocTypes only (NFR-9), the bulk-deletion routes closed (Transaction Deletion Record, Company delete),
+  billing rights removed from EMR roles and selling price lists disabled (C-5), billing workspaces
+  restricted, ``krcs_archived`` added to clinical DocTypes.
+- First run only (so admin edits survive): role settings, System Settings, Website Settings.
+- One-off fix-ups (marker ``krcs_security_fixups_v2``): undo the over-reach of the first version.
+"""
+
+import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+from onerc_healthcare.constants import ALL_ROLES, CLINICAL_DOCTYPES, ROLE_SYSADMIN, VISIT_DOCTYPE
+from onerc_healthcare.security import matrix
+from onerc_healthcare.security.delete_guard import ARCHIVED_FIELD
+from onerc_healthcare.security.permissions import (
+	apply_matrix,
+	clear_perm_cache,
+	doctype_exists,
+	ensure_custom_perms,
+	remove_role_perms,
+	restore_standard_delete,
+	set_perm_values,
+	strip_delete,
+)
+
+ROLE_SETTINGS_MARKER = "krcs_security_role_settings_v1"
+SYSTEM_SETTINGS_MARKER = "krcs_security_system_settings_v1"
+FIXUPS_MARKER = "krcs_security_fixups_v2"
 
 
 def install() -> None:
-	pass
+	apply_role_settings()
+	apply_permissions()
+	close_bulk_deletion()
+	apply_fixups()
+	lock_down_billing()
+	add_archived_fields()
+	apply_session_security()
+
+
+# ---------------------------------------------------------------------------
+# Roles (SDD §6.1)
+# ---------------------------------------------------------------------------
+def apply_role_settings() -> None:
+	"""Desk access, home page and 2FA flag per role. First run only."""
+	if frappe.db.get_default(ROLE_SETTINGS_MARKER):
+		return
+	for role, values in matrix.ROLE_SETTINGS.items():
+		if not frappe.db.exists("Role", role):
+			continue
+		doc = frappe.get_doc("Role", role)
+		doc.update(values)
+		doc.save(ignore_permissions=True)
+	frappe.db.set_default(ROLE_SETTINGS_MARKER, "1")
+
+
+# ---------------------------------------------------------------------------
+# Permissions (FR-39) and delete lock-down (NFR-9)
+# ---------------------------------------------------------------------------
+def clinical_doctypes_with_custom_perms() -> list[str]:
+	"""Clinical DocTypes we own the perms of. Patient Visit is ours: its perms live in its JSON."""
+	return [dt for dt in CLINICAL_DOCTYPES if dt != VISIT_DOCTYPE and doctype_exists(dt)]
+
+
+def apply_permissions() -> None:
+	touched = []
+	touched += apply_matrix(matrix.CLINICAL_MATRIX)
+	touched += apply_matrix(matrix.MASTER_MATRIX)
+	touched += apply_matrix(matrix.ADMIN_MATRIX)
+
+	# Clinical DocTypes outside the Phase 1 matrix still get Custom DocPerms, so delete can be removed
+	# from System Manager and the Marley roles too (SDD §4.6).
+	clinical = clinical_doctypes_with_custom_perms()
+	for doctype in clinical:
+		ensure_custom_perms(doctype)
+	touched += clinical
+
+	# Delete is removed from clinical DocTypes only (SDD §4.6). Admin and master DocTypes keep the
+	# standard delete rights of System Manager / Healthcare Administrator; EMR roles never get delete.
+	# Patient Visit keeps its JSON perms; only clear delete if someone added Custom DocPerms.
+	strip_delete(list(CLINICAL_DOCTYPES))
+	clear_perm_cache([*touched, VISIT_DOCTYPE])
+
+
+def close_bulk_deletion() -> None:
+	"""NFR-9: ERPNext's Transaction Deletion Record bulk-deletes company-linked rows with
+	``frappe.db.delete``, bypassing on_trash. No role may create or submit one; Company delete (the
+	permission ``create_transaction_deletion_request`` checks) is removed too. Enforced every run.
+	The record itself is inserted with ignore_permissions by ERPNext, so the real stop is the
+	``delete_guard.block_transaction_deletion`` hook plus ``company_data_to_be_ignored``.
+	"""
+	changed = []
+	for doctype, values in matrix.BULK_DELETION_PERMS.items():
+		if doctype_exists(doctype) and set_perm_values(doctype, values):
+			changed.append(doctype)
+	clear_perm_cache(changed)
+
+
+def apply_fixups() -> None:
+	"""One-off corrections of the first version, which over-reached. Marker-guarded so admin edits
+	made afterwards survive."""
+	if frappe.db.get_default(FIXUPS_MARKER):
+		return
+	# M7: restore the standard delete rights on the admin and master DocTypes.
+	doctypes = [
+		dt
+		for dt in [*matrix.MASTER_MATRIX, *matrix.ADMIN_MATRIX]
+		if dt not in CLINICAL_DOCTYPES and doctype_exists(dt)
+	]
+	restore_standard_delete(doctypes, exclude_roles=ALL_ROLES)
+	# L4: the EMR System Administrator reads System Settings but cannot switch off NFR-5 controls.
+	if doctype_exists("System Settings"):
+		set_perm_values("System Settings", {"write": 0, "create": 0}, roles=[ROLE_SYSADMIN])
+	# L5: only selling price lists are disabled (C-5); re-enable buying-only lists we disabled.
+	for name in frappe.get_all("Price List", filters={"enabled": 0, "buying": 1, "selling": 0}, pluck="name"):
+		frappe.db.set_value("Price List", name, "enabled", 1)
+	clear_perm_cache([*doctypes, "System Settings"])
+	frappe.db.set_default(FIXUPS_MARKER, "1")
+
+
+def add_archived_fields() -> None:
+	"""`krcs_archived` on each clinical DocType that exists (Patient Visit once it is migrated)."""
+	field = {
+		"fieldname": ARCHIVED_FIELD,
+		"label": "Archived",
+		"fieldtype": "Check",
+		"default": "0",
+		"allow_on_submit": 1,
+		"no_copy": 1,
+		"in_standard_filter": 1,
+		"description": "Inactive record kept for retrieval; clinical records are never deleted (NFR-9).",
+	}
+	fields = {dt: [dict(field)] for dt in CLINICAL_DOCTYPES if doctype_exists(dt)}
+	create_custom_fields(fields, ignore_validate=True)
+
+
+# ---------------------------------------------------------------------------
+# Billing lock-down (C-5): enforced on every run; it is a hard constraint, not a preference.
+# ---------------------------------------------------------------------------
+def lock_down_billing() -> None:
+	for doctype in matrix.BILLING_DOCTYPES:
+		if doctype_exists(doctype) and remove_role_perms(doctype, ALL_ROLES):
+			clear_perm_cache([doctype])
+	# Selling price lists only: C-5 is about charging patients; buying lists may serve pharmacy procurement.
+	for name in frappe.get_all("Price List", filters={"enabled": 1, "selling": 1}, pluck="name"):
+		frappe.db.set_value("Price List", name, "enabled", 0)
+	restrict_workspaces()
+
+
+def restrict_workspaces() -> None:
+	"""Give the billing/stock workspaces a roles table so EMR-only users never see them.
+
+	Rows are inserted directly instead of saving the Workspace: in developer mode a save would export
+	the change into the ERPNext / Marley JSON files. A workspace that already has roles is left alone.
+	"""
+	added = 0
+	for workspace, roles in matrix.RESTRICTED_WORKSPACES.items():
+		if frappe.db.exists("Workspace", workspace) and not _workspace_roles(workspace):
+			added += _add_workspace_roles(workspace, roles)
+	# The EMR System Administrator manages users, so it needs the (System Manager only) Users workspace.
+	for workspace, roles in matrix.ADMIN_WORKSPACES.items():
+		if frappe.db.exists("Workspace", workspace):
+			added += _add_workspace_roles(workspace, roles)
+	if added:
+		from frappe.cache_manager import clear_user_cache
+
+		clear_user_cache()
+
+
+def _workspace_roles(workspace: str) -> list[str]:
+	return frappe.get_all("Has Role", filters={"parenttype": "Workspace", "parent": workspace}, pluck="role")
+
+
+def _add_workspace_roles(workspace: str, roles) -> int:
+	"""Insert missing Has Role rows directly (no Workspace save, see restrict_workspaces)."""
+	existing = _workspace_roles(workspace)
+	idx = len(existing)
+	for role in roles:
+		if role in existing or not frappe.db.exists("Role", role):
+			continue
+		idx += 1
+		row = frappe.new_doc("Has Role")
+		row.update(
+			{
+				"name": frappe.generate_hash(length=10),
+				"parent": workspace,
+				"parenttype": "Workspace",
+				"parentfield": "roles",
+				"role": role,
+				"idx": idx,
+			}
+		)
+		row.db_insert()
+	return idx - len(existing)
+
+
+# ---------------------------------------------------------------------------
+# Authentication and sessions (NFR-5, NFR-8, SDD §6.3). First run only.
+# ---------------------------------------------------------------------------
+def apply_session_security() -> None:
+	if frappe.db.get_default(SYSTEM_SETTINGS_MARKER):
+		return
+	settings = frappe.get_single("System Settings")
+	settings.update(matrix.SYSTEM_SETTINGS)
+	settings.flags.ignore_mandatory = True
+	settings.save(ignore_permissions=True)
+
+	# Enabling 2FA makes Frappe switch it on for the "All" role, i.e. everyone. SDD §6.3 asks for it on
+	# the System Administrator and HIS Officer only, and available to all, so keep it per role.
+	frappe.db.set_value("Role", "All", "two_factor_auth", 0)
+	for role, values in matrix.ROLE_SETTINGS.items():
+		if frappe.db.exists("Role", role):
+			frappe.db.set_value("Role", role, "two_factor_auth", values.get("two_factor_auth", 0))
+
+	for field, value in matrix.WEBSITE_SETTINGS.items():
+		frappe.db.set_single_value("Website Settings", field, value)
+	frappe.db.set_default(SYSTEM_SETTINGS_MARKER, "1")
