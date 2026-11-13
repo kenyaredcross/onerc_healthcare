@@ -121,6 +121,7 @@ def seed_operation(op: str) -> None:
 	create_custom_fields(HSU_CUSTOM_FIELDS, ignore_validate=True)
 	_seed_facilities(cfg)
 	_seed_departments()
+	_seed_inpatient_unit_types()
 	seed_lab(cfg)
 
 
@@ -152,6 +153,25 @@ def _seed_facilities(cfg: dict) -> None:
 				"krcs_county": cfg["county"],
 			}
 		).insert(ignore_permissions=True)
+
+
+# Inpatient unit types (ORG-25). Non-billable (C-5); Marley requires appointments or occupancy, and
+# Ward/Bed units hold inpatients. Wards and beds themselves are created per facility in Wave 2 (OI-18).
+INPATIENT_UNIT_TYPES = ("Ward", "Bed")
+
+
+def _seed_inpatient_unit_types() -> None:
+	for unit_type in INPATIENT_UNIT_TYPES:
+		if not frappe.db.exists("Healthcare Service Unit Type", unit_type):
+			frappe.get_doc(
+				{
+					"doctype": "Healthcare Service Unit Type",
+					"service_unit_type": unit_type,
+					"inpatient_occupancy": 1,
+					"allow_appointments": 0,
+					"is_billable": 0,
+				}
+			).insert(ignore_permissions=True)
 
 
 def _seed_departments() -> None:

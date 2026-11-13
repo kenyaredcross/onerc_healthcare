@@ -1,0 +1,297 @@
+#!/usr/bin/env python3
+# Copyright (c) 2026, Lennox Mwita and contributors
+# For license information, please see license.txt
+"""End-to-end smoke test over HTTP, as real role users (HANDOVER §11.7).
+
+Run it against a THROWAWAY site of a running bench: clinical records cannot be deleted (NFR-9), so
+everything it creates stays on that site. Never point it at a live operation site.
+
+    python3 scripts/smoke_test.py --site smoke.localhost --other-site dadaab.localhost \
+        [--url http://127.0.0.1:8004] [--other-url URL] [--admin-password admin]
+
+If the bench has a default_site, `bench serve` answers every Host with that site; then serve each site on
+its own port (`bench --site smoke.localhost serve --port 8010`) and pass --url / --other-url.
+
+Steps:
+1. A Nurse Receptionist registers a patient by UNHCR ID.
+2. The same UNHCR ID (typed differently) is refused.
+3. A walk-in gets a facility-generated ID.
+4. The receptionist starts a visit, and it shows in the reception queue with a waiting time.
+5. A Triage Nurse records and submits vital signs, then routes the patient to Outpatient.
+6. A Clinical Officer sees the patient in the Outpatient queue.
+7. Deleting the visit is refused, even for Administrator.
+8. The receptionist can neither read nor create a Sales Invoice.
+9. Separation: the other operation's site has neither the patient nor the user.
+
+Exit code 0 when every step passes.
+"""
+
+import argparse
+import json
+import random
+import string
+import sys
+from datetime import date, datetime
+
+import requests
+
+PASSWORD = "Smoke!Check#2026-Kx"
+OPEN_STATUSES = [
+	"Registered",
+	"In Triage",
+	"Routed to Department",
+	"In Consultation",
+	"Awaiting Laboratory",
+	"Awaiting Pharmacy",
+]
+results: list[tuple[str, bool, str]] = []
+
+
+def rand(n: int = 6) -> str:
+	return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
+
+
+class Client:
+	def __init__(self, url: str, site: str):
+		self.url, self.s = url.rstrip("/"), requests.Session()
+		self.s.headers.update({"Host": site, "Accept": "application/json"})
+
+	def login(self, usr: str, pwd: str) -> requests.Response:
+		return self.s.post(f"{self.url}/api/method/login", json={"usr": usr, "pwd": pwd})
+
+	def get(self, path: str, **params) -> requests.Response:
+		params = {k: json.dumps(v) if isinstance(v, list | dict) else v for k, v in params.items()}
+		return self.s.get(f"{self.url}{path}", params=params)
+
+	def post(self, path: str, data: dict) -> requests.Response:
+		return self.s.post(f"{self.url}{path}", json=data)
+
+	def delete(self, path: str) -> requests.Response:
+		return self.s.delete(f"{self.url}{path}")
+
+
+def check(step: str, ok: bool, detail: str = "") -> bool:
+	results.append((step, bool(ok), detail))
+	print(f"[{'PASS' if ok else 'FAIL'}] {step}" + (f": {detail}" if detail else ""), flush=True)
+	return bool(ok)
+
+
+def err(r: requests.Response) -> str:
+	try:
+		body = r.json()
+		msg = body.get("exception") or body.get("_server_messages") or body.get("message") or ""
+	except ValueError:
+		msg = r.text[:200]
+	return f"HTTP {r.status_code} {str(msg)[:220]}"
+
+
+def main() -> int:
+	ap = argparse.ArgumentParser()
+	ap.add_argument("--site", required=True)
+	ap.add_argument("--other-site", required=True)
+	ap.add_argument("--url", default="http://127.0.0.1:8004")
+	ap.add_argument("--other-url", help="URL serving --other-site (default: --url, routed by Host header)")
+	ap.add_argument("--admin-password", default="admin")
+	ap.add_argument("--facility", default="Natukobenyo Health and Community Centre - KLB")
+	ap.add_argument("--facility-code", default="NTK")
+	a = ap.parse_args()
+
+	admin = Client(a.url, a.site)
+	if not check("Administrator login", admin.login("Administrator", a.admin_password).ok):
+		return 1
+
+	tag = rand(4).lower()
+	users = {
+		"reception": ("Nurse Receptionist", f"smoke-reception-{tag}@test.krcs"),
+		"triage": ("Triage Nurse", f"smoke-triage-{tag}@test.krcs"),
+		"clinician": ("Clinical Officer", f"smoke-clinician-{tag}@test.krcs"),
+	}
+	clients = {}
+	for key, (role, email) in users.items():
+		r = admin.post(
+			"/api/resource/User",
+			{
+				"email": email,
+				"first_name": f"Smoke {key}",
+				"send_welcome_email": 0,
+				"new_password": PASSWORD,
+				"roles": [{"role": role}],
+			},
+		)
+		check(f"Create user {email} ({role})", r.ok, "" if r.ok else err(r))
+		c = Client(a.url, a.site)
+		check(f"{role} login", c.login(email, PASSWORD).ok)
+		clients[key] = c
+	rec, tri, cli = clients["reception"], clients["triage"], clients["clinician"]
+
+	# 1. Register by UNHCR ID
+	unhcr = f"SMK-{rand(8)}"
+	r = rec.post(
+		"/api/resource/Patient",
+		{
+			"first_name": f"Amina{rand(3)}",
+			"last_name": "Smoke",
+			"sex": "Female",
+			"dob": "1994-03-12",
+			"krcs_identifiers": [{"identifier_type": "UNHCR ID", "identifier_value": unhcr}],
+		},
+	)
+	patient = r.json().get("data", {}).get("name") if r.ok else None
+	check("1. Receptionist registers a patient by UNHCR ID", bool(patient), patient or err(r))
+	if not patient:
+		return summary()
+
+	# 2. Duplicate identifier refused (lower case, spaces: normalisation must still match)
+	r = rec.post(
+		"/api/resource/Patient",
+		{
+			"first_name": f"Other{rand(3)}",
+			"last_name": "Smoke",
+			"sex": "Male",
+			"dob": "1990-01-01",
+			"krcs_identifiers": [
+				{"identifier_type": "UNHCR ID", "identifier_value": " " + unhcr.lower().replace("-", " ")}
+			],
+		},
+	)
+	check("2. Duplicate UNHCR ID is refused", not r.ok, err(r))
+
+	# 3. Walk-in gets a facility-generated identifier
+	r = rec.post(
+		"/api/resource/Patient",
+		{
+			"first_name": f"Walkin{rand(3)}",
+			"last_name": "Smoke",
+			"sex": "Male",
+			"dob": "1988-07-01",
+			"krcs_is_walk_in": 1,
+			"krcs_registration_facility": a.facility,
+		},
+	)
+	ids = (
+		[i.get("identifier_value") for i in r.json().get("data", {}).get("krcs_identifiers", [])]
+		if r.ok
+		else []
+	)
+	year = date.today().year
+	check(
+		"3. Walk-in gets a facility ID",
+		any(str(v).startswith(f"{a.facility_code}-{year}-") for v in ids),
+		str(ids) if r.ok else err(r),
+	)
+
+	# 4. Start a visit; it shows in the queue with a waiting time
+	r = rec.post("/api/resource/Patient Visit", {"patient": patient, "facility": a.facility})
+	visit = r.json().get("data", {}) if r.ok else {}
+	check(
+		"4a. Receptionist starts a visit",
+		visit.get("status") == "Registered",
+		f"{visit.get('name')} status={visit.get('status')} queue={visit.get('queue_number')}"
+		if r.ok
+		else err(r),
+	)
+	if not visit:
+		return summary()
+	r = rec.get("/api/method/onerc_healthcare.visit.queue.get_queue", facility=a.facility)
+	row = (
+		next((q for q in (r.json().get("message") or []) if q.get("name") == visit["name"]), None)
+		if r.ok
+		else None
+	)
+	check(
+		"4b. Visit is in the reception queue with a waiting time",
+		row is not None and "waiting_minutes" in row,
+		f"waiting_minutes={row.get('waiting_minutes')}" if row else err(r),
+	)
+
+	# 5. Triage: vital signs submitted, then route to Outpatient
+	now = datetime.now()
+	r = tri.post(
+		"/api/resource/Vital Signs",
+		{
+			"patient": patient,
+			"signs_date": now.date().isoformat(),
+			"signs_time": now.strftime("%H:%M:%S"),
+			"temperature": "37.2",
+			"pulse": "84",
+			"respiratory_rate": "18",
+			"bp_systolic": "118",
+			"bp_diastolic": "76",
+			"krcs_visit": visit["name"],
+			"krcs_chief_complaint": "Fever for two days",
+			"krcs_triage_level": "Non-urgent",
+			"docstatus": 1,
+		},
+	)
+	check(
+		"5a. Triage Nurse records and submits vital signs", r.ok, r.json()["data"]["name"] if r.ok else err(r)
+	)
+	status = admin.get(f"/api/resource/Patient Visit/{visit['name']}").json().get("data", {}).get("status")
+	check("5b. Submitting vital signs starts triage", status == "In Triage", f"status={status}")
+	r = tri.post(
+		"/api/method/onerc_healthcare.visit.engine.apply_action",
+		{"visit": visit["name"], "action": "route", "department": "Outpatient"},
+	)
+	status = admin.get(f"/api/resource/Patient Visit/{visit['name']}").json().get("data", {})
+	check(
+		"5c. Triage Nurse routes the patient to Outpatient",
+		r.ok
+		and status.get("status") == "Routed to Department"
+		and status.get("current_department") == "Outpatient",
+		f"status={status.get('status')} dept={status.get('current_department')}" if r.ok else err(r),
+	)
+
+	# 6. Clinician sees the patient in the Outpatient queue
+	r = cli.get(
+		"/api/resource/Patient Visit",
+		filters=[["current_department", "=", "Outpatient"], ["status", "in", OPEN_STATUSES]],
+		fields=["name", "patient", "status"],
+		limit_page_length=100,
+	)
+	names = [v["name"] for v in r.json().get("data", [])] if r.ok else []
+	check(
+		"6. Clinical Officer sees the patient in the Outpatient queue",
+		visit["name"] in names,
+		err(r) if not r.ok else "",
+	)
+
+	# 7. Delete refused, even for Administrator
+	r = admin.delete(f"/api/resource/Patient Visit/{visit['name']}")
+	still = admin.get(f"/api/resource/Patient Visit/{visit['name']}").ok
+	check("7. Deleting the visit is refused (Administrator)", not r.ok and still, err(r))
+
+	# 8. No billing for the receptionist
+	r_read = rec.get("/api/resource/Sales Invoice")
+	r_new = rec.post("/api/resource/Sales Invoice", {"customer": "x", "items": []})
+	check(
+		"8. Receptionist cannot read or create a Sales Invoice",
+		r_read.status_code == 403 and r_new.status_code == 403,
+		f"read HTTP {r_read.status_code}, create HTTP {r_new.status_code}",
+	)
+
+	# 9. Separation from the other operation's site
+	other_url = a.other_url or a.url
+	other_admin = Client(other_url, a.other_site)
+	other_admin.login("Administrator", a.admin_password)
+	r = other_admin.get(f"/api/resource/Patient/{patient}")
+	check(
+		f"9a. {a.other_site} does not have patient {patient}", r.status_code == 404, f"HTTP {r.status_code}"
+	)
+	other_rec = Client(other_url, a.other_site)
+	check(
+		f"9b. The receptionist cannot log in to {a.other_site}",
+		not other_rec.login(users["reception"][1], PASSWORD).ok,
+	)
+	return summary()
+
+
+def summary() -> int:
+	failed = [s for s, ok, _ in results if not ok]
+	print(f"\n{len(results) - len(failed)}/{len(results)} checks passed")
+	for s in failed:
+		print(f"  FAILED: {s}")
+	return 1 if failed else 0
+
+
+if __name__ == "__main__":
+	sys.exit(main())

@@ -71,3 +71,33 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 - Clinical Note is named `{patient}-{reference}-#####`, which already contains the prefixed Patient ID, so it needs no rule.
 - Walk-in identifiers are configured separately in EMR Registration Settings.
 - Set on 2026-11-13, before any clinical record existed.
+
+**D20. Branch strategy.**
+- `main` holds released code only; each production deployment is a tag on `main`.
+- `develop` is the integration branch.
+- Work happens on `feat/<topic>` or `fix/<topic>` branches that merge into `develop` by pull request after review. `develop` merges into `main` for a release.
+- Phase 1 lives on the local branch `feat/emr-phase-1`. It is pushed and opened as a PR into `develop` once `develop` and `main` exist on the remote. Today the remote has only `feat/patient-registration`.
+- Commits stay local until the owner decides to push.
+
+**D21. Scheduler.**
+- The scheduler is enabled on the operation sites (kalobeyei, dadaab), and background workers run under `bench start` in development and Supervisor in production.
+- `emr-test.localhost` keeps automated tests isolated: Frappe's test runner disables the scheduler during runs.
+
+**D22. Strict user permissions.**
+- System Settings "Apply strict user permissions" stays **off** for Phase 1. Separation between operations comes from separate sites (D3), and no User Permissions are used inside a site yet.
+- Revisit together with SEP-14 if OI-12 decides that users see only their own facility's records.
+
+**D23. Inpatient unit types.**
+- Healthcare Service Unit Types **Ward** and **Bed** are seeded on every site: inpatient occupancy, not billable (C-5).
+- The wards and beds themselves are created per facility when inpatient care is scoped (Wave 2, OI-18).
+
+**D24. Department queues live on Marley's workspaces.** (FR-8, BR-3)
+- The EMR has no workspaces of its own. Each department's queue is a labelled block (header, shortcuts, quick list) on one of Marley's pages:
+  - **Healthcare:** Reception, Triage, Pharmacy and Health Information queues, plus the Visit Overview number cards.
+  - **Outpatient:** Outpatient, Maternal and Child Health, Mental Health and Nutrition queues.
+  - **Diagnostics:** Laboratory queue.
+- `visit/workspaces.py` applies this on every migrate. It writes child rows and content directly and never saves Marley's workspaces, so nothing is exported into Marley's files even in developer mode.
+- The changes are idempotent and restored after a Marley upgrade.
+- Billing items (Sales Invoice shortcuts, "Appointments To Bill" cards) are removed from these pages by rule (C-5).
+- If an admin customises one of these pages in the desk, Frappe shows the admin's saved layout instead, and our blocks stop showing.
+- Decided by the user on 2026-11-13, replacing the 10 separate EMR workspaces.

@@ -109,3 +109,17 @@ class TestInstall(EMRTestCase):
 
 		ignored = set(frappe.get_hooks("company_data_to_be_ignored"))
 		self.assertTrue(set(CLINICAL_DOCTYPES) <= ignored, set(CLINICAL_DOCTYPES) - ignored)
+
+	def test_inpatient_unit_types(self):
+		"""ORG-25: Ward and Bed unit types exist, hold inpatients and are not billable (C-5)."""
+		from onerc_healthcare.setup.install import INPATIENT_UNIT_TYPES
+
+		for unit_type in INPATIENT_UNIT_TYPES:
+			row = frappe.db.get_value(
+				"Healthcare Service Unit Type",
+				unit_type,
+				["inpatient_occupancy", "is_billable"],
+				as_dict=True,
+			)
+			self.assertIsNotNone(row, unit_type)
+			self.assertEqual((row.inpatient_occupancy, row.is_billable), (1, 0))
