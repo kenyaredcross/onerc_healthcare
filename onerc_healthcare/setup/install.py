@@ -64,29 +64,47 @@ HSU_CUSTOM_FIELDS = {
 }
 
 
+# Default key recording which operation's first-time setup (wizard, seeding, billing-free settings)
+# has run on this site. Lets a site installed before `krcs_operation` was set finish on migrate.
+INITIAL_SETUP_KEY = "krcs_initial_setup"
+
+
 def after_install() -> None:
 	op = get_operation()
-	if not op:
+	if op:
+		initial_setup(op)
+	else:
 		print(
 			"onerc_healthcare: site config krcs_operation is not set (kalobeyei | dadaab); "
-			"skipping operation seeding. Set it and run `bench migrate`."
+			"skipping operation setup. Set it and run `bench migrate` to complete it."
 		)
-		ensure_roles()
-		_install_workstreams()
-		return
-	ensure_setup_complete(op)
-	seed_operation(op)
-	apply_healthcare_settings()
 	ensure_roles()
 	_install_workstreams()
 
 
 def after_migrate() -> None:
 	op = get_operation()
-	if op and frappe.db.exists("Company", get_operation_config(op)["company_name"]):
-		seed_operation(op)
+	if op:
+		if frappe.db.get_default(INITIAL_SETUP_KEY) != op:
+			initial_setup(op)
+		else:
+			seed_operation(op)
 	ensure_roles()
 	_install_workstreams()
+
+
+def initial_setup(op: str) -> None:
+	"""First-time setup for the site's operation: wizard, seeding and billing-free settings (C-5)."""
+	ensure_setup_complete(op)
+	company = get_operation_config(op)["company_name"]
+	if not frappe.db.exists("Company", company):
+		frappe.throw(
+			f"Setup is complete but company {company!r} for operation {op!r} does not exist. "
+			"Check site config krcs_operation, or create the company, then run `bench migrate`."
+		)
+	seed_operation(op)
+	apply_healthcare_settings()
+	frappe.db.set_default(INITIAL_SETUP_KEY, op)
 
 
 def ensure_roles() -> None:

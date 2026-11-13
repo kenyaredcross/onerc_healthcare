@@ -1,3 +1,5 @@
+from onerc_healthcare.constants import CLINICAL_DOCTYPES
+
 app_name = "onerc_healthcare"
 app_title = "Onerc Healthcare"
 app_publisher = "Lennox Mwita"
@@ -41,9 +43,28 @@ doc_events = {
 		"validate": "onerc_healthcare.visit.events.vital_signs_validate",
 		"on_submit": "onerc_healthcare.visit.events.vital_signs_on_submit",
 	},
+	"User": {
+		"validate": "onerc_healthcare.security.user_guard.user_validate",
+	},
+	"Role Profile": {
+		"validate": "onerc_healthcare.security.user_guard.role_profile_validate",
+	},
+	"Transaction Deletion Record": {
+		"before_insert": "onerc_healthcare.security.delete_guard.block_transaction_deletion",
+		"before_submit": "onerc_healthcare.security.delete_guard.block_transaction_deletion",
+	},
 	"*": {
 		"on_trash": "onerc_healthcare.security.delete_guard.on_trash",
 	},
+}
+
+# ERPNext "Delete Company Transactions" bulk-deletes company-linked DocTypes with frappe.db.delete,
+# bypassing on_trash. Clinical records must never be deleted (NFR-9, SDD §4.6).
+company_data_to_be_ignored = list(CLINICAL_DOCTYPES)
+
+doctype_js = {
+	"Patient": "registration/patient.js",
+	"Vital Signs": "visit/vital_signs.js",
 }
 
 permission_query_conditions = {

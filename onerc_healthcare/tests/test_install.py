@@ -96,3 +96,16 @@ class TestInstall(EMRTestCase):
 
 		for role in ALL_ROLES:
 			self.assertTrue(frappe.db.exists("Role", role), role)
+
+	def test_initial_setup_recorded(self):
+		"""A site installed before krcs_operation was set completes its setup on migrate."""
+		from onerc_healthcare.setup.install import INITIAL_SETUP_KEY
+
+		self.assertEqual(frappe.db.get_default(INITIAL_SETUP_KEY), get_operation())
+
+	def test_company_deletion_ignores_clinical_doctypes(self):
+		"""NFR-9: ERPNext "Delete Company Transactions" must skip every clinical DocType."""
+		from onerc_healthcare.constants import CLINICAL_DOCTYPES
+
+		ignored = set(frappe.get_hooks("company_data_to_be_ignored"))
+		self.assertTrue(set(CLINICAL_DOCTYPES) <= ignored, set(CLINICAL_DOCTYPES) - ignored)
