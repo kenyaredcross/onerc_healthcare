@@ -24,7 +24,7 @@ from onerc_healthcare.constants import (
 )
 from onerc_healthcare.security import matrix
 from onerc_healthcare.security.delete_guard import ARCHIVED_FIELD, on_trash
-from onerc_healthcare.security.setup import clinical_doctypes_with_custom_perms
+from onerc_healthcare.security.setup import billing_fields_to_hide, clinical_doctypes_with_custom_perms
 from onerc_healthcare.security.user_guard import role_profile_validate, user_validate
 from onerc_healthcare.tests.base import EMRTestCase
 from onerc_healthcare.tests.factories import make_patient, make_user
@@ -90,6 +90,61 @@ class TestBillingLockDown(EMRTestCase):
 			"Has Role", filters={"parenttype": "Workspace", "parent": "Users"}, pluck="role"
 		)
 		self.assertIn(ROLE_SYSADMIN, roles)
+
+
+class TestBillingFieldsHidden(EMRTestCase):
+	def test_every_billing_field_hidden(self):
+		"""C-5 / BIL-04: every listed field that exists is hidden, out of print and out of list view."""
+		for doctype, fieldnames in matrix.BILLING_FIELDS.items():
+			if not frappe.db.exists("DocType", doctype):
+				continue
+			meta = frappe.get_meta(doctype)
+			for fieldname in fieldnames:
+				df = meta.get_field(fieldname)
+				if not df:
+					continue
+				self.assertEqual(df.hidden, 1, f"{doctype}.{fieldname}")
+				self.assertEqual(df.print_hide, 1, f"{doctype}.{fieldname}")
+				self.assertFalse(df.in_list_view, f"{doctype}.{fieldname}")
+
+	def test_no_listed_field_is_mandatory(self):
+		"""Hiding never hides a mandatory field, so no form becomes impossible to save."""
+		for doctype in matrix.BILLING_FIELDS:
+			if not frappe.db.exists("DocType", doctype):
+				continue
+			_hide, refused = billing_fields_to_hide(doctype)
+			self.assertEqual(refused, [], doctype)
+			meta = frappe.get_meta(doctype)
+			for fieldname in matrix.BILLING_FIELDS[doctype]:
+				df = meta.get_field(fieldname)
+				if df:
+					self.assertFalse(df.reqd and not df.default, f"{doctype}.{fieldname}")
+
+	def test_practitioner_charges_hidden(self):
+		"""BIL-04: practitioner consulting charges and their (now empty) Charges section are hidden."""
+		meta = frappe.get_meta("Healthcare Practitioner")
+		for fieldname in (
+			"op_consulting_charge",
+			"op_consulting_charge_item",
+			"inpatient_visit_charge",
+			"inpatient_visit_charge_item",
+			"charges",
+		):
+			self.assertEqual(meta.get_field(fieldname).hidden, 1, fieldname)
+
+	def test_archive_field_stays_visible(self):
+		"""Hiding a trailing billing tab must not take the NFR-9 archive section with it."""
+		for doctype in CLINICAL_DOCTYPES:
+			if not frappe.db.exists("DocType", doctype):
+				continue
+			tab = None
+			for df in frappe.get_meta(doctype).fields:
+				if df.fieldtype == "Tab Break":
+					tab = df
+				if df.fieldname == ARCHIVED_FIELD:
+					self.assertFalse(
+						tab and tab.hidden, f"{doctype}: archive inside hidden tab {tab and tab.fieldname}"
+					)
 
 
 class TestDeleteGuard(EMRTestCase):

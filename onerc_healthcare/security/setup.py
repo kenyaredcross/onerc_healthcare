@@ -7,13 +7,14 @@ Called by setup/install.py on after_install and after_migrate. Idempotent, never
 - Every run: Custom DocPerms from security.matrix (missing rows only), delete stripped from the clinical
   DocTypes only (NFR-9), the bulk-deletion routes closed (Transaction Deletion Record, Company delete),
   billing rights removed from EMR roles and selling price lists disabled (C-5), billing workspaces
-  restricted, ``krcs_archived`` added to clinical DocTypes.
+  restricted, ``krcs_archived`` added to clinical DocTypes, billing fields hidden from forms (BIL-04).
 - First run only (so admin edits survive): role settings, System Settings, Website Settings.
 - One-off fix-ups (marker ``krcs_security_fixups_v2``): undo the over-reach of the first version.
 """
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.utils import cint
 
 from onerc_healthcare.constants import ALL_ROLES, CLINICAL_DOCTYPES, ROLE_SYSADMIN, VISIT_DOCTYPE
 from onerc_healthcare.security import matrix
@@ -42,6 +43,7 @@ def install() -> None:
 	close_bulk_deletion()
 	apply_fixups()
 	lock_down_billing()
+	hide_billing_fields()
 	add_archived_fields()
 	apply_session_security()
 
@@ -249,3 +251,99 @@ def apply_session_security() -> None:
 	for field, value in matrix.WEBSITE_SETTINGS.items():
 		frappe.db.set_single_value("Website Settings", field, value)
 	frappe.db.set_default(SYSTEM_SETTINGS_MARKER, "1")
+
+
+# ---------------------------------------------------------------------------
+# Billing fields hidden from forms (C-5, BIL-04). Enforced on every run; UI only.
+# ---------------------------------------------------------------------------
+_BREAKS = ("Section Break", "Tab Break")
+_LAYOUT_ONLY = ("Column Break", *_BREAKS)
+
+
+def billing_fields_to_hide(doctype: str) -> tuple[set[str], list[str]]:
+	"""Fields of matrix.BILLING_FIELDS[doctype] that can be hidden safely, and those refused.
+
+	A field is refused when it is mandatory without a default, or mandatory on a condition that does
+	not depend on another field we hide (e.g. ``is_billable``, which stays 0 once hidden).
+	"""
+	meta = frappe.get_meta(doctype)
+	wanted = [fn for fn in matrix.BILLING_FIELDS.get(doctype, ()) if meta.get_field(fn)]
+	hide, refused = set(), []
+	for fieldname in wanted:
+		df = meta.get_field(fieldname)
+		condition = df.mandatory_depends_on or ""
+		if (df.reqd and not df.default) or (
+			condition and not any(other in condition for other in wanted if other != fieldname)
+		):
+			refused.append(f"{doctype}.{fieldname}")
+		else:
+			hide.add(fieldname)
+	return hide, refused
+
+
+def empty_containers(doctype: str, hiding: set[str]) -> set[str]:
+	"""Section and Tab Breaks whose every content field is hidden once `hiding` is applied, and that
+	contain at least one of `hiding` (other empty sections are not ours to touch)."""
+	containers: dict[str, list] = {}
+	section = tab = None
+	for df in frappe.get_meta(doctype).fields:
+		if df.fieldtype == "Tab Break":
+			tab, section = df.fieldname, None
+			containers[tab] = []
+			continue
+		if df.fieldtype == "Section Break":
+			section = df.fieldname
+			containers[section] = []
+			continue
+		if df.fieldtype in _LAYOUT_ONLY:
+			continue
+		for owner in (section, tab):
+			if owner:
+				containers[owner].append(df)
+	return {
+		name
+		for name, fields in containers.items()
+		if fields
+		and any(df.fieldname in hiding for df in fields)
+		and all(df.hidden or df.fieldname in hiding for df in fields)
+	}
+
+
+def hide_billing_fields() -> list[str]:
+	"""Hide the BILLING_FIELDS (and sections/tabs they empty). Returns the refused fields."""
+	refused_all = []
+	for doctype in matrix.BILLING_FIELDS:
+		if not doctype_exists(doctype):
+			continue
+		hide, refused = billing_fields_to_hide(doctype)
+		refused_all += refused
+		if not hide:
+			continue
+		meta = frappe.get_meta(doctype)
+		changed = False
+		for fieldname in hide | empty_containers(doctype, hide):
+			df = meta.get_field(fieldname)
+			changed |= _set_field_property(doctype, df, "hidden", 1)
+			if df.fieldtype not in _BREAKS:
+				changed |= _set_field_property(doctype, df, "print_hide", 1)
+				if df.in_list_view:
+					changed |= _set_field_property(doctype, df, "in_list_view", 0)
+		if changed:
+			frappe.clear_cache(doctype=doctype)
+	return refused_all
+
+
+def _set_field_property(doctype: str, df, prop: str, value: int) -> bool:
+	if cint(df.get(prop)) == value:
+		return False
+	frappe.make_property_setter(
+		{
+			"doctype": doctype,
+			"fieldname": df.fieldname,
+			"property": prop,
+			"value": value,
+			"property_type": "Check",
+		},
+		validate_fields_for_doctype=False,
+	)
+	return True

@@ -200,3 +200,81 @@ SYSTEM_SETTINGS = {
 	"allow_guests_to_upload_files": 0,
 }
 WEBSITE_SETTINGS = {"disable_signup": 1}
+
+# Price, charge, billing-item, payment and insurance fields hidden from clinical and admin forms
+# (C-5, tracker BIL-04). UI only: values, Marley logic and reports are untouched. Sections or tabs left
+# with nothing visible are hidden as well. Fields that are mandatory, or that carry an item Marley needs
+# to create the record (Lab Test Template, Clinical Procedure Template, Therapy Type item codes), and
+# stock links (Medication Linked Items, Clinical Procedure consumables) are deliberately not listed.
+_INSURANCE = ("insurance_payor", "insurance_policy", "insurance_coverage", "coverage_status")
+BILLING_FIELDS: dict[str, tuple[str, ...]] = {
+	"Healthcare Practitioner": (
+		"op_consulting_charge_item",
+		"op_consulting_charge",
+		"inpatient_visit_charge_item",
+		"inpatient_visit_charge",
+		"accounts",
+		"default_currency",
+	),
+	"Patient": ("customer", "customer_group", "default_currency", "default_price_list"),
+	"Patient Appointment": (
+		"mode_of_payment",
+		"paid_amount",
+		"invoiced",
+		"ref_sales_invoice",
+		"billing_item",
+		*_INSURANCE,
+	),
+	"Patient Encounter": ("invoiced", *_INSURANCE),
+	"Service Request": ("item_code", "qty_invoiced", "billing_status", *_INSURANCE),
+	"Medication Request": ("qty_invoiced", "billing_status"),
+	"Clinical Procedure": (
+		"invoiced",
+		"invoice_separately_as_consumables",
+		"consumable_total_amount",
+		"consumption_invoiced",
+	),
+	"Lab Test": ("invoiced",),
+	"Sample Collection": ("invoiced",),
+	"Observation": ("sales_invoice", "sales_invoice_status", "sales_invoice_item", "invoiced"),
+	"Diagnostic Report": ("sales_invoice_status",),
+	"Inpatient Record": (
+		"items",
+		"currency",
+		"price_list",
+		"total",
+		"paid_amount",
+		"approval_status",  # insurance claim status
+		*_INSURANCE,
+	),
+	"Therapy Plan": ("invoiced",),
+	"Therapy Session": ("rate", "invoiced"),
+	"Medication": ("price_list",),
+	# Templates: the billable switch and price. Item links stay where Marley requires them.
+	"Observation Template": (
+		"is_billable",
+		"link_existing_item",
+		"item",
+		"rate",
+		"item_group",
+		"item_code",
+	),
+	"Clinical Procedure Template": ("is_billable", "rate"),
+	# Lab Test Template (legacy route, unused per D5) is left alone: it defaults to billable and its rate
+	# is then mandatory, so hiding the rate would make new templates unsaveable.
+	"Therapy Type": ("is_billable", "rate"),
+	"Healthcare Service Unit Type": (
+		"is_billable",
+		"item",
+		"item_code",
+		"item_group",
+		"rate",
+		"items",
+		"minimum_billable_qty",
+	),
+	# Child tables shown inside clinical forms.
+	"Lab Prescription": ("invoiced",),
+	"Procedure Prescription": ("invoiced",),
+	"Inpatient Occupancy": ("invoiced", "scheduled_billing_time", "insurance_coverage"),
+	"Clinical Procedure Item": ("invoice_separately_as_consumables",),
+}
