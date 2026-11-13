@@ -1,7 +1,7 @@
 [project]
 name = "onerc_healthcare"
 authors = [
-    { name = "Kelvin Njenga", email = "njengasheba@gmail.com"}
+    { name = "Lennox Mwita", email = "mwitalnx@gmail.com"}
 ]
 description = "OneRC Healthcare "
 requires-python = ">=3.14"

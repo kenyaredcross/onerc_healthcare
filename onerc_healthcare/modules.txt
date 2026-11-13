@@ -1,1 +1,4 @@
 Onerc Healthcare
+EMR Registration
+EMR Visit
+EMR Security

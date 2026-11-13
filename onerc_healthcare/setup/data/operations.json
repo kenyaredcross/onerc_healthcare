@@ -1,0 +1,24 @@
+{
+ "kalobeyei": {
+  "label": "Kalobeyei",
+  "company_name": "KRCS Kalobeyei",
+  "abbr": "KLB",
+  "county": "Turkana",
+  "facilities": [
+   {"name": "Natukobenyo Health and Community Centre", "short": "Natukobenyo", "code": "NTK"},
+   {"name": "Naragai Health and Community Centre", "short": "Naragai", "code": "NRG"}
+  ],
+  "residence_levels": ["Village", "Neighbourhood", "Compound"]
+ },
+ "dadaab": {
+  "label": "Dadaab",
+  "company_name": "KRCS Dadaab",
+  "abbr": "DDB",
+  "county": "Garissa",
+  "facilities": [
+   {"name": "IFO 1 Main Health Facility", "short": "IFO 1", "code": "IFO1"},
+   {"name": "IFO 2 Main Health Facility", "short": "IFO 2", "code": "IFO2"}
+  ],
+  "residence_levels": ["Block"]
+ }
+}

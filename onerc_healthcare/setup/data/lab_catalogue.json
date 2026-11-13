@@ -1,0 +1,395 @@
+{
+ "_comment": "PROVISIONAL (dev) starter lab catalogue. No reference ranges, non-billable. Lab Technician to review before clinical use (SDD OI-9). Ported from handover/scripts/setup_diagnostics.py.",
+ "department": "Laboratory",
+ "service_unit_type": "Laboratory",
+ "provisional_description": "<p><b>PROVISIONAL (dev)</b> - starter template. Lab Technician to review the method, sample, result options and units, and add reference ranges before clinical use (SDD open item OI-9).</p>",
+ "uoms": [
+  {
+   "uom": "g/dL",
+   "description": "grams per decilitre"
+  },
+  {
+   "uom": "mmol/L",
+   "description": "millimoles per litre"
+  },
+  {
+   "uom": "x10^9/L",
+   "description": "x 10^9 cells per litre"
+  },
+  {
+   "uom": "x10^12/L",
+   "description": "x 10^12 cells per litre"
+  },
+  {
+   "uom": "fL",
+   "description": "femtolitre"
+  },
+  {
+   "uom": "pg",
+   "description": "picogram"
+  },
+  {
+   "uom": "mL",
+   "description": "millilitre"
+  }
+ ],
+ "colors": [
+  {
+   "name": "Purple",
+   "hex": "#7B2D8E"
+  },
+  {
+   "name": "Red",
+   "hex": "#C00000"
+  },
+  {
+   "name": "Grey",
+   "hex": "#808080"
+  },
+  {
+   "name": "Light Blue",
+   "hex": "#9DC3E6"
+  }
+ ],
+ "sample_types": [
+  "Blood",
+  "Urine",
+  "Stool",
+  "Sputum"
+ ],
+ "samples": [
+  {
+   "sample": "Whole blood - EDTA",
+   "sample_type": "Blood",
+   "color": "Purple"
+  },
+  {
+   "sample": "Serum - plain tube",
+   "sample_type": "Blood",
+   "color": "Red"
+  },
+  {
+   "sample": "Plasma - fluoride",
+   "sample_type": "Blood",
+   "color": "Grey"
+  },
+  {
+   "sample": "Whole blood - citrate",
+   "sample_type": "Blood",
+   "color": "Light Blue"
+  },
+  {
+   "sample": "Capillary blood",
+   "sample_type": "Blood",
+   "color": null
+  },
+  {
+   "sample": "Urine - random",
+   "sample_type": "Urine",
+   "color": null
+  },
+  {
+   "sample": "Stool",
+   "sample_type": "Stool",
+   "color": null
+  },
+  {
+   "sample": "Sputum",
+   "sample_type": "Sputum",
+   "color": null
+  }
+ ],
+ "single_tests": [
+  {
+   "name": "Malaria Rapid Diagnostic Test",
+   "abbr": "MRDT",
+   "data_type": "Select",
+   "unit": null,
+   "options": "Negative\nPositive - P. falciparum\nPositive - non-falciparum or mixed\nInvalid",
+   "sample": "Capillary blood"
+  },
+  {
+   "name": "Malaria Blood Slide",
+   "abbr": "MBS",
+   "data_type": "Select",
+   "unit": null,
+   "options": "No malaria parasites seen\nP. falciparum seen\nOther Plasmodium species seen\nMixed infection",
+   "sample": "Capillary blood"
+  },
+  {
+   "name": "Haemoglobin",
+   "abbr": "HB",
+   "data_type": "Quantity",
+   "unit": "g/dL",
+   "options": null,
+   "sample": "Whole blood - EDTA"
+  },
+  {
+   "name": "Random Blood Sugar",
+   "abbr": "RBS",
+   "data_type": "Quantity",
+   "unit": "mmol/L",
+   "options": null,
+   "sample": "Capillary blood"
+  },
+  {
+   "name": "Fasting Blood Sugar",
+   "abbr": "FBS",
+   "data_type": "Quantity",
+   "unit": "mmol/L",
+   "options": null,
+   "sample": "Capillary blood"
+  },
+  {
+   "name": "Urine Pregnancy Test",
+   "abbr": "UPT",
+   "data_type": "Select",
+   "unit": null,
+   "options": "Negative\nPositive\nInvalid",
+   "sample": "Urine - random"
+  },
+  {
+   "name": "HIV 1/2 Rapid Test",
+   "abbr": "HIV",
+   "data_type": "Select",
+   "unit": null,
+   "options": "Non-reactive\nReactive\nInconclusive",
+   "sample": "Capillary blood"
+  },
+  {
+   "name": "Syphilis RPR",
+   "abbr": "RPR",
+   "data_type": "Select",
+   "unit": null,
+   "options": "Non-reactive\nReactive",
+   "sample": "Serum - plain tube"
+  },
+  {
+   "name": "Hepatitis B Surface Antigen",
+   "abbr": "HBSAG",
+   "data_type": "Select",
+   "unit": null,
+   "options": "Negative\nPositive",
+   "sample": "Serum - plain tube"
+  },
+  {
+   "name": "Blood Group and Rhesus",
+   "abbr": "BGRH",
+   "data_type": "Select",
+   "unit": null,
+   "options": "A Rh positive\nA Rh negative\nB Rh positive\nB Rh negative\nAB Rh positive\nAB Rh negative\nO Rh positive\nO Rh negative",
+   "sample": "Whole blood - EDTA"
+  },
+  {
+   "name": "GeneXpert MTB/RIF",
+   "abbr": "GXP",
+   "data_type": "Select",
+   "unit": null,
+   "options": "MTB not detected\nMTB detected, RIF resistance not detected\nMTB detected, RIF resistance detected\nMTB detected, RIF resistance indeterminate\nInvalid or error",
+   "sample": "Sputum"
+  },
+  {
+   "name": "Sputum AFB Smear",
+   "abbr": "AFB",
+   "data_type": "Select",
+   "unit": null,
+   "options": "Negative\nScanty\n1+\n2+\n3+",
+   "sample": "Sputum"
+  },
+  {
+   "name": "Stool Microscopy",
+   "abbr": "STOOL",
+   "data_type": "Text",
+   "unit": null,
+   "options": null,
+   "sample": "Stool"
+  },
+  {
+   "name": "H. pylori Stool Antigen",
+   "abbr": "HPYL",
+   "data_type": "Select",
+   "unit": null,
+   "options": "Negative\nPositive",
+   "sample": "Stool"
+  },
+  {
+   "name": "Erythrocyte Sedimentation Rate",
+   "abbr": "ESR",
+   "data_type": "Quantity",
+   "unit": "mm / hr",
+   "options": null,
+   "sample": "Whole blood - citrate"
+  }
+ ],
+ "panels": [
+  {
+   "name": "Urinalysis",
+   "sample": "Urine - random",
+   "new_components": [
+    {
+     "name": "Urine Appearance",
+     "abbr": "UAPP",
+     "data_type": "Text",
+     "unit": null,
+     "options": null
+    },
+    {
+     "name": "Urine pH",
+     "abbr": "UPH",
+     "data_type": "Numeric",
+     "unit": null,
+     "options": null
+    },
+    {
+     "name": "Urine Specific Gravity",
+     "abbr": "USG",
+     "data_type": "Numeric",
+     "unit": null,
+     "options": null
+    },
+    {
+     "name": "Urine Protein",
+     "abbr": "UPRO",
+     "data_type": "Select",
+     "unit": null,
+     "options": "Negative\nTrace\n1+\n2+\n3+\n4+"
+    },
+    {
+     "name": "Urine Glucose",
+     "abbr": "UGLU",
+     "data_type": "Select",
+     "unit": null,
+     "options": "Negative\nTrace\n1+\n2+\n3+\n4+"
+    },
+    {
+     "name": "Urine Ketones",
+     "abbr": "UKET",
+     "data_type": "Select",
+     "unit": null,
+     "options": "Negative\nTrace\n1+\n2+\n3+\n4+"
+    },
+    {
+     "name": "Urine Blood",
+     "abbr": "UBLD",
+     "data_type": "Select",
+     "unit": null,
+     "options": "Negative\nTrace\n1+\n2+\n3+\n4+"
+    },
+    {
+     "name": "Urine Leukocytes",
+     "abbr": "ULEU",
+     "data_type": "Select",
+     "unit": null,
+     "options": "Negative\nTrace\n1+\n2+\n3+\n4+"
+    },
+    {
+     "name": "Urine Nitrite",
+     "abbr": "UNIT",
+     "data_type": "Select",
+     "unit": null,
+     "options": "Negative\nPositive"
+    },
+    {
+     "name": "Urine Microscopy",
+     "abbr": "UMIC",
+     "data_type": "Text",
+     "unit": null,
+     "options": null
+    }
+   ],
+   "components": [
+    "Urine Appearance",
+    "Urine pH",
+    "Urine Specific Gravity",
+    "Urine Protein",
+    "Urine Glucose",
+    "Urine Ketones",
+    "Urine Blood",
+    "Urine Leukocytes",
+    "Urine Nitrite",
+    "Urine Microscopy"
+   ]
+  },
+  {
+   "name": "Full Haemogram (CBC)",
+   "sample": "Whole blood - EDTA",
+   "new_components": [
+    {
+     "name": "White Blood Cell Count",
+     "abbr": "WBC",
+     "data_type": "Quantity",
+     "unit": "x10^9/L",
+     "options": null
+    },
+    {
+     "name": "Red Blood Cell Count",
+     "abbr": "RBC",
+     "data_type": "Quantity",
+     "unit": "x10^12/L",
+     "options": null
+    },
+    {
+     "name": "Haematocrit",
+     "abbr": "HCT",
+     "data_type": "Quantity",
+     "unit": "%",
+     "options": null
+    },
+    {
+     "name": "Mean Cell Volume",
+     "abbr": "MCV",
+     "data_type": "Quantity",
+     "unit": "fL",
+     "options": null
+    },
+    {
+     "name": "Mean Cell Haemoglobin",
+     "abbr": "MCH",
+     "data_type": "Quantity",
+     "unit": "pg",
+     "options": null
+    },
+    {
+     "name": "Mean Cell Haemoglobin Concentration",
+     "abbr": "MCHC",
+     "data_type": "Quantity",
+     "unit": "g/dL",
+     "options": null
+    },
+    {
+     "name": "Platelet Count",
+     "abbr": "PLT",
+     "data_type": "Quantity",
+     "unit": "x10^9/L",
+     "options": null
+    },
+    {
+     "name": "Neutrophils",
+     "abbr": "NEUT",
+     "data_type": "Quantity",
+     "unit": "%",
+     "options": null
+    },
+    {
+     "name": "Lymphocytes",
+     "abbr": "LYMPH",
+     "data_type": "Quantity",
+     "unit": "%",
+     "options": null
+    }
+   ],
+   "components": [
+    "White Blood Cell Count",
+    "Red Blood Cell Count",
+    "Haemoglobin",
+    "Haematocrit",
+    "Mean Cell Volume",
+    "Mean Cell Haemoglobin",
+    "Mean Cell Haemoglobin Concentration",
+    "Platelet Count",
+    "Neutrophils",
+    "Lymphocytes"
+   ]
+  }
+ ]
+}
