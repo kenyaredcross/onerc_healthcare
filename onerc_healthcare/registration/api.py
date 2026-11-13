@@ -4,9 +4,11 @@
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 from onerc_healthcare.constants import (
 	IDENTIFIER_FACILITY,
+	IDENTIFIER_UNHCR,
 	PATIENT_IDENTIFIER_DOCTYPE,
 	PATIENT_IDENTIFIER_TYPE_DOCTYPE,
 	PATIENT_IDENTIFIERS_FIELD,
@@ -74,10 +76,24 @@ def find_patient_by_identifier(identifier_value: str, identifier_type: str | Non
 				"identifier_type": row.identifier_type,
 				"identifier_value": row.identifier_value,
 				"merged_into": info.get(MERGED_INTO_FIELD),
-				"surviving_patient": _surviving(row.parent),
+				**_surviving_details(_surviving(row.parent)),
 			}
 		)
 	return out
+
+
+def _surviving_details(patient: str) -> dict:
+	"""What the reception search dialog shows for the record to open (REG-24)."""
+	info = (
+		frappe.db.get_value("Patient", patient, ["patient_name", "sex", "dob", "status"], as_dict=True) or {}
+	)
+	return {
+		"surviving_patient": patient,
+		"surviving_patient_name": info.get("patient_name"),
+		"surviving_sex": info.get("sex"),
+		"surviving_dob": info.get("dob"),
+		"surviving_status": info.get("status"),
+	}
 
 
 def _surviving(patient: str) -> str:
@@ -93,9 +109,23 @@ def _surviving(patient: str) -> str:
 
 @frappe.whitelist()
 def get_registration_defaults() -> dict:
-	"""Defaults for a new Patient form: the registering facility (see walk_in module docstring)."""
+	"""Defaults for a new Patient form: the registering facility (see walk_in module docstring) and
+	whether to open the "Find patient by identifier" dialog first (REG-24, SDD 4.3 / 5.1)."""
 	frappe.has_permission("Patient", "create", throw=True)
-	return {"registration_facility": get_default_registration_facility()}
+	return {
+		"registration_facility": get_default_registration_facility(),
+		"search_first_on_new_patient": search_first_on_new_patient(),
+		"default_identifier_type": IDENTIFIER_UNHCR,
+	}
+
+
+def search_first_on_new_patient() -> bool:
+	"""EMR Registration Settings flag; on (its default) until an admin saves it off."""
+	raw = frappe.db.sql(
+		"select value from `tabSingles` where doctype = %s and field = %s",
+		("EMR Registration Settings", "search_first_on_new_patient"),
+	)
+	return True if not raw or raw[0][0] is None else bool(cint(raw[0][0]))
 
 
 @frappe.whitelist(methods=["POST"])

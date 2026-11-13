@@ -28,16 +28,22 @@ frappe.ui.form.on("Patient", {
 	},
 
 	onload(frm) {
-		if (frm.is_new() && !frm.doc.krcs_registration_facility) {
-			frappe
-				.xcall(`${krcs.registration.API}.get_registration_defaults`)
-				.then((r) => {
-					if (r && r.registration_facility && !frm.doc.krcs_registration_facility) {
-						frm.set_value("krcs_registration_facility", r.registration_facility);
-					}
-				})
-				.catch(() => {});
-		}
+		if (!frm.is_new()) return;
+		// Decide before any async work: values already filled (link, route options) skip the search.
+		const prefilled = krcs.registration.is_prefilled(frm);
+		frappe
+			.xcall(`${krcs.registration.API}.get_registration_defaults`)
+			.then((r) => {
+				if (!r) return;
+				if (r.registration_facility && !frm.doc.krcs_registration_facility) {
+					frm.set_value("krcs_registration_facility", r.registration_facility);
+				}
+				if (r.search_first_on_new_patient && !prefilled && !frm.__krcs_search_shown) {
+					frm.__krcs_search_shown = true;
+					krcs.registration.search_first_dialog(frm, r.default_identifier_type);
+				}
+			})
+			.catch(() => {});
 	},
 
 	refresh(frm) {
@@ -277,4 +283,145 @@ krcs.registration.merge_dialog = function (frm, target) {
 		},
 	});
 	dialog.show();
+};
+
+// ---------------------------------------------------------------------------
+// REG-24 (SDD 4.3, 5.1; FR-1, FR-2): registration starts with a search by identifier, then the
+// duplicate check (similarity dialog on save), then capture.
+// ---------------------------------------------------------------------------
+
+krcs.registration.is_prefilled = function (frm) {
+	const d = frm.doc;
+	return Boolean(
+		d.first_name ||
+			d.last_name ||
+			d.patient_name ||
+			d.krcs_is_walk_in ||
+			(d.krcs_identifiers || []).some((r) => r.identifier_value)
+	);
+};
+
+krcs.registration.search_first_dialog = function (frm, default_type) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Find patient by identifier"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "intro",
+				options: `<p class="text-muted">${__(
+					"Search for the patient first so the same person is not registered twice. Close this window to skip."
+				)}</p>`,
+			},
+			{
+				fieldtype: "Link",
+				fieldname: "identifier_type",
+				label: __("Identifier Type"),
+				options: "Patient Identifier Type",
+				reqd: 1,
+				default: default_type || "UNHCR ID",
+				get_query: () => ({
+					filters: { enabled: 1, name: ["!=", krcs.registration.FACILITY_TYPE] },
+				}),
+			},
+			{ fieldtype: "Data", fieldname: "identifier_value", label: __("Identifier Value"), reqd: 1 },
+			{ fieldtype: "HTML", fieldname: "results" },
+		],
+		primary_action_label: __("Search"),
+		primary_action(values) {
+			frappe
+				.xcall(`${krcs.registration.API}.find_patient_by_identifier`, {
+					identifier_value: values.identifier_value,
+					identifier_type: values.identifier_type,
+				})
+				.then((found) => {
+					if (found && found.length) {
+						krcs.registration.show_search_results(frm, dialog, found);
+					} else {
+						dialog.hide();
+						krcs.registration.prefill_identifier(
+							frm,
+							values.identifier_type,
+							values.identifier_value
+						);
+					}
+				});
+		},
+		secondary_action_label: __("New walk-in (no identifier)"),
+		secondary_action() {
+			dialog.hide();
+			frm.set_value("krcs_is_walk_in", 1).then(() => krcs.registration.focus_first_name(frm));
+		},
+	});
+	dialog.show();
+	setTimeout(() => dialog.get_field("identifier_value").$input.trigger("focus"), 300);
+};
+
+krcs.registration.show_search_results = function (frm, dialog, found) {
+	const esc = frappe.utils.escape_html;
+	// One line per surviving record (a merged holder resolves to the record it was merged into).
+	const seen = new Set();
+	const rows = found
+		.filter((f) => !seen.has(f.surviving_patient) && seen.add(f.surviving_patient))
+		.map(
+			(f) => `
+		<tr>
+			<td><b>${esc(f.surviving_patient_name || "")}</b><br>
+				<span class="text-muted">${esc(f.surviving_patient)}</span>${
+				f.surviving_status === "Disabled"
+					? ` <span class="indicator-pill red">${__("Disabled")}</span>`
+					: ""
+			}</td>
+			<td>${esc(f.surviving_sex || "")}<br>${
+				f.surviving_dob ? frappe.datetime.str_to_user(f.surviving_dob) : ""
+			}</td>
+			<td>${esc(f.identifier_type)}: ${esc(f.identifier_value)}${
+				f.merged_into
+					? `<br><span class="text-muted small">${__("held by merged record {0}", [
+							esc(f.patient),
+					  ])}</span>`
+					: ""
+			}</td>
+			<td><button class="btn btn-xs btn-primary krcs-open-found" data-name="${esc(
+				f.surviving_patient
+			)}">${__("Open record")}</button></td>
+		</tr>`
+		)
+		.join("");
+	dialog.get_field("results").$wrapper.html(`
+		<p><b>${__("Already registered:")}</b></p>
+		<table class="table table-bordered table-sm">
+			<thead><tr><th>${__("Patient")}</th><th>${__("Sex / DOB")}</th><th>${__("Identifier")}</th><th></th></tr></thead>
+			<tbody>${rows}</tbody>
+		</table>`);
+	dialog.$wrapper.off("click.krcs").on("click.krcs", ".krcs-open-found", function () {
+		const name = $(this).attr("data-name");
+		const unsaved = frm.docname;
+		dialog.hide();
+		// Discard the unsaved new form, then open the existing record.
+		frappe.set_route("Form", "Patient", name).then(() => {
+			if (locals["Patient"] && locals["Patient"][unsaved] && locals["Patient"][unsaved].__islocal) {
+				frappe.model.clear_doc("Patient", unsaved);
+			}
+		});
+	});
+};
+
+krcs.registration.prefill_identifier = function (frm, identifier_type, identifier_value) {
+	frm.clear_table("krcs_identifiers");
+	frm.add_child("krcs_identifiers", { identifier_type, identifier_value });
+	frm.refresh_field("krcs_identifiers");
+	frappe.show_alert({
+		message: __("No patient holds {0} {1}. Register the patient below.", [
+			frappe.utils.escape_html(identifier_type),
+			frappe.utils.escape_html(identifier_value),
+		]),
+		indicator: "blue",
+	});
+	krcs.registration.focus_first_name(frm);
+};
+
+krcs.registration.focus_first_name = function (frm) {
+	frm.scroll_to_field("first_name");
+	const field = frm.get_field("first_name");
+	if (field && field.$input) setTimeout(() => field.$input.trigger("focus"), 100);
 };

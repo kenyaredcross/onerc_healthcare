@@ -6,6 +6,8 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "registration_flow_section",
+  "search_first_on_new_patient",
   "walk_in_section",
   "walk_in_id_format",
   "default_registration_facility",
@@ -14,6 +16,18 @@
   "seed_version"
  ],
  "fields": [
+  {
+   "fieldname": "registration_flow_section",
+   "fieldtype": "Section Break",
+   "label": "Registration Flow (SDD 4.3, 5.1)"
+  },
+  {
+   "fieldname": "search_first_on_new_patient",
+   "fieldtype": "Check",
+   "label": "Search by Identifier First on New Patient",
+   "default": "1",
+   "description": "A new Patient form opens with a 'Find patient by identifier' dialog before any details are captured (FR-1, FR-2)."
+  },
   {
    "fieldname": "walk_in_section",
    "fieldtype": "Section Break",
@@ -57,7 +71,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-11-13 14:00:00.000000",
+ "modified": "2026-11-13 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Registration",
  "name": "EMR Registration Settings",

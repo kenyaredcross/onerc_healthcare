@@ -679,3 +679,43 @@ class TestReviewFixes(EMRTestCase):
 		self.assertTrue(
 			frappe.db.exists("Comment", {"reference_name": twin.name, "content": ["like", "%Twin sister%"]})
 		)
+
+
+class TestSearchFirst(EMRTestCase):
+	def test_registration_defaults_include_search_first_flag(self):
+		"""REG-24 / SDD 5.1: the search-first dialog is on by default and can be switched off."""
+		frappe.db.sql(
+			"delete from `tabSingles` where doctype = %s and field = 'search_first_on_new_patient'",
+			(SETTINGS_DOCTYPE,),
+		)
+		defaults = api.get_registration_defaults()
+		self.assertIs(defaults["search_first_on_new_patient"], True)
+		self.assertEqual(defaults["default_identifier_type"], IDENTIFIER_UNHCR)
+		self.assertIn("registration_facility", defaults)
+
+		frappe.db.set_single_value(SETTINGS_DOCTYPE, "search_first_on_new_patient", 0)
+		self.assertIs(api.get_registration_defaults()["search_first_on_new_patient"], False)
+
+	def test_registration_defaults_need_create_permission(self):
+		"""SDD 6.1: only users who may register patients get the defaults."""
+		frappe.set_user(make_user("reg-search-sysadmin", [ROLE_SYSADMIN]))
+		with self.assertRaises(frappe.PermissionError):
+			api.get_registration_defaults()
+
+	def test_search_normalises_and_returns_surviving_record(self):
+		"""REG-24 / FR-2: any spelling finds the patient; a merged holder resolves to the survivor."""
+		value = f"T-KAK/{random_string(5)}"
+		target = make_patient(sex="Male", dob="1980-01-01")
+		source = make_patient(**{PATIENT_IDENTIFIERS_FIELD: [ident(IDENTIFIER_POL, value)]})
+		found = api.find_patient_by_identifier(f"  {value.lower().replace('/', ' .')} ", IDENTIFIER_POL)
+		self.assertEqual([f["patient"] for f in found], [source.name])
+		self.assertEqual(found[0]["surviving_patient"], source.name)
+
+		# Merge keeps PoL on the target (target has no PoL), so look it up there.
+		api.merge_patients(source.name, target.name, "duplicate")
+		found = api.find_patient_by_identifier(value.lower(), IDENTIFIER_POL)
+		self.assertEqual(found[0]["surviving_patient"], target.name)
+		self.assertEqual(found[0]["surviving_patient_name"], target.patient_name)
+		self.assertEqual(found[0]["surviving_sex"], "Male")
+		self.assertEqual(str(found[0]["surviving_dob"]), "1980-01-01")
+		self.assertEqual(api.find_patient_by_identifier("T-NOT-THERE", IDENTIFIER_POL), [])
