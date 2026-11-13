@@ -62,6 +62,9 @@ doc_events = {
 # bypassing on_trash. Clinical records must never be deleted (NFR-9, SDD §4.6).
 company_data_to_be_ignored = list(CLINICAL_DOCTYPES)
 
+# Desk navigation fix: Marley's workspaces open under their own sidebars (D26).
+boot_session = "onerc_healthcare.boot.boot_session"
+
 doctype_js = {
 	"Patient": "registration/patient.js",
 	"Vital Signs": "visit/vital_signs.js",

@@ -109,3 +109,11 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
   - **Healthcare Setup:** a "KRCS EMR" section with EMR Registration Settings, EMR Naming Settings, Patient Identifier Type and Residence Location.
 - The rows are written directly, with `key` starting `krcs-`. Marley's sidebars are never saved, so nothing is exported. The rows are re-applied on every migrate and restored after a Marley upgrade.
 - Requested by the user on 2026-11-13.
+
+**D26. Marley's workspaces open under their own sidebars.**
+- All eight of Marley's sidebars belong to one module, "Healthcare". Frappe 16 lists every workspace of a module on each of that module's sidebars, and the desk opens a workspace under the first sidebar listing it. So the Healthcare app icon (`/desk/healthcare`) opened the Healthcare page under the Diagnostics sidebar.
+- Our `boot_session` hook (`onerc_healthcare/boot.py`) narrows each Marley sidebar's workspace list to the workspaces its own rows link: Healthcare → Healthcare, Diagnostics → Diagnostics, Setup → Healthcare Setup, and so on.
+- It only adjusts the boot payload; nothing is stored, and other apps' sidebars are untouched.
+- **Limitation:** after an admin rearranges a sidebar in the desk, the client reloads sidebars without this hook, and the old behaviour returns until the page is reloaded.
+- **Upstream:** this is a Frappe 16 / Marley v16 issue worth reporting.
+- Reported by the user on 2026-11-13.
