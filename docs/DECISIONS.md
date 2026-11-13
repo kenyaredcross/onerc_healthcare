@@ -101,3 +101,11 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 - Billing items (Sales Invoice shortcuts, "Appointments To Bill" cards) are removed from these pages by rule (C-5).
 - If an admin customises one of these pages in the desk, Frappe shows the admin's saved layout instead, and our blocks stop showing.
 - Decided by the user on 2026-11-13, replacing the 10 separate EMR workspaces.
+
+**D25. EMR record types open under Marley's sidebars.**
+- Frappe 16 shows a record type under the sidebar that claims it (`is_default_module`), and otherwise under its own module's sidebar. Our modules have no pages (D24), so Patient Visit opened under a bare "EMR Visit" sidebar.
+- `onerc_healthcare/desk_sidebar.py` adds rows to Marley's sidebars:
+  - **Healthcare:** "Patient Visit", right after "Patient".
+  - **Healthcare Setup:** a "KRCS EMR" section with EMR Registration Settings, EMR Naming Settings, Patient Identifier Type and Residence Location.
+- The rows are written directly, with `key` starting `krcs-`. Marley's sidebars are never saved, so nothing is exported. The rows are re-applied on every migrate and restored after a Marley upgrade.
+- Requested by the user on 2026-11-13.

@@ -193,6 +193,7 @@ def apply_healthcare_settings() -> None:
 
 
 def _install_workstreams() -> None:
+	from onerc_healthcare import desk_sidebar
 	from onerc_healthcare.coding import setup as coding_setup
 	from onerc_healthcare.naming import ensure_naming_settings
 	from onerc_healthcare.registration import setup as registration_setup
@@ -204,3 +205,4 @@ def _install_workstreams() -> None:
 	security_setup.install()
 	coding_setup.install()
 	ensure_naming_settings()
+	desk_sidebar.install()
