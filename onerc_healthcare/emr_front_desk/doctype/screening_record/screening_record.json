@@ -1,0 +1,190 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-13 16:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "facility",
+  "person_type",
+  "patient",
+  "visit",
+  "visitor_record",
+  "person_name",
+  "column_break_header",
+  "outcome",
+  "screened_at",
+  "screened_by",
+  "results_section",
+  "results",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "SCR-.YYYY.-",
+   "default": "SCR-.YYYY.-",
+   "hidden": 1,
+   "reqd": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "person_type",
+   "fieldtype": "Select",
+   "label": "Person Screened",
+   "options": "Patient\nVisitor\nStaff\nOther",
+   "default": "Patient",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "depends_on": "eval:doc.person_type=='Patient'",
+   "mandatory_depends_on": "eval:doc.person_type=='Patient'",
+   "search_index": 1
+  },
+  {
+   "fieldname": "visit",
+   "fieldtype": "Link",
+   "label": "Visit",
+   "options": "Patient Visit",
+   "depends_on": "eval:doc.person_type=='Patient'",
+   "search_index": 1
+  },
+  {
+   "fieldname": "visitor_record",
+   "fieldtype": "Link",
+   "label": "Visitor Record",
+   "options": "Visitor Record",
+   "depends_on": "eval:doc.person_type=='Visitor'",
+   "search_index": 1
+  },
+  {
+   "fieldname": "person_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "in_list_view": 1,
+   "depends_on": "eval:doc.person_type!='Patient'",
+   "mandatory_depends_on": "eval:['Staff','Other'].includes(doc.person_type)"
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Outcome",
+   "options": "\nNormal\nOutside Expected Range",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "screened_at",
+   "fieldtype": "Datetime",
+   "label": "Screened At",
+   "no_copy": 1,
+   "in_list_view": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "screened_by",
+   "fieldtype": "Link",
+   "label": "Screened By",
+   "options": "User",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "results_section",
+   "fieldtype": "Section Break",
+   "label": "Results"
+  },
+  {
+   "fieldname": "results",
+   "fieldtype": "Table",
+   "label": "Results",
+   "options": "Screening Record Result"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Screening Record",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "hidden": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-13 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Front Desk",
+ "name": "Screening Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Nurse Receptionist",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "Triage Nurse",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "title_field": "person_name",
+ "search_fields": "person_name,patient,facility",
+ "show_title_field_in_link": 0,
+ "document_type": "Document"
+}

@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-13 16:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "facility",
+  "visitor_name",
+  "relationship",
+  "identifier_type",
+  "identifier_value",
+  "column_break_header",
+  "patient",
+  "patient_name",
+  "visit",
+  "status_section",
+  "status",
+  "entry_time",
+  "column_break_status",
+  "exit_time",
+  "history_section",
+  "status_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "VIS-.YYYY.-",
+   "default": "VIS-.YYYY.-",
+   "hidden": 1,
+   "reqd": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "visitor_name",
+   "fieldtype": "Data",
+   "label": "Visitor Name",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "relationship",
+   "fieldtype": "Select",
+   "label": "Relationship to Patient",
+   "options": "\nParent\nGuardian\nSpouse\nChild\nSibling\nOther Relative\nCompanion\nOther"
+  },
+  {
+   "fieldname": "identifier_type",
+   "fieldtype": "Link",
+   "label": "Identifier Type",
+   "options": "Patient Identifier Type",
+   "description": "Optional"
+  },
+  {
+   "fieldname": "identifier_value",
+   "fieldtype": "Data",
+   "label": "Identifier",
+   "depends_on": "eval:doc.identifier_type",
+   "mandatory_depends_on": "eval:doc.identifier_type"
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient Accompanied",
+   "options": "Patient",
+   "search_index": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "visit",
+   "fieldtype": "Link",
+   "label": "Visit",
+   "options": "Patient Visit",
+   "depends_on": "eval:doc.patient",
+   "search_index": 1
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Presence"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Inside\nExited",
+   "default": "Inside",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "entry_time",
+   "fieldtype": "Datetime",
+   "label": "Entry Time",
+   "default": "Now",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "exit_time",
+   "fieldtype": "Datetime",
+   "label": "Exit Time",
+   "no_copy": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "history_section",
+   "fieldtype": "Section Break",
+   "label": "History",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "status_log",
+   "fieldtype": "Table",
+   "label": "Status History",
+   "options": "Visitor Record Log",
+   "no_copy": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-13 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Front Desk",
+ "name": "Visitor Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Nurse Receptionist",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Triage Nurse",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "track_changes": 1,
+ "title_field": "visitor_name",
+ "search_fields": "visitor_name,patient_name,facility",
+ "show_title_field_in_link": 0,
+ "document_type": "Document"
+}

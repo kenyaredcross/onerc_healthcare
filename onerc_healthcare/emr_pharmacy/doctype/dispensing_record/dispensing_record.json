@@ -1,0 +1,327 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-13 16:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "medication_request",
+  "patient",
+  "patient_name",
+  "column_break_header",
+  "visit",
+  "encounter",
+  "dispensed_by",
+  "dispensed_at",
+  "prescribed_section",
+  "prescribed_medication",
+  "prescribed_item",
+  "prescribed_dosage",
+  "column_break_prescribed",
+  "prescribed_period",
+  "prescribed_quantity",
+  "previously_dispensed",
+  "dispensing_section",
+  "outcome",
+  "dispensed_medication",
+  "dispensed_item",
+  "is_substitution",
+  "substitution_reason",
+  "column_break_dispensing",
+  "quantity",
+  "final",
+  "not_dispensed_reason",
+  "cancellation_section",
+  "cancel_reason",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "DSP-.YYYY.-",
+   "default": "DSP-.YYYY.-",
+   "hidden": 1,
+   "reqd": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "medication_request",
+   "fieldtype": "Link",
+   "label": "Medication Request",
+   "options": "Medication Request",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "fetch_from": "medication_request.patient",
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "visit",
+   "fieldtype": "Link",
+   "label": "Visit",
+   "options": "Patient Visit",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "encounter",
+   "fieldtype": "Link",
+   "label": "Encounter",
+   "options": "Patient Encounter",
+   "fetch_from": "medication_request.order_group",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "dispensed_by",
+   "fieldtype": "Link",
+   "label": "Dispensed By",
+   "options": "User",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "dispensed_at",
+   "fieldtype": "Datetime",
+   "label": "Dispensed At",
+   "no_copy": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "prescribed_section",
+   "fieldtype": "Section Break",
+   "label": "Prescribed"
+  },
+  {
+   "fieldname": "prescribed_medication",
+   "fieldtype": "Link",
+   "label": "Prescribed Medication",
+   "options": "Medication",
+   "fetch_from": "medication_request.medication",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prescribed_item",
+   "fieldtype": "Link",
+   "label": "Prescribed Item",
+   "options": "Item",
+   "fetch_from": "medication_request.medication_item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prescribed_dosage",
+   "fieldtype": "Link",
+   "label": "Dose / Frequency",
+   "options": "Prescription Dosage",
+   "fetch_from": "medication_request.dosage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_prescribed",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "prescribed_period",
+   "fieldtype": "Link",
+   "label": "Duration",
+   "options": "Prescription Duration",
+   "fetch_from": "medication_request.period",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prescribed_quantity",
+   "fieldtype": "Float",
+   "label": "Prescribed Quantity",
+   "description": "Quantity plus any repeats allowed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previously_dispensed",
+   "fieldtype": "Float",
+   "label": "Previously Dispensed",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "dispensing_section",
+   "fieldtype": "Section Break",
+   "label": "Dispensing"
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Outcome",
+   "options": "Dispensed\nNot Dispensed",
+   "default": "Dispensed",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "dispensed_medication",
+   "fieldtype": "Link",
+   "label": "Dispensed Medication",
+   "options": "Medication",
+   "depends_on": "eval:doc.outcome=='Dispensed'",
+   "description": "Leave as prescribed unless a substitute is given"
+  },
+  {
+   "fieldname": "dispensed_item",
+   "fieldtype": "Link",
+   "label": "Dispensed Item",
+   "options": "Item",
+   "depends_on": "eval:doc.outcome=='Dispensed'"
+  },
+  {
+   "fieldname": "is_substitution",
+   "fieldtype": "Check",
+   "label": "Substitution",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "substitution_reason",
+   "fieldtype": "Small Text",
+   "label": "Substitution Reason",
+   "depends_on": "eval:doc.is_substitution",
+   "mandatory_depends_on": "eval:doc.is_substitution"
+  },
+  {
+   "fieldname": "column_break_dispensing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Float",
+   "label": "Quantity",
+   "in_list_view": 1,
+   "depends_on": "eval:doc.outcome=='Dispensed'",
+   "mandatory_depends_on": "eval:doc.outcome=='Dispensed'"
+  },
+  {
+   "fieldname": "final",
+   "fieldtype": "Check",
+   "label": "Final (close this line)",
+   "description": "Tick when nothing more will be dispensed for this line. A Not Dispensed record is always final."
+  },
+  {
+   "fieldname": "not_dispensed_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason Not Dispensed",
+   "depends_on": "eval:doc.outcome=='Not Dispensed'",
+   "mandatory_depends_on": "eval:doc.outcome=='Not Dispensed'"
+  },
+  {
+   "fieldname": "cancellation_section",
+   "fieldtype": "Section Break",
+   "label": "Cancellation",
+   "depends_on": "eval:doc.docstatus>0"
+  },
+  {
+   "fieldname": "cancel_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancel Reason",
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Dispensing Record",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-13 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Pharmacy",
+ "name": "Dispensing Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Pharmacist",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1
+  },
+  {
+   "role": "Clinical Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  },
+  {
+   "role": "Mental Health Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "title_field": "patient_name",
+ "search_fields": "patient_name,medication_request",
+ "show_title_field_in_link": 0,
+ "document_type": "Document",
+ "editable_grid": 0
+}
