@@ -1,0 +1,85 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 09:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "code",
+  "code_value",
+  "title",
+  "column_break_dx",
+  "case_type",
+  "is_primary",
+  "note"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "ICD-11 Code",
+   "options": "Code Value",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "code.code_value",
+   "fieldname": "code_value",
+   "fieldtype": "Data",
+   "label": "Code",
+   "read_only": 1
+  },
+  {
+   "columns": 3,
+   "fetch_from": "code.display",
+   "fieldname": "title",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Diagnosis",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_dx",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 2,
+   "default": "New",
+   "fieldname": "case_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Case Type",
+   "options": "New\nFollow-up",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "is_primary",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Primary"
+  },
+  {
+   "columns": 2,
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Note"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-14 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Clinical",
+ "name": "EMR Encounter Diagnosis",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": []
+}
