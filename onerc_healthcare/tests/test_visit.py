@@ -1079,7 +1079,7 @@ class TestVisitWorkspaces(VisitTestCase):
 				self.assertEqual(
 					json.loads(quick[ql["label"]].quick_list_filter), json.loads(ql["quick_list_filter"])
 				)
-				self.assertEqual(quick[ql["label"]].document_type, VISIT_DOCTYPE)
+				self.assertEqual(quick[ql["label"]].document_type, ql["document_type"])
 				self.assertIn(ql["label"], [b["data"].get("quick_list_name") for b in content])
 			for sc in block["shortcuts"]:
 				self.assertIn(sc["label"], shortcuts)
@@ -1542,7 +1542,8 @@ class TestPhase2Engine(VisitTestCase):
 
 	def test_new_fields_protected(self):
 		visit = self.consulting_visit()
-		enc = make_submitted_encounter(visit.patient)
+		other = self.consulting_visit()
+		enc = make_submitted_encounter(other.patient, other.name, link=False)
 		for field, value in (
 			("encounter", enc.name),
 			("closure_reason", VISIT_CLOSURE_REASONS[0]),

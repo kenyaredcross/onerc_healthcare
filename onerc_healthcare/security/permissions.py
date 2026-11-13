@@ -14,6 +14,7 @@ PTYPE_CODES = {
 	"c": ("create",),
 	"s": ("submit",),
 	"e": ("export",),
+	"x": ("cancel",),
 }
 # DocPerm columns copied from the standard rows.
 PERM_COLUMNS = (

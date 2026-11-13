@@ -87,6 +87,15 @@ doc_events = {
 for _doctype in _ACCESS_LOGGED_DOCTYPES:
 	doc_events.setdefault(_doctype, {})["onload"] = "onerc_healthcare.privacy.access_log.log_open"
 
+# B1: internal referral -> Received when the target visit starts consultation.
+doc_events.setdefault("Patient Visit", {})["on_update"] = "onerc_healthcare.clinical.referral.visit_on_update"
+# B4: warn (never block) when a visit is registered for a patient without current consent (FR-37, OI-14).
+doc_events["Patient Visit"]["after_insert"] = "onerc_healthcare.privacy.consent.visit_after_insert"
+# B1: the encounter addendum is append-only after submit.
+doc_events["Patient Encounter"]["before_update_after_submit"] = (
+	"onerc_healthcare.clinical.events.encounter_before_update_after_submit"
+)
+
 # ERPNext "Delete Company Transactions" bulk-deletes company-linked DocTypes with frappe.db.delete,
 # bypassing on_trash. Clinical records must never be deleted (NFR-9, SDD §4.6).
 company_data_to_be_ignored = list(_CLINICAL_DOCTYPES)
@@ -95,7 +104,7 @@ company_data_to_be_ignored = list(_CLINICAL_DOCTYPES)
 boot_session = "onerc_healthcare.boot.boot_session"
 
 doctype_js = {
-	"Patient": "registration/patient.js",
+	"Patient": ["registration/patient.js", "privacy/patient.js"],  # A1 registration + B4 consent
 	"Vital Signs": "visit/vital_signs.js",
 	"Patient Encounter": "clinical/patient_encounter.js",
 	"Service Request": "lab/service_request.js",
@@ -111,6 +120,8 @@ override_whitelisted_methods = {
 	),
 	f"{_PE}.create_patient_referral": "onerc_healthcare.clinical.guards.create_patient_referral",
 	f"{_PE}.cancel_request": "onerc_healthcare.clinical.guards.cancel_request",
+	# Would release prescriptions from a draft encounter (B1).
+	f"{_PE}.create_medication_request": "onerc_healthcare.clinical.guards.create_medication_request",
 	"healthcare.healthcare.doctype.service_request.service_request.make_observation": (
 		"onerc_healthcare.lab.guards.make_observation"
 	),

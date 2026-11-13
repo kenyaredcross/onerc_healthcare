@@ -49,6 +49,7 @@ def install() -> None:
 	apply_permissions()
 	close_bulk_deletion()
 	apply_fixups()
+	apply_phase2_fixups()
 	lock_down_billing()
 	hide_billing_fields()
 	add_archived_fields()
@@ -142,6 +143,36 @@ def apply_fixups() -> None:
 		frappe.db.set_value("Price List", name, "enabled", 1)
 	clear_perm_cache([*doctypes, "System Settings"])
 	frappe.db.set_default(FIXUPS_MARKER, "1")
+
+
+PHASE2_FIXUPS_MARKER = "krcs_security_fixups_v3"
+
+
+def apply_phase2_fixups() -> None:
+	"""Phase 2 changes to rows that already exist (apply_matrix only adds missing rows). Run once per site,
+	after apply_matrix, so a fresh site and a migrated site end up the same; later admin edits survive."""
+	if frappe.db.get_default(PHASE2_FIXUPS_MARKER):
+		return
+	from onerc_healthcare.constants import ROLE_CLINICIAN, ROLE_LAB, ROLE_MHO
+
+	touched = []
+	# Clinicians read orders only; the consultation flow creates them (audit A3: no forged statuses).
+	no_write = {"write": 0, "create": 0, "submit": 0, "cancel": 0, "amend": 0}
+	for doctype in ("Service Request", "Medication Request"):
+		if doctype_exists(doctype):
+			set_perm_values(doctype, no_write, roles=[ROLE_CLINICIAN, ROLE_MHO])
+			touched.append(doctype)
+	# A rejected lab result is cancelled and redone by the Laboratory Technician (B2).
+	if doctype_exists("Observation"):
+		set_perm_values("Observation", {"cancel": 1}, roles=[ROLE_LAB])
+		touched.append("Observation")
+	# LAB-07: no paper lab request form, for anyone.
+	for doctype in ("Service Request", "Lab Test"):
+		if doctype_exists(doctype):
+			set_perm_values(doctype, {"print": 0})
+			touched.append(doctype)
+	clear_perm_cache(touched)
+	frappe.db.set_default(PHASE2_FIXUPS_MARKER, "1")
 
 
 def add_archived_fields() -> None:

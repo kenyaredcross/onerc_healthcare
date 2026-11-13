@@ -30,6 +30,9 @@ import json
 import frappe
 
 from onerc_healthcare.constants import (
+	ACCESS_LOG_DOCTYPE,
+	CONSENT_DOCTYPE,
+	DATA_ACCESS_REQUEST_DOCTYPE,
 	DEPT_HIS,
 	DEPT_LABORATORY,
 	DEPT_MCH,
@@ -39,6 +42,15 @@ from onerc_healthcare.constants import (
 	DEPT_PHARMACY,
 	DEPT_RECEPTION,
 	DEPT_TRIAGE,
+	DISPENSING_DOCTYPE,
+	ENCOUNTER_DOCTYPE,
+	REFERRAL_DOCTYPE,
+	REPORT_ACCESS_AUDIT,
+	REPORT_CONSENT_EXCEPTIONS,
+	REPORT_DAILY_ENTRY,
+	REPORT_LAB_WORKLIST,
+	REPORT_PHARMACY_WORKLIST,
+	SCREENING_DOCTYPE,
 	VISIT_CLOSED_STATUSES,
 	VISIT_DOCTYPE,
 	VISIT_OPEN_STATUSES,
@@ -47,6 +59,7 @@ from onerc_healthcare.constants import (
 	VISIT_STATUS_REGISTERED,
 	VISIT_STATUS_ROUTED,
 	VISIT_STATUSES,
+	VISITOR_DOCTYPE,
 )
 from onerc_healthcare.security.matrix import BILLING_DOCTYPES
 
@@ -106,6 +119,35 @@ def _quick_list(label: str, filters: list) -> dict:
 	return {"document_type": VISIT_DOCTYPE, "label": label, "quick_list_filter": json.dumps(filters)}
 
 
+def _doc_shortcut(
+	label: str,
+	doctype: str,
+	filters: list | None = None,
+	color: str = "Blue",
+	fmt: str = "{} open",
+	view: str = "List",
+) -> dict:
+	"""Shortcut to another DocType (Phase 2 records). `filters` are [doctype, field, op, value] rows."""
+	row = {"type": "DocType", "link_to": doctype, "doc_view": view, "label": label, "color": color}
+	if filters:
+		row.update({"format": fmt, "stats_filter": json.dumps(filters)})
+	return row
+
+
+def _doc_quick_list(label: str, doctype: str, filters: list) -> dict:
+	return {"document_type": doctype, "label": label, "quick_list_filter": json.dumps(filters)}
+
+
+def _report_shortcut(label: str, report: str, ref_doctype: str, color: str = "Orange") -> dict:
+	return {
+		"type": "Report",
+		"link_to": report,
+		"report_ref_doctype": ref_doctype,
+		"label": label,
+		"color": color,
+	}
+
+
 def department_filters(dept: str) -> list:
 	return [_f("current_department", "=", dept), OPEN]
 
@@ -117,8 +159,32 @@ def department_block(dept: str) -> dict:
 			_shortcut(f"{dept}: Waiting", [_f("status", "=", VISIT_STATUS_REGISTERED)], "Orange"),
 			_shortcut(f"{dept}: All Open Visits", [OPEN], "Blue", "{} open"),
 			{"type": "DocType", "link_to": VISIT_DOCTYPE, "doc_view": "New", "label": f"{dept}: New Visit"},
+			# B3 front desk (FR-41/42) and B4 consent (FR-37)
+			_doc_shortcut(f"{dept}: New Screening", SCREENING_DOCTYPE, view="New"),
+			_doc_shortcut(
+				f"{dept}: Visitors Inside",
+				VISITOR_DOCTYPE,
+				[[VISITOR_DOCTYPE, "status", "=", "Inside"]],
+				"Orange",
+				"{} inside",
+			),
+			_doc_shortcut(f"{dept}: Patient Consent", CONSENT_DOCTYPE),
+			_report_shortcut(f"{dept}: Daily Facility Entry", REPORT_DAILY_ENTRY, VISIT_DOCTYPE, "Blue"),
 		]
-		quick_lists = [_quick_list(f"{dept} Queue", [_f("status", "=", VISIT_STATUS_REGISTERED)])]
+		quick_lists = [
+			_quick_list(f"{dept} Queue", [_f("status", "=", VISIT_STATUS_REGISTERED)]),
+			_doc_quick_list(
+				f"{dept}: Visitors Inside", VISITOR_DOCTYPE, [[VISITOR_DOCTYPE, "status", "=", "Inside"]]
+			),
+			_doc_quick_list(
+				f"{dept}: Screenings Outside Expected Range",
+				SCREENING_DOCTYPE,
+				[
+					[SCREENING_DOCTYPE, "docstatus", "=", 1],
+					[SCREENING_DOCTYPE, "outcome", "=", "Outside Expected Range"],
+				],
+			),
+		]
 	elif dept == DEPT_TRIAGE:
 		shortcuts = [
 			_shortcut(f"{dept}: Waiting for Triage", [_f("status", "=", VISIT_STATUS_REGISTERED)], "Orange"),
@@ -137,17 +203,75 @@ def department_block(dept: str) -> dict:
 			_quick_list(f"{dept}: In Triage", [_f("status", "=", VISIT_STATUS_IN_TRIAGE)]),
 		]
 	elif dept == DEPT_LABORATORY:
+		# B2 (FR-16): worklist, samples and results to approve.
 		shortcuts = [
 			_shortcut(f"{dept}: Awaiting Laboratory", [_f("lab_open", "=", 1), OPEN], "Purple"),
+			_report_shortcut(f"{dept}: Worklist", REPORT_LAB_WORKLIST, "Service Request"),
+			_doc_shortcut(
+				f"{dept}: Samples to Collect",
+				"Sample Collection",
+				[["Sample Collection", "docstatus", "=", 0]],
+				"Orange",
+			),
+			_doc_shortcut(
+				f"{dept}: Results to Approve",
+				"Diagnostic Report",
+				[["Diagnostic Report", "status", "!=", "Approved"]],
+				"Blue",
+			),
 			_shortcut(f"{dept}: Routed to {dept}", department_filters(dept), "Blue"),
 		]
-		quick_lists = [_quick_list(f"{dept} Queue", department_filters(dept))]
+		quick_lists = [
+			_quick_list(f"{dept} Queue", department_filters(dept)),
+			_doc_quick_list(
+				f"{dept}: Open Sample Collections",
+				"Sample Collection",
+				[["Sample Collection", "docstatus", "=", 0]],
+			),
+		]
 	elif dept == DEPT_PHARMACY:
+		# B3 (FR-20): worklist, open prescriptions, dispensing records.
+		open_lines = [
+			["Medication Request", "docstatus", "=", 1],
+			["Medication Request", "krcs_dispense_status", "in", ["Pending", "Partly Dispensed"]],
+		]
 		shortcuts = [
 			_shortcut(f"{dept}: Awaiting Pharmacy", [_f("pharmacy_open", "=", 1)], "Red"),
+			_report_shortcut(f"{dept}: Worklist", REPORT_PHARMACY_WORKLIST, "Medication Request"),
+			_doc_shortcut(
+				f"{dept}: Dispensing Records",
+				DISPENSING_DOCTYPE,
+				[[DISPENSING_DOCTYPE, "docstatus", "=", 1]],
+				"Green",
+				"{} dispensed",
+			),
 			_shortcut(f"{dept}: Routed to {dept}", department_filters(dept), "Blue"),
 		]
-		quick_lists = [_quick_list(f"{dept} Queue", department_filters(dept))]
+		quick_lists = [
+			_quick_list(f"{dept} Queue", department_filters(dept)),
+			_doc_quick_list(f"{dept}: Open Prescriptions", "Medication Request", open_lines),
+		]
+	elif dept == DEPT_HIS:
+		# B4 (FR-38): data access requests and consent exceptions.
+		not_closed = [DATA_ACCESS_REQUEST_DOCTYPE, "status", "!=", "Closed"]
+		shortcuts = [
+			_doc_shortcut(
+				f"{dept}: Data Access Requests", DATA_ACCESS_REQUEST_DOCTYPE, [not_closed], "Orange"
+			),
+			_doc_shortcut(
+				f"{dept}: Overdue Requests",
+				DATA_ACCESS_REQUEST_DOCTYPE,
+				[not_closed, [DATA_ACCESS_REQUEST_DOCTYPE, "due_date", "<", "Today"]],
+				"Red",
+				"{} overdue",
+			),
+			_report_shortcut(f"{dept}: Consent Exceptions", REPORT_CONSENT_EXCEPTIONS, CONSENT_DOCTYPE),
+			_shortcut(f"{dept}: Routed to {dept}", department_filters(dept), "Blue"),
+		]
+		quick_lists = [
+			_quick_list(f"{dept} Queue", department_filters(dept)),
+			_doc_quick_list(f"{dept}: Open Data Access Requests", DATA_ACCESS_REQUEST_DOCTYPE, [not_closed]),
+		]
 	else:
 		shortcuts = [
 			_shortcut(f"{dept}: Routed to {dept}", department_filters(dept), "Blue"),
@@ -163,7 +287,15 @@ def department_block(dept: str) -> dict:
 				"{} in consultation",
 			),
 		]
-		quick_lists = [_quick_list(f"{dept} Queue", department_filters(dept))]
+		quick_lists = [
+			_quick_list(f"{dept} Queue", department_filters(dept)),
+			# B1: this department's consultations not yet completed.
+			_doc_quick_list(
+				f"{dept}: Open Consultations",
+				ENCOUNTER_DOCTYPE,
+				[[ENCOUNTER_DOCTYPE, "docstatus", "=", 0], [ENCOUNTER_DOCTYPE, "krcs_department", "=", dept]],
+			),
+		]
 	return {"shortcuts": shortcuts, "quick_lists": quick_lists}
 
 
@@ -176,6 +308,29 @@ def workspace_definition(workspace: str) -> dict:
 			if frappe.db.exists("Number Card", card):
 				number_cards.append({"number_card_name": card, "label": card})
 				blocks.append(_block("number_card", card, 3))
+		# Phase 2 oversight (B1 referrals, B4 data access and audit): Medical In-Charge.
+		overview = [
+			_doc_shortcut(
+				"Visit Overview: Open Referrals",
+				REFERRAL_DOCTYPE,
+				[[REFERRAL_DOCTYPE, "status", "in", ["Sent", "Received"]]],
+				"Orange",
+			),
+			_doc_shortcut(
+				"Visit Overview: Requests Awaiting Decision",
+				DATA_ACCESS_REQUEST_DOCTYPE,
+				[[DATA_ACCESS_REQUEST_DOCTYPE, "status", "=", "Identity Verified"]],
+				"Red",
+				"{} to decide",
+			),
+			_report_shortcut(
+				"Visit Overview: Consent Exceptions", REPORT_CONSENT_EXCEPTIONS, CONSENT_DOCTYPE
+			),
+			_report_shortcut("Visit Overview: Access Audit", REPORT_ACCESS_AUDIT, ACCESS_LOG_DOCTYPE, "Grey"),
+		]
+		for sc in overview:
+			blocks.append(_block("shortcut", sc["label"], 3))
+		shortcuts += overview
 		blocks.append(_spacer("overview"))
 	for dept, ws in DEPARTMENT_WORKSPACE.items():
 		if ws != workspace:

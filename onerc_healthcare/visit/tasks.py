@@ -33,8 +33,13 @@ from onerc_healthcare.constants import (
 )
 from onerc_healthcare.visit import engine
 
-VISIT_CLOSED_HANDLERS: list[str] = []
-TASK_CHECKERS: dict[str, str] = {}
+VISIT_CLOSED_HANDLERS: list[str] = [
+	"onerc_healthcare.clinical.consultation.on_visit_closed",  # B1: revoke unsent lab orders
+]
+TASK_CHECKERS: dict[str, str] = {
+	"lab": "onerc_healthcare.lab.tasks.is_lab_complete",  # B2
+	"pharmacy": "onerc_healthcare.pharmacy.tasks.is_pharmacy_complete",  # B3
+}
 
 # task key -> (visit flag, event raised when the checker reports the task complete)
 TASK_EVENTS = {

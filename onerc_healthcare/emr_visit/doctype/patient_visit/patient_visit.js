@@ -154,8 +154,29 @@ frappe.ui.form.on("Patient Visit", {
 
 	refresh(frm) {
 		if (frm.is_new()) return;
-		const actions = (frm.doc.__onload || {}).available_actions || [];
+		// Refer is done from the consultation (it creates the Referral record, BR-14), not the visit.
+		const actions = ((frm.doc.__onload || {}).available_actions || []).filter(
+			(a) => a.action !== "refer"
+		);
 		actions.forEach((a) => {
+			if (a.action === "start_consultation") {
+				// Starting a consultation creates (or reopens) the visit's Patient Encounter (B1).
+				const btn = frm.add_custom_button(__(a.label), () =>
+					frappe
+						.call({
+							method: "onerc_healthcare.clinical.consultation.start_consultation",
+							type: "POST",
+							args: { visit: frm.doc.name },
+							freeze: true,
+						})
+						.then((r) => {
+							const enc = r.message && (r.message.encounter || r.message.name || r.message);
+							if (enc) frappe.set_route("Form", "Patient Encounter", enc);
+						})
+				);
+				btn.addClass("btn-primary");
+				return;
+			}
 			const btn = frm.add_custom_button(
 				__(a.label),
 				() =>
@@ -169,6 +190,12 @@ frappe.ui.form.on("Patient Visit", {
 			);
 			if (a.is_primary) btn.addClass("btn-primary");
 		});
+
+		if (frm.doc.encounter) {
+			frm.add_custom_button(__("Open Consultation"), () =>
+				frappe.set_route("Form", "Patient Encounter", frm.doc.encounter)
+			);
+		}
 
 		if ((frm.doc.__onload || {}).can_recheck_tasks) {
 			frm.add_custom_button(

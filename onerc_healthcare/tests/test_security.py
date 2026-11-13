@@ -226,6 +226,9 @@ class TestDeleteGuard(EMRTestCase):
 	def test_archived_field_on_clinical_doctypes(self):
 		"""NFR-9: inactive records are flagged archived instead of deleted."""
 		for doctype in CLINICAL_DOCTYPES:
+			# The Access Log Entry is append-only: no archive flag (security/setup.add_archived_fields).
+			if doctype == "Access Log Entry":
+				continue
 			if frappe.db.exists("DocType", doctype):
 				self.assertTrue(frappe.get_meta(doctype).has_field(ARCHIVED_FIELD), doctype)
 				names = [df.fieldname for df in frappe.get_meta(doctype).fields]
@@ -271,10 +274,15 @@ class TestRoleMatrix(EMRTestCase):
 		self.assertFalse(can("Patient Encounter", "read", pharmacist))
 
 	def test_clinician_consults_and_orders(self):
+		"""Clinicians write encounters; Phase 2: orders are created by the consultation flow, so clinicians
+		only read Service/Medication Requests (no forged statuses, audit A3)."""
 		clinician = role_user(ROLE_CLINICIAN)
-		for doctype in ("Patient Encounter", "Service Request", "Medication Request"):
-			self.assertTrue(can(doctype, "create", clinician), doctype)
-			self.assertTrue(can(doctype, "submit", clinician), doctype)
+		self.assertTrue(can("Patient Encounter", "create", clinician))
+		self.assertTrue(can("Patient Encounter", "submit", clinician))
+		for doctype in ("Service Request", "Medication Request"):
+			self.assertTrue(can(doctype, "read", clinician), doctype)
+			self.assertFalse(can(doctype, "create", clinician), doctype)
+			self.assertFalse(can(doctype, "write", clinician), doctype)
 
 	def test_his_officer_reads_but_does_not_edit_clinical_notes(self):
 		his = role_user(ROLE_HIS)
@@ -285,8 +293,13 @@ class TestRoleMatrix(EMRTestCase):
 		"""SDD §6.1: user and role management, configuration, no clinical content."""
 		admin = role_user(ROLE_SYSADMIN)
 		for doctype in CLINICAL_DOCTYPES:
+			# D15/FR-40: the EMR System Administrator audits access (metadata only, no clinical values).
+			if doctype == "Access Log Entry":
+				continue
 			if frappe.db.exists("DocType", doctype):
 				self.assertFalse(can(doctype, "read", admin), doctype)
+		self.assertTrue(can("Access Log Entry", "read", admin))
+		self.assertTrue(can("Activity Log", "read", admin))
 		self.assertTrue(can("User", "create", admin))
 		self.assertTrue(can("Medical Department", "write", admin))
 		self.assertFalse(can("Healthcare Settings", "write", admin))

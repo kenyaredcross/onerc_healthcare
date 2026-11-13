@@ -144,6 +144,20 @@ def _guard_no_open_tasks(doc) -> str | None:
 	return None
 
 
+def _guard_discharge(doc) -> str | None:
+	"""Discharge: no open tasks, and no consultation left unfinished (integration fix: a draft
+	encounter would otherwise be abandoned; Complete Consultation is the path when one exists)."""
+	failure = _guard_no_open_tasks(doc)
+	if failure:
+		return failure
+	encounter = doc.get("encounter")
+	if encounter and frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, "docstatus") == 0:
+		return _("Visit {0} has an unfinished consultation. Use Complete Consultation on {1}.").format(
+			doc.name, encounter
+		)
+	return None
+
+
 def _guard_encounter_submitted(doc) -> str | None:
 	if not is_consultation_complete(doc):
 		return _("Submit the consultation (Patient Encounter) for visit {0} before completing it.").format(
@@ -243,7 +257,7 @@ TRANSITIONS: dict[str, Transition] = {
 		VISIT_STATUS_DISCHARGED,
 		CONSULTING_ROLES,
 		timestamp_field="closed_at",
-		guard=_guard_no_open_tasks,
+		guard=_guard_discharge,
 	),
 	ACTION_COMPLETE_CONSULTATION: Transition(
 		_("Complete Consultation"),
@@ -254,7 +268,9 @@ TRANSITIONS: dict[str, Transition] = {
 	),
 	ACTION_REFER: Transition(
 		_("Refer"),
-		(VISIT_STATUS_IN_CONSULTATION,),
+		# Integration fix: a referral may be issued while results or dispensing are still pending; the
+		# Referred visit keeps its open tasks and the lab/pharmacy events clear them later (invariant 1).
+		(VISIT_STATUS_IN_CONSULTATION, VISIT_STATUS_AWAITING_LAB, VISIT_STATUS_AWAITING_PHARMACY),
 		VISIT_STATUS_REFERRED,
 		CONSULTING_ROLES,
 		needs_comment=True,

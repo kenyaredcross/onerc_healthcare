@@ -130,27 +130,11 @@ def get_test_appointment_type() -> str:
 
 
 def make_submitted_encounter(patient: str, visit: str | None = None, link: bool = True, submit: bool = True):
-	"""A minimal Patient Encounter for `patient`, submitted, and linked to `visit` (engine.link_encounter)."""
-	from onerc_healthcare.setup.operations import get_company
-	from onerc_healthcare.visit.engine import link_encounter
+	"""A minimal submitted Patient Encounter for `patient`, linked to `visit`.
 
-	values = {
-		"doctype": ENCOUNTER_DOCTYPE,
-		"patient": patient,
-		"practitioner": get_test_practitioner(),
-		"appointment_type": get_test_appointment_type(),
-		"encounter_date": nowdate(),
-		"encounter_time": nowtime(),
-		"company": get_company(),
-	}
-	if visit and frappe.get_meta(ENCOUNTER_DOCTYPE).has_field(ENCOUNTER_VISIT_FIELD):
-		values[ENCOUNTER_VISIT_FIELD] = visit
-	doc = frappe.get_doc(values)
-	doc.flags.ignore_mandatory = True
-	doc.insert(ignore_permissions=True)
-	if submit:
-		doc.flags.ignore_mandatory = True
-		doc.submit()
-	if visit and link:
-		link_encounter(visit, doc.name)
-	return doc
+	Delegates to `clinical_factories.make_submitted_encounter`, which submits the way the consultation
+	flow does (B1 guards refuse a plain desk submit).
+	"""
+	from onerc_healthcare.tests.clinical_factories import make_submitted_encounter as _make
+
+	return _make(patient, visit, link=link, submit=submit)

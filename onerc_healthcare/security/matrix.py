@@ -65,22 +65,24 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_HIS: "r",  # reports and diagnosis mapping; no editing (SDD §6.1)
 		ROLE_MIC: "r",
 	},
+	# Phase 2: clinicians read only. Orders are created by the consultation flow (ignore_permissions), and
+	# write would let Marley's set_request_status forge "completed" (audit A3).
 	"Service Request": {
-		ROLE_CLINICIAN: "rwcs",
-		ROLE_MHO: "rwcs",
+		ROLE_CLINICIAN: "r",
+		ROLE_MHO: "r",
 		ROLE_LAB: "r",
 		ROLE_HIS: "r",
 		ROLE_MIC: "r",
 	},
 	"Medication Request": {
-		ROLE_CLINICIAN: "rwcs",
-		ROLE_MHO: "rwcs",
+		ROLE_CLINICIAN: "r",
+		ROLE_MHO: "r",
 		ROLE_PHARMACIST: "r",
 		ROLE_HIS: "r",
 		ROLE_MIC: "r",
 	},
 	"Observation": {
-		ROLE_LAB: "rwcs",
+		ROLE_LAB: "rwcsx",  # x = cancel: a rejected result is cancelled and redone (B2)
 		ROLE_CLINICIAN: "r",
 		ROLE_MHO: "r",
 		ROLE_HIS: "r",
@@ -117,6 +119,14 @@ MASTER_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_MIC: "r",
 		ROLE_SYSADMIN: "r",
 	},
+	# Phase 2: medication masters, read for prescribing and dispensing. No write: Marley's Medication form
+	# creates stock Items and Item Prices (C-5); the catalogue is maintained through the seeded JSON (OI-9).
+	**{
+		dt: {ROLE_CLINICIAN: "r", ROLE_MHO: "r", ROLE_PHARMACIST: "r", ROLE_HIS: "r", ROLE_MIC: "r"}
+		for dt in ("Medication", "Prescription Dosage", "Prescription Duration", "Dosage Form")
+	},
+	# Phase 2: Marley's create_specimen saves without ignore_permissions (B2).
+	"Specimen": {ROLE_LAB: "rwc", ROLE_MIC: "r"},
 }
 
 # EMR System Administrator: user and role management and configuration, no clinical content.
@@ -132,6 +142,8 @@ ADMIN_MATRIX: dict[str, dict[str, str] | dict[int, dict[str, str]]] = {
 	"System Settings": {0: {ROLE_SYSADMIN: "r"}},
 	# Read-only so the billing-free settings (C-5) stay under System Manager control.
 	"Healthcare Settings": {0: {ROLE_SYSADMIN: "r"}},
+	# NFR-7: login attempts are reviewed by the EMR System Administrator (metadata only, no clinical data).
+	"Activity Log": {0: {ROLE_SYSADMIN: "r"}},
 }
 
 # Bulk-deletion routes closed for every role (NFR-9). Enforced on every migrate.
