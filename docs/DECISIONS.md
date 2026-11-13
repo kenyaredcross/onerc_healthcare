@@ -60,3 +60,9 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
   - clinical DocTypes are listed in `company_data_to_be_ignored`
 
 **D18. Price lists.** (C-5) Only selling price lists are disabled. Buying price lists stay available for future pharmacy procurement.
+
+**D19. Patient ID series per operation.**
+- Patient records are named `KLB-PAT-.YYYY.-#####` on Kalobeyei and `DDB-PAT-.YYYY.-#####` on Dadaab, so the two sites never issue the same Patient ID. Marley's `HLC-PAT-` series is replaced through a property setter.
+- Marley's Emergency Record still names its patients `ER-.YYYY.-#####`. That series is hard-coded in Marley, so it stays an option.
+- The series is set only while no naming-series property setter exists, so an admin's later choice in Document Naming Settings survives migrate.
+- Set on 2026-11-13, before any patient existed.
