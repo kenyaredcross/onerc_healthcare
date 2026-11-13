@@ -1,0 +1,224 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-11-13 18:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "patient",
+  "patient_name",
+  "column_break_outcome",
+  "outcome",
+  "recorded_at",
+  "recorded_by",
+  "statement_section",
+  "statement",
+  "column_break_statement",
+  "statement_version",
+  "statement_language",
+  "statement_text_section",
+  "statement_text",
+  "given_by_section",
+  "given_by",
+  "representative_name",
+  "relationship",
+  "column_break_reason",
+  "reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CON-.YYYY.-",
+   "default": "CON-.YYYY.-",
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "reqd": 1,
+   "search_index": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_outcome",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Outcome",
+   "options": "\nGiven\nWithheld\nUnable to Consent\nWithdrawn",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "recorded_at",
+   "fieldtype": "Datetime",
+   "label": "Recorded At",
+   "read_only": 1,
+   "in_list_view": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "label": "Recorded By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "statement_section",
+   "fieldtype": "Section Break",
+   "label": "Consent Statement"
+  },
+  {
+   "fieldname": "statement",
+   "fieldtype": "Link",
+   "label": "Statement",
+   "options": "Consent Statement",
+   "reqd": 1,
+   "link_filters": "[[\"Consent Statement\",\"status\",\"=\",\"Active\"]]",
+   "description": "The Active statement read to the patient."
+  },
+  {
+   "fieldname": "column_break_statement",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "statement_version",
+   "fieldtype": "Data",
+   "label": "Statement Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "statement_language",
+   "fieldtype": "Link",
+   "label": "Statement Language",
+   "options": "Language",
+   "read_only": 1
+  },
+  {
+   "fieldname": "statement_text_section",
+   "fieldtype": "Section Break",
+   "label": "Statement Text",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "statement_text",
+   "fieldtype": "HTML",
+   "label": "Statement Text"
+  },
+  {
+   "fieldname": "given_by_section",
+   "fieldtype": "Section Break",
+   "label": "Given By"
+  },
+  {
+   "fieldname": "given_by",
+   "fieldtype": "Select",
+   "label": "Given By",
+   "options": "Patient\nRepresentative",
+   "default": "Patient",
+   "reqd": 1
+  },
+  {
+   "fieldname": "representative_name",
+   "fieldtype": "Data",
+   "label": "Representative Name",
+   "depends_on": "eval:doc.given_by=='Representative'",
+   "mandatory_depends_on": "eval:doc.given_by=='Representative'"
+  },
+  {
+   "fieldname": "relationship",
+   "fieldtype": "Data",
+   "label": "Relationship to Patient",
+   "depends_on": "eval:doc.given_by=='Representative'",
+   "mandatory_depends_on": "eval:doc.given_by=='Representative'"
+  },
+  {
+   "fieldname": "column_break_reason",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "depends_on": "eval:doc.outcome && doc.outcome!='Given'",
+   "mandatory_depends_on": "eval:doc.outcome && doc.outcome!='Given'",
+   "description": "Required when consent is not given. Care is never denied (SDD §5.10)."
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-11-13 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Data Protection",
+ "name": "Patient Consent",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Nurse Receptionist",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Clinical Officer",
+   "permlevel": 0,
+   "read": 1
+  },
+  {
+   "role": "Mental Health Officer",
+   "permlevel": 0,
+   "read": 1
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "print": 1,
+   "report": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "patient_name,outcome",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 1
+}

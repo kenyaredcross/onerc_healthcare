@@ -1,0 +1,176 @@
+{
+ "actions": [],
+ "autoname": "field:version",
+ "creation": "2026-11-13 18:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "version",
+  "language",
+  "column_break_status",
+  "status",
+  "effective_date",
+  "activated_at",
+  "retired_at",
+  "provisional_section",
+  "is_provisional",
+  "provisional_note",
+  "text_section",
+  "text",
+  "history_section",
+  "log"
+ ],
+ "fields": [
+  {
+   "fieldname": "version",
+   "fieldtype": "Data",
+   "label": "Version",
+   "reqd": 1,
+   "unique": 1,
+   "set_only_once": 1,
+   "in_list_view": 1,
+   "description": "Unique label, e.g. EN-1.0. A change of wording is a new version (SDD §5.10)."
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Link",
+   "label": "Language",
+   "options": "Language",
+   "reqd": 1,
+   "default": "en",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nActive\nRetired",
+   "default": "Draft",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Changes only through Activate. Activating a statement retires the previous Active one of the same language."
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date"
+  },
+  {
+   "fieldname": "activated_at",
+   "fieldtype": "Datetime",
+   "label": "Activated At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retired_at",
+   "fieldtype": "Datetime",
+   "label": "Retired At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "provisional_section",
+   "fieldtype": "Section Break",
+   "label": "Provisional Wording"
+  },
+  {
+   "fieldname": "is_provisional",
+   "fieldtype": "Check",
+   "label": "Provisional",
+   "default": "0"
+  },
+  {
+   "fieldname": "provisional_note",
+   "fieldtype": "Small Text",
+   "label": "Provisional Note",
+   "depends_on": "is_provisional"
+  },
+  {
+   "fieldname": "text_section",
+   "fieldtype": "Section Break",
+   "label": "Statement"
+  },
+  {
+   "fieldname": "text",
+   "fieldtype": "Text Editor",
+   "label": "Text",
+   "reqd": 1,
+   "description": "Locked once any Patient Consent references this statement."
+  },
+  {
+   "fieldname": "history_section",
+   "fieldtype": "Section Break",
+   "label": "History",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "log",
+   "fieldtype": "Table",
+   "label": "Status History",
+   "options": "Consent Statement Log",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-13 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Data Protection",
+ "name": "Consent Statement",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "EMR System Administrator",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Nurse Receptionist",
+   "permlevel": 0,
+   "read": 1
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1
+  },
+  {
+   "role": "Clinical Officer",
+   "permlevel": 0,
+   "read": 1
+  },
+  {
+   "role": "Mental Health Officer",
+   "permlevel": 0,
+   "read": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 0,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "version",
+ "track_changes": 1
+}

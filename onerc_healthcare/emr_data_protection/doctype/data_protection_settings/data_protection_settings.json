@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 18:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "response_days"
+ ],
+ "fields": [
+  {
+   "fieldname": "response_days",
+   "fieldtype": "Int",
+   "label": "Response Period (days)",
+   "default": "7",
+   "reqd": 1,
+   "description": "Days from receipt to the due date of a data access or correction request. PROVISIONAL: 7 days until the statutory period is confirmed (Data Protection Act 2019, OI-14)."
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-13 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Data Protection",
+ "name": "Data Protection Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "EMR System Administrator",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

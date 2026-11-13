@@ -1,0 +1,357 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-11-13 18:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "patient",
+  "patient_name",
+  "request_type",
+  "details",
+  "column_break_status",
+  "status",
+  "received_date",
+  "due_date",
+  "requester_section",
+  "requester_type",
+  "requester_name",
+  "column_break_requester",
+  "relationship",
+  "contact",
+  "identity_section",
+  "identity_method",
+  "identity_evidence",
+  "column_break_identity",
+  "identity_verified_by",
+  "identity_verified_at",
+  "decision_section",
+  "decision_reason",
+  "column_break_decision",
+  "decided_by",
+  "decided_at",
+  "response_section",
+  "extract_file",
+  "corrected_doctype",
+  "corrected_record",
+  "correction_version",
+  "column_break_response",
+  "response_date",
+  "response_method",
+  "responded_by",
+  "history_section",
+  "log"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "DAR-.YYYY.-",
+   "default": "DAR-.YYYY.-",
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "reqd": 1,
+   "search_index": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "request_type",
+   "fieldtype": "Select",
+   "label": "Request Type",
+   "options": "Access\nCorrection",
+   "default": "Access",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Small Text",
+   "label": "Details",
+   "reqd": 1,
+   "description": "What is requested. For a correction: which record and what is wrong."
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Received\nIdentity Verified\nApproved\nRejected\nResponse Ready\nClosed",
+   "default": "Received",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "no_copy": 1,
+   "description": "Changes only through the request actions (FR-38)."
+  },
+  {
+   "fieldname": "received_date",
+   "fieldtype": "Date",
+   "label": "Received Date",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "label": "Due Date",
+   "read_only": 1,
+   "in_list_view": 1,
+   "no_copy": 1,
+   "search_index": 1,
+   "description": "Received date plus the response period in Data Protection Settings."
+  },
+  {
+   "fieldname": "requester_section",
+   "fieldtype": "Section Break",
+   "label": "Requester"
+  },
+  {
+   "fieldname": "requester_type",
+   "fieldtype": "Select",
+   "label": "Requester Type",
+   "options": "Patient\nAuthorised Representative",
+   "default": "Patient",
+   "reqd": 1
+  },
+  {
+   "fieldname": "requester_name",
+   "fieldtype": "Data",
+   "label": "Requester Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_requester",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "relationship",
+   "fieldtype": "Data",
+   "label": "Relationship to Patient",
+   "depends_on": "eval:doc.requester_type=='Authorised Representative'",
+   "mandatory_depends_on": "eval:doc.requester_type=='Authorised Representative'"
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Data",
+   "label": "Contact",
+   "description": "Phone number or email for the response."
+  },
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "Identity Verification"
+  },
+  {
+   "fieldname": "identity_method",
+   "fieldtype": "Select",
+   "label": "Identity Method",
+   "options": "\nNational ID\nUNHCR ID / Proof of Life\nAlien ID\nOther official document\nKnown to staff\nWritten authorisation from the patient",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "identity_evidence",
+   "fieldtype": "Small Text",
+   "label": "Identity Evidence",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Document number or how identity was confirmed."
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "identity_verified_by",
+   "fieldtype": "Link",
+   "label": "Verified By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "identity_verified_at",
+   "fieldtype": "Datetime",
+   "label": "Verified At",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "decision_section",
+   "fieldtype": "Section Break",
+   "label": "Decision"
+  },
+  {
+   "fieldname": "decision_reason",
+   "fieldtype": "Small Text",
+   "label": "Decision Reason",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_decision",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "decided_by",
+   "fieldtype": "Link",
+   "label": "Decided By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "decided_at",
+   "fieldtype": "Datetime",
+   "label": "Decided At",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "response_section",
+   "fieldtype": "Section Break",
+   "label": "Response"
+  },
+  {
+   "fieldname": "extract_file",
+   "fieldtype": "Attach",
+   "label": "Record Extract",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Private file generated by Prepare Extract (access requests)."
+  },
+  {
+   "fieldname": "corrected_doctype",
+   "fieldtype": "Link",
+   "label": "Corrected Record Type",
+   "options": "DocType",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "corrected_record",
+   "fieldtype": "Dynamic Link",
+   "label": "Corrected Record",
+   "options": "corrected_doctype",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "correction_version",
+   "fieldtype": "Link",
+   "label": "Correction Version",
+   "options": "Version",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Version entry of the corrected record that holds the change."
+  },
+  {
+   "fieldname": "column_break_response",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "response_date",
+   "fieldtype": "Date",
+   "label": "Response Date",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "response_method",
+   "fieldtype": "Select",
+   "label": "Response Method",
+   "options": "\nIn person\nEmail\nPost\nTelephone\nOther",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "responded_by",
+   "fieldtype": "Link",
+   "label": "Responded By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "history_section",
+   "fieldtype": "Section Break",
+   "label": "History",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "log",
+   "fieldtype": "Table",
+   "label": "Status History",
+   "options": "Data Access Request Log",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "links": [],
+ "make_attachments_public": 0,
+ "modified": "2026-11-13 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Data Protection",
+ "name": "Data Access Request",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Nurse Receptionist",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "print": 1,
+   "report": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "patient_name,requester_name,status",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 1
+}
