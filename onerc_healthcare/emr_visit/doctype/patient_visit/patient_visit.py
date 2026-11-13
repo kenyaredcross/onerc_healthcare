@@ -32,9 +32,11 @@ from onerc_healthcare.constants import (
 from onerc_healthcare.setup.operations import get_company, get_operation
 from onerc_healthcare.visit.engine import (
 	ACTION_REGISTER,
+	NON_ROUTABLE_DEPARTMENTS,
 	PROTECTED_FIELDS,
 	STATUS_LOG_FIELDS,
 	get_available_actions,
+	has_submitted_triage_vitals,
 )
 from onerc_healthcare.visit.patients import assert_patient_active, lock_patient
 from onerc_healthcare.visit.queue import get_primary_identifier, next_queue_number
@@ -50,6 +52,8 @@ class VisitStatusLockedError(frappe.ValidationError):
 class PatientVisit(Document):
 	def onload(self):
 		self.set_onload("available_actions", get_available_actions(self))
+		self.set_onload("non_routable_departments", list(NON_ROUTABLE_DEPARTMENTS))
+		self.set_onload("has_triage_vitals", has_submitted_triage_vitals(self))
 
 	def validate(self):
 		self.validate_required()
@@ -136,6 +140,7 @@ class PatientVisit(Document):
 		for field in STAGE_TIMESTAMPS:
 			self.set(field, None)
 		self.triage_level = self.triage_vital_signs = None
+		self.routed_without_vitals = 0
 		self.queue_number = None
 		self.company = self._facility_company or (get_company() if get_operation() else None)
 		self.patient_identifier = get_primary_identifier(self.patient) if self.patient else None

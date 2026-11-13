@@ -117,3 +117,15 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 - **Limitation:** after an admin rearranges a sidebar in the desk, the client reloads sidebars without this hook, and the old behaviour returns until the page is reloaded.
 - **Upstream:** this is a Frappe 16 / Marley v16 issue worth reporting.
 - Reported by the user on 2026-11-13.
+
+**D27. Routing rules after triage.** (FR-9, SDD §4.4)
+- **Routing targets:**
+  - `route` and `reroute` refuse **Reception** and **Triage**. These are intake steps, not destinations, and a visit routed "to Triage" showed in no queue.
+  - **Re-route** (Triage Nurse) changes the department of a routed visit before consultation starts.
+  - **Return to Triage** (Triage Nurse, Clinical Officer or Mental Health Officer, with a reason) sends a routed visit back to In Triage before consultation starts.
+- **Vital signs before routing:**
+  - `route` needs **submitted triage vital signs** linked to the visit, which carry the triage level and chief complaint.
+  - **Emergency override:** a Triage Nurse may route without vitals by giving a reason. The reason is logged as "Routed without vital signs: …", and the visit gets a protected flag `routed_without_vitals` so the Medical In-Charge can review these cases.
+  - The flag is sticky: it stays set even if the visit is later returned, triaged and routed normally.
+- **Correction on kalobeyei:** the mistaken visit KLB-PV-2026-00009 (Mary Akuru, routed to Triage) was returned to In Triage by Administrator with a logged reason.
+- Decided by the user on 2026-11-13.

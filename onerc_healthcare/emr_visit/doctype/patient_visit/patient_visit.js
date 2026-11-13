@@ -5,8 +5,9 @@ frappe.provide("onerc_healthcare.visit");
 
 onerc_healthcare.visit.APPLY_ACTION = "onerc_healthcare.visit.engine.apply_action";
 
-// Run a visit action; route asks for the department, discharge/refer ask for confirmation.
-onerc_healthcare.visit.run_action = function (visit, action, label, needs_department, after) {
+// Run a visit action. `a` is an entry of `available_actions` ({action, label, needs_department,
+// needs_comment}); `opts.exclude_departments` are the intake departments hidden from the picker.
+onerc_healthcare.visit.run_action = function (visit, a, after, opts = {}) {
 	const call = (values) =>
 		frappe
 			.call({
@@ -14,9 +15,10 @@ onerc_healthcare.visit.run_action = function (visit, action, label, needs_depart
 				type: "POST",
 				args: {
 					visit: visit,
-					action: action,
+					action: a.action,
 					department: values.department || null,
 					comment: values.comment || null,
+					without_vitals_reason: values.without_vitals_reason || null,
 				},
 				freeze: true,
 				freeze_message: __("Updating visit..."),
@@ -31,49 +33,58 @@ onerc_healthcare.visit.run_action = function (visit, action, label, needs_depart
 				after && after(r.message);
 			});
 
-	if (needs_department) {
-		const d = new frappe.ui.Dialog({
-			title: __(label),
-			fields: [
-				{
-					fieldname: "department",
-					fieldtype: "Link",
-					options: "Medical Department",
-					label: __("Department"),
-					reqd: 1,
-				},
-				{ fieldname: "comment", fieldtype: "Small Text", label: __("Comment") },
-			],
-			primary_action_label: __("Route"),
-			primary_action(values) {
-				d.hide();
-				call(values);
-			},
-		});
-		d.show();
+	const asks_comment = a.needs_comment || ["discharge", "refer"].includes(a.action);
+	if (!a.needs_department && !asks_comment) {
+		call({});
 		return;
 	}
-	if (["discharge", "refer"].includes(action)) {
-		const d = new frappe.ui.Dialog({
-			title: __(label),
-			fields: [
-				{
-					fieldname: "comment",
-					fieldtype: "Small Text",
-					label: action === "refer" ? __("Referral reason") : __("Comment"),
-					reqd: action === "refer" ? 1 : 0,
-				},
-			],
-			primary_action_label: __(label),
-			primary_action(values) {
-				d.hide();
-				call(values);
-			},
+	const exclude = [...(opts.exclude_departments || [])];
+	if (a.action === "reroute" && opts.current_department) exclude.push(opts.current_department);
+	const fields = [];
+	if (a.needs_department) {
+		fields.push({
+			fieldname: "department",
+			fieldtype: "Link",
+			options: "Medical Department",
+			label: __("Department"),
+			reqd: 1,
+			get_query: () => ({ filters: { name: ["not in", exclude] } }),
 		});
-		d.show();
-		return;
 	}
-	call({});
+	// FR-9: routing needs submitted triage vitals, or an emergency reason.
+	if (a.action === "route" && opts.has_triage_vitals === false) {
+		fields.push(
+			{
+				fieldname: "no_vitals_note",
+				fieldtype: "HTML",
+				options: `<div class="alert alert-warning" style="margin-bottom: 0">${__(
+					"No vital signs recorded. Record Vital Signs first, or give a reason to route without them."
+				)}</div>`,
+			},
+			{
+				fieldname: "without_vitals_reason",
+				fieldtype: "Small Text",
+				label: __("Reason for routing without vital signs"),
+				reqd: 1,
+			}
+		);
+	}
+	fields.push({
+		fieldname: "comment",
+		fieldtype: "Small Text",
+		label: a.needs_comment ? __("Reason") : __("Comment"),
+		reqd: a.needs_comment ? 1 : 0,
+	});
+	const d = new frappe.ui.Dialog({
+		title: __(a.label),
+		fields: fields,
+		primary_action_label: __(a.label),
+		primary_action(values) {
+			d.hide();
+			call(values);
+		},
+	});
+	d.show();
 };
 
 onerc_healthcare.visit.minutes_since = function (value) {
@@ -95,13 +106,11 @@ frappe.ui.form.on("Patient Visit", {
 			const btn = frm.add_custom_button(
 				__(a.label),
 				() =>
-					onerc_healthcare.visit.run_action(
-						frm.doc.name,
-						a.action,
-						a.label,
-						a.needs_department,
-						() => frm.reload_doc()
-					),
+					onerc_healthcare.visit.run_action(frm.doc.name, a, () => frm.reload_doc(), {
+						exclude_departments: (frm.doc.__onload || {}).non_routable_departments || [],
+						current_department: frm.doc.current_department,
+						has_triage_vitals: !!(frm.doc.__onload || {}).has_triage_vitals,
+					}),
 				a.is_primary ? null : __("Actions")
 			);
 			if (a.is_primary) btn.addClass("btn-primary");

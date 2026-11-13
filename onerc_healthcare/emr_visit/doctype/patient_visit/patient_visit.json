@@ -29,6 +29,7 @@
   "pharmacy_open",
   "triage_level",
   "triage_vital_signs",
+  "routed_without_vitals",
   "timestamps_section",
   "triage_started_at",
   "routed_at",
@@ -211,6 +212,16 @@
    "read_only": 1
   },
   {
+   "description": "Set when triage routed the patient without submitted vital signs (emergency override, FR-9)",
+   "fieldname": "routed_without_vitals",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Routed Without Vital Signs",
+   "no_copy": 1,
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "fieldname": "timestamps_section",
    "fieldtype": "Section Break",
@@ -288,7 +299,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-13 16:30:00.000000",
+ "modified": "2026-11-13 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Visit",
  "name": "Patient Visit",

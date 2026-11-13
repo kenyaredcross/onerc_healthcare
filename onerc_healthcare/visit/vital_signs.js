@@ -35,7 +35,11 @@ frappe.ui.form.on("Vital Signs", {
 		frappe.db.get_value("Patient Visit", frm.doc.krcs_visit, "status").then((r) => {
 			const status = r.message && r.message.status;
 			if (status !== "In Triage") return;
-			frm.add_custom_button(__("Route to Department"), () => {
+			frm.add_custom_button(__("Route to Department"), async () => {
+				// Reception and Triage are intake departments, never routing targets.
+				const exclude = await frappe.xcall(
+					"onerc_healthcare.visit.engine.get_non_routable_departments"
+				);
 				const d = new frappe.ui.Dialog({
 					title: __("Route to Department"),
 					fields: [
@@ -45,6 +49,7 @@ frappe.ui.form.on("Vital Signs", {
 							options: "Medical Department",
 							label: __("Department"),
 							reqd: 1,
+							get_query: () => ({ filters: { name: ["not in", exclude] } }),
 						},
 						{ fieldname: "comment", fieldtype: "Small Text", label: __("Comment") },
 					],

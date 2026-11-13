@@ -42,6 +42,7 @@ from onerc_healthcare.visit import engine, workspaces
 from onerc_healthcare.visit.engine import (
 	IllegalVisitTransitionError,
 	PharmacyTaskOpenError,
+	TriageVitalsMissingError,
 	apply_action,
 	transition,
 )
@@ -74,8 +75,14 @@ class VisitTestCase(EMRTestCase):
 		with self.as_user(user):
 			return transition(visit.name if hasattr(visit, "name") else visit, action, **kw)
 
+	def submit_vitals(self, visit):
+		"""Submit triage vital signs linked to `visit` (needed before routing, FR-9)."""
+		name = visit.name if hasattr(visit, "name") else visit
+		patient = frappe.db.get_value(VISIT_DOCTYPE, name, "patient")
+		return make_vital_signs(patient, visit=name, submit=True)
+
 	def visit_in(self, status: str, department: str = DEPT_OUTPATIENT):
-		"""A visit advanced to `status` along the normal path."""
+		"""A visit advanced to `status` along the normal path (with submitted triage vitals)."""
 		visit = make_visit()
 		path = {
 			VISIT_STATUS_REGISTERED: [],
@@ -88,6 +95,8 @@ class VisitTestCase(EMRTestCase):
 			],
 		}[status]
 		for action, user in path:
+			if action == "route":
+				self.submit_vitals(visit)
 			visit = self.act(visit, action, user, department=department if action == "route" else None)
 		self.assertEqual(visit.status, status)
 		return visit
@@ -168,6 +177,7 @@ class TestVisitTransitions(VisitTestCase):
 		self.assertEqual(visit.current_department, DEPT_TRIAGE)
 		self.assertTrue(visit.triage_started_at)
 
+		self.submit_vitals(visit)
 		visit = self.act(visit, "route", "triage", department=DEPT_OUTPATIENT)
 		self.assertEqual(visit.status, VISIT_STATUS_ROUTED)
 		self.assertEqual(visit.current_department, DEPT_OUTPATIENT)
@@ -317,6 +327,8 @@ class TestVisitTransitions(VisitTestCase):
 		with self.as_user("triage"):
 			out = apply_action(visit.name, "start_triage")
 			self.assertEqual(out["status"], VISIT_STATUS_IN_TRIAGE)
+		self.submit_vitals(visit)
+		with self.as_user("triage"):
 			out = apply_action(visit.name, "route", department=DEPT_OUTPATIENT, comment="Fever")
 			self.assertEqual(out["current_department"], DEPT_OUTPATIENT)
 		with self.as_user("clinician"), self.assertRaises(frappe.PermissionError):
@@ -333,6 +345,221 @@ class TestVisitTransitions(VisitTestCase):
 			self.assertEqual(
 				sorted(a["action"] for a in engine.get_available_actions(visit)), ["discharge", "refer"]
 			)
+
+
+class TestRerouteAndReturnToTriage(VisitTestCase):
+	"""Intake departments are not routing targets; a routed visit can be re-routed or sent back to triage."""
+
+	def test_intake_departments_not_routable(self):
+		for dept in (DEPT_RECEPTION, DEPT_TRIAGE):
+			visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+			with self.assertRaises(IllegalVisitTransitionError, msg=f"route {dept}"):
+				self.act(visit, "route", "triage", department=dept)
+			self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, visit.name, "status"), VISIT_STATUS_IN_TRIAGE)
+			routed = self.visit_in(VISIT_STATUS_ROUTED)
+			with self.assertRaises(IllegalVisitTransitionError, msg=f"reroute {dept}"):
+				self.act(routed, "reroute", "triage", department=dept)
+			self.assertEqual(
+				frappe.db.get_value(VISIT_DOCTYPE, routed.name, "current_department"), DEPT_OUTPATIENT
+			)
+		self.assertEqual(engine.get_non_routable_departments(), [DEPT_RECEPTION, DEPT_TRIAGE])
+
+	def test_return_to_triage_allowed_roles(self):
+		triage_filter = {"status": VISIT_STATUS_IN_TRIAGE}
+		for user in ("triage", "clinician", "mho"):
+			visit = self.visit_in(VISIT_STATUS_ROUTED)
+			visit = self.act(visit, "return_to_triage", user, comment="Vitals need repeating")
+			self.assertEqual(visit.status, VISIT_STATUS_IN_TRIAGE, user)
+			self.assertEqual(visit.current_department, DEPT_TRIAGE, user)
+			row = visit.status_log[-1]
+			self.assertEqual(
+				(row.from_status, row.to_status, row.action, row.user, row.department, row.comment),
+				(
+					VISIT_STATUS_ROUTED,
+					VISIT_STATUS_IN_TRIAGE,
+					"return_to_triage",
+					self.users[user],
+					DEPT_TRIAGE,
+					"Vitals need repeating",
+				),
+			)
+			# Shows again in the Triage "In Triage" quick list, and can be routed again.
+			with self.as_user("triage"):
+				self.assertIn(visit.name, frappe.get_list(VISIT_DOCTYPE, filters=triage_filter, pluck="name"))
+			visit = self.act(visit, "route", "triage", department=DEPT_MENTAL_HEALTH)
+			self.assertEqual(visit.status, VISIT_STATUS_ROUTED)
+		ql = workspaces.department_block(DEPT_TRIAGE)["quick_lists"]
+		self.assertIn(
+			[[VISIT_DOCTYPE, "status", "=", VISIT_STATUS_IN_TRIAGE]],
+			[json.loads(q["quick_list_filter"]) for q in ql],
+		)
+
+	def test_return_to_triage_refused(self):
+		visit = self.visit_in(VISIT_STATUS_ROUTED)
+		for user in ("reception", "lab", "pharmacist", "his", "mic", "hoo"):
+			with self.assertRaises(frappe.PermissionError, msg=user):
+				self.act(visit, "return_to_triage", user, comment="x")
+		for comment in (None, "  "):
+			with self.assertRaises(IllegalVisitTransitionError):
+				self.act(visit, "return_to_triage", "clinician", comment=comment)
+		consulting = self.visit_in(VISIT_STATUS_IN_CONSULTATION)
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(consulting, "return_to_triage", "clinician", comment="too late")
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, visit.name, "status"), VISIT_STATUS_ROUTED)
+
+	def test_reroute(self):
+		visit = self.visit_in(VISIT_STATUS_ROUTED)
+		first_routed_at = visit.routed_at
+		visit = self.act(visit, "reroute", "triage", department=DEPT_MENTAL_HEALTH)
+		self.assertEqual(visit.status, VISIT_STATUS_ROUTED)
+		self.assertEqual(visit.current_department, DEPT_MENTAL_HEALTH)
+		self.assertGreaterEqual(visit.routed_at, first_routed_at)
+		row = visit.status_log[-1]
+		self.assertEqual(
+			(row.from_status, row.to_status, row.action, row.department, row.user),
+			(VISIT_STATUS_ROUTED, VISIT_STATUS_ROUTED, "reroute", DEPT_MENTAL_HEALTH, self.users["triage"]),
+		)
+		self.assertEqual(len([r for r in visit.status_log if r.action == "reroute"]), 1)
+
+	def test_reroute_refused(self):
+		visit = self.visit_in(VISIT_STATUS_ROUTED)
+		for user in ("reception", "clinician", "mho", "lab", "mic", "hoo"):
+			with self.assertRaises(frappe.PermissionError, msg=user):
+				self.act(visit, "reroute", user, department=DEPT_MENTAL_HEALTH)
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(visit, "reroute", "triage", department=DEPT_OUTPATIENT)
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(visit, "reroute", "triage")
+		consulting = self.visit_in(VISIT_STATUS_IN_CONSULTATION)
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(consulting, "reroute", "triage", department=DEPT_MENTAL_HEALTH)
+
+	def test_available_actions_on_routed_visit(self):
+		visit = self.visit_in(VISIT_STATUS_ROUTED)
+		with self.as_user("triage"):
+			actions = {a["action"]: a for a in engine.get_available_actions(visit)}
+		self.assertEqual(set(actions), {"reroute", "return_to_triage"})
+		self.assertTrue(actions["reroute"]["needs_department"])
+		self.assertFalse(actions["reroute"]["needs_comment"])
+		self.assertTrue(actions["return_to_triage"]["needs_comment"])
+		self.assertFalse(actions["return_to_triage"]["needs_department"])
+		with self.as_user("clinician"):
+			self.assertEqual(
+				{a["action"] for a in engine.get_available_actions(visit)},
+				{"start_consultation", "return_to_triage"},
+			)
+
+	def test_history_stays_append_only(self):
+		visit = self.visit_in(VISIT_STATUS_ROUTED)
+		self.act(visit, "reroute", "triage", department=DEPT_MENTAL_HEALTH)
+		self.act(visit, "return_to_triage", "triage", comment="Recheck")
+		with self.as_user("triage"):
+			doc = frappe.get_doc(VISIT_DOCTYPE, visit.name)
+			doc.status_log[-1].comment = "edited"
+			with self.assertRaises(VisitStatusLockedError):
+				doc.save()
+
+
+class TestRouteRequiresVitals(VisitTestCase):
+	"""FR-9: routing needs submitted triage vital signs, or an emergency reason from the Triage Nurse."""
+
+	def test_route_without_vitals_or_reason_refused(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		for reason in (None, "", "   "):
+			with self.assertRaises(TriageVitalsMissingError, msg=repr(reason)):
+				self.act(visit, "route", "triage", department=DEPT_OUTPATIENT, without_vitals_reason=reason)
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, visit.name, "status"), VISIT_STATUS_IN_TRIAGE)
+
+	def test_route_with_draft_vitals_refused(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		draft = make_vital_signs(visit.patient, visit=visit.name)
+		self.assertEqual(draft.docstatus, 0)
+		frappe.db.set_value(
+			VISIT_DOCTYPE, visit.name, "triage_vital_signs", draft.name, update_modified=False
+		)
+		with self.assertRaises(TriageVitalsMissingError):
+			self.act(visit, "route", "triage", department=DEPT_OUTPATIENT)
+
+	def test_route_with_vitals_of_another_visit_refused(self):
+		other = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		foreign = self.submit_vitals(other)
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		frappe.db.set_value(
+			VISIT_DOCTYPE, visit.name, "triage_vital_signs", foreign.name, update_modified=False
+		)
+		with self.assertRaises(TriageVitalsMissingError):
+			self.act(visit, "route", "triage", department=DEPT_OUTPATIENT)
+
+	def test_route_with_submitted_vitals(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		vs = self.submit_vitals(visit)
+		visit = self.act(visit, "route", "triage", department=DEPT_OUTPATIENT)
+		self.assertEqual(visit.status, VISIT_STATUS_ROUTED)
+		self.assertEqual(visit.triage_vital_signs, vs.name)
+		self.assertFalse(visit.routed_without_vitals)
+		self.assertFalse(visit.status_log[-1].comment)
+
+	def test_emergency_override(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		with self.as_user("triage"):
+			apply_action(
+				visit.name,
+				"route",
+				department=DEPT_OUTPATIENT,
+				without_vitals_reason="  Too unwell to wait, taken straight to clinician  ",
+			)
+		visit.reload()
+		self.assertEqual(visit.status, VISIT_STATUS_ROUTED)
+		self.assertEqual(visit.routed_without_vitals, 1)
+		self.assertEqual(
+			visit.status_log[-1].comment,
+			"Routed without vital signs: Too unwell to wait, taken straight to clinician",
+		)
+		self.assertIn(
+			visit.name, frappe.get_list(VISIT_DOCTYPE, filters={"routed_without_vitals": 1}, pluck="name")
+		)
+
+	def test_override_reason_length(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		with self.assertRaises(TriageVitalsMissingError):
+			self.act(visit, "route", "triage", department=DEPT_OUTPATIENT, without_vitals_reason="x" * 1001)
+
+	def test_flag_not_editable_by_hand(self):
+		visit = make_visit()
+		visit.routed_without_vitals = 1
+		with self.assertRaises(VisitStatusLockedError):
+			visit.save(ignore_permissions=True)
+		forged = make_visit(routed_without_vitals=1)
+		self.assertFalse(forged.routed_without_vitals)
+		self.assertEqual(frappe.get_meta(VISIT_DOCTYPE).get_field("routed_without_vitals").permlevel, 1)
+
+	def test_return_to_triage_then_vitals_then_route(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		self.act(visit, "route", "triage", department=DEPT_OUTPATIENT, without_vitals_reason="Collapsed")
+		self.act(visit, "return_to_triage", "clinician", comment="Stable now, please triage")
+		vs = self.submit_vitals(visit)
+		visit = self.act(visit, "route", "triage", department=DEPT_MENTAL_HEALTH)
+		self.assertEqual(visit.status, VISIT_STATUS_ROUTED)
+		self.assertEqual(visit.triage_vital_signs, vs.name)
+		self.assertFalse(visit.status_log[-1].comment)
+		self.assertEqual(visit.routed_without_vitals, 1)  # sticky: the earlier override stays reportable
+
+	def test_reroute_and_return_unaffected(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		self.act(visit, "route", "triage", department=DEPT_OUTPATIENT, without_vitals_reason="Collapsed")
+		visit = self.act(visit, "reroute", "triage", department=DEPT_MENTAL_HEALTH)
+		self.assertEqual(visit.current_department, DEPT_MENTAL_HEALTH)
+		visit = self.act(visit, "return_to_triage", "triage", comment="Recheck")
+		self.assertEqual(visit.status, VISIT_STATUS_IN_TRIAGE)
+
+	def test_onload_flag(self):
+		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
+		visit.run_method("onload")
+		self.assertFalse(visit.get_onload().get("has_triage_vitals"))
+		self.submit_vitals(visit)
+		visit.reload()
+		visit.run_method("onload")
+		self.assertTrue(visit.get_onload().get("has_triage_vitals"))
 
 
 class TestVisitStatusLock(VisitTestCase):
@@ -941,6 +1168,7 @@ class TestVisitValidation(VisitTestCase):
 		visit = self.visit_in(VISIT_STATUS_IN_TRIAGE)
 		with self.assertRaises(IllegalVisitTransitionError):
 			self.act(visit, "route", "triage", department=DEPT_OUTPATIENT, comment="x" * 1001)
+		self.submit_vitals(visit)
 		visit = self.act(visit, "route", "triage", department=DEPT_OUTPATIENT, comment="  Fever  ")
 		self.assertEqual(visit.status_log[-1].comment, "Fever")
 

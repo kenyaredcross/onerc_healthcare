@@ -11,7 +11,12 @@ import frappe
 from frappe import _
 from frappe.utils import flt, format_datetime, get_datetime, getdate, now_datetime
 
-from onerc_healthcare.constants import VISIT_CLOSED_STATUSES, VISIT_DOCTYPE, VISIT_STATUS_REGISTERED
+from onerc_healthcare.constants import (
+	VISIT_CLOSED_STATUSES,
+	VISIT_DOCTYPE,
+	VISIT_STATUS_IN_TRIAGE,
+	VISIT_STATUS_REGISTERED,
+)
 from onerc_healthcare.visit import engine
 from onerc_healthcare.visit.patients import assert_patient_active
 
@@ -266,6 +271,9 @@ def vital_signs_on_submit(doc, method=None) -> None:
 		return
 	if visit.status == VISIT_STATUS_REGISTERED:
 		engine.transition(doc.krcs_visit, engine.ACTION_START_TRIAGE, system=True, vital_signs=doc.name)
-	elif visit.status not in VISIT_CLOSED_STATUSES and not visit.triage_vital_signs:
+	elif visit.status == VISIT_STATUS_IN_TRIAGE or (
+		visit.status not in VISIT_CLOSED_STATUSES and not visit.triage_vital_signs
+	):
+		# While in triage (also after Return to Triage) the latest submitted vitals become the triage record.
 		visit_doc = frappe.get_doc(VISIT_DOCTYPE, doc.krcs_visit, for_update=True)
 		engine.link_vital_signs(visit_doc, doc.name)
