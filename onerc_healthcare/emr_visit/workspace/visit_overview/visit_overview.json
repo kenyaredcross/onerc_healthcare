@@ -1,0 +1,85 @@
+{
+ "app": "onerc_healthcare",
+ "charts": [],
+ "content": "[{\"id\": \"hdr00\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Visit Overview</b></span>\", \"col\": 12}}, {\"id\": \"nc00\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Visits Registered\", \"col\": 3}}, {\"id\": \"nc01\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Visits In Triage\", \"col\": 3}}, {\"id\": \"nc02\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Visits Routed to Department\", \"col\": 3}}, {\"id\": \"nc03\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Visits In Consultation\", \"col\": 3}}, {\"id\": \"nc04\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Visits Awaiting Laboratory\", \"col\": 3}}, {\"id\": \"nc05\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Visits Awaiting Pharmacy\", \"col\": 3}}, {\"id\": \"nc06\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Visits Discharged Today\", \"col\": 3}}, {\"id\": \"nc07\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Visits Referred Today\", \"col\": 3}}, {\"id\": \"nc08\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Longest Current Wait\", \"col\": 3}}, {\"id\": \"sc00\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"All Open Visits\", \"col\": 4}}]",
+ "creation": "2026-11-13 09:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "chart-column",
+ "idx": 0,
+ "indicator_color": "",
+ "is_hidden": 0,
+ "label": "Visit Overview",
+ "links": [],
+ "modified": "2026-11-13 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Visit",
+ "name": "Visit Overview",
+ "number_cards": [
+  {
+   "label": "Visits Registered",
+   "number_card_name": "Visits Registered"
+  },
+  {
+   "label": "Visits In Triage",
+   "number_card_name": "Visits In Triage"
+  },
+  {
+   "label": "Visits Routed to Department",
+   "number_card_name": "Visits Routed to Department"
+  },
+  {
+   "label": "Visits In Consultation",
+   "number_card_name": "Visits In Consultation"
+  },
+  {
+   "label": "Visits Awaiting Laboratory",
+   "number_card_name": "Visits Awaiting Laboratory"
+  },
+  {
+   "label": "Visits Awaiting Pharmacy",
+   "number_card_name": "Visits Awaiting Pharmacy"
+  },
+  {
+   "label": "Visits Discharged Today",
+   "number_card_name": "Visits Discharged Today"
+  },
+  {
+   "label": "Visits Referred Today",
+   "number_card_name": "Visits Referred Today"
+  },
+  {
+   "label": "Longest Current Wait",
+   "number_card_name": "Longest Current Wait"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Medical In-Charge"
+  },
+  {
+   "role": "Head of Operations"
+  }
+ ],
+ "sequence_id": 59.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "format": "{} open",
+   "label": "All Open Visits",
+   "link_to": "Patient Visit",
+   "stats_filter": "[[\"Patient Visit\", \"status\", \"in\", [\"Registered\", \"In Triage\", \"Routed to Department\", \"In Consultation\", \"Awaiting Laboratory\", \"Awaiting Pharmacy\"]]]",
+   "type": "DocType"
+  }
+ ],
+ "title": "Visit Overview",
+ "type": "Workspace"
+}

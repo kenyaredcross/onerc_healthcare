@@ -1,0 +1,23 @@
+{
+ "background_color": "",
+ "color": "#E2A03F",
+ "creation": "2026-11-13 09:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "document_type": "Patient Visit",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[[\"Patient Visit\", \"status\", \"=\", \"In Triage\"]]",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Visits In Triage",
+ "modified": "2026-11-13 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Visit",
+ "name": "Visits In Triage",
+ "owner": "Administrator",
+ "show_full_number": 1,
+ "show_percentage_stats": 0,
+ "type": "Document Type"
+}

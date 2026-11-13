@@ -1,0 +1,403 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "autoname": "format:PV-{YYYY}-{#####}",
+ "creation": "2026-11-13 09:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "patient_section",
+  "patient",
+  "patient_name",
+  "patient_identifier",
+  "column_break_patient",
+  "facility",
+  "company",
+  "visit_date",
+  "arrived_at",
+  "queue_number",
+  "status_section",
+  "status",
+  "current_department",
+  "status_changed_at",
+  "column_break_status",
+  "lab_open",
+  "pharmacy_open",
+  "triage_level",
+  "triage_vital_signs",
+  "timestamps_section",
+  "triage_started_at",
+  "routed_at",
+  "column_break_timestamps",
+  "consultation_started_at",
+  "closed_at",
+  "outreach_section",
+  "is_outreach",
+  "column_break_outreach",
+  "outreach_session",
+  "history_section",
+  "status_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "patient_section",
+   "fieldtype": "Section Break",
+   "label": "Patient"
+  },
+  {
+   "description": "Can be corrected by a Nurse Receptionist while the visit is Registered",
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Patient",
+   "permlevel": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "patient.patient_name",
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Patient Name",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Primary identifier of the patient at registration (FR-6)",
+   "fieldname": "patient_identifier",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Primary Identifier",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_patient",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Facility (service unit group) where the patient arrived",
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "reqd": 1,
+   "search_index": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "visit_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Visit Date",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "arrived_at",
+   "fieldtype": "Datetime",
+   "label": "Arrived At",
+   "read_only": 1
+  },
+  {
+   "description": "Sequential per facility per day",
+   "fieldname": "queue_number",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Queue Number",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "default": "Registered",
+   "description": "Changes only through visit actions (SDD §4.4)",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "no_copy": 1,
+   "options": "Registered\nIn Triage\nRouted to Department\nIn Consultation\nAwaiting Laboratory\nAwaiting Pharmacy\nDischarged\nReferred",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "current_department",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Current Department",
+   "no_copy": 1,
+   "options": "Medical Department",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "status_changed_at",
+   "fieldtype": "Datetime",
+   "label": "Status Changed At",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lab_open",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Laboratory Task Open",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "pharmacy_open",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Pharmacy Task Open",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "triage_level",
+   "fieldtype": "Link",
+   "label": "Triage Level",
+   "no_copy": 1,
+   "options": "Triage Level",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "triage_vital_signs",
+   "fieldtype": "Link",
+   "label": "Triage Vital Signs",
+   "no_copy": 1,
+   "options": "Vital Signs",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "timestamps_section",
+   "fieldtype": "Section Break",
+   "label": "Stage Timestamps"
+  },
+  {
+   "fieldname": "triage_started_at",
+   "fieldtype": "Datetime",
+   "label": "Triage Started At",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "routed_at",
+   "fieldtype": "Datetime",
+   "label": "Routed At",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_timestamps",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "consultation_started_at",
+   "fieldtype": "Datetime",
+   "label": "Consultation Started At",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "closed_at",
+   "fieldtype": "Datetime",
+   "label": "Closed At",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "outreach_section",
+   "fieldtype": "Section Break",
+   "label": "Outreach"
+  },
+  {
+   "fieldname": "is_outreach",
+   "fieldtype": "Check",
+   "label": "Outreach Visit",
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "column_break_outreach",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.is_outreach",
+   "description": "Placeholder until the Outreach Session DocType exists (Phase 4)",
+   "fieldname": "outreach_session",
+   "fieldtype": "Data",
+   "label": "Outreach Session"
+  },
+  {
+   "fieldname": "history_section",
+   "fieldtype": "Section Break",
+   "label": "Status History"
+  },
+  {
+   "fieldname": "status_log",
+   "fieldtype": "Table",
+   "label": "Status Log",
+   "no_copy": 1,
+   "options": "Patient Visit Status Log",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-13 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Visit",
+ "name": "Patient Visit",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Nurse Receptionist",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Nurse Receptionist",
+   "write": 1
+  },
+  {
+   "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Triage Nurse",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Triage Nurse",
+   "write": 1
+  },
+  {
+   "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Clinical Officer",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Clinical Officer",
+   "write": 1
+  },
+  {
+   "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Mental Health Officer",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Mental Health Officer",
+   "write": 1
+  },
+  {
+   "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Laboratory Technician"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Laboratory Technician"
+  },
+  {
+   "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Pharmacist"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Pharmacist"
+  },
+  {
+   "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HIS Officer"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HIS Officer"
+  },
+  {
+   "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Medical In-Charge"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Medical In-Charge"
+  },
+  {
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Head of Operations"
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "patient_name,patient_identifier,queue_number",
+ "show_title_field_in_link": 0,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 1
+}

@@ -1,0 +1,72 @@
+{
+ "app": "onerc_healthcare",
+ "charts": [],
+ "content": "[{\"id\": \"hdr00\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Outpatient Queue</b></span>\", \"col\": 12}}, {\"id\": \"sc00\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Routed to Outpatient\", \"col\": 4}}, {\"id\": \"sc01\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Waiting for Consultation\", \"col\": 4}}, {\"id\": \"sc02\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"In Consultation\", \"col\": 4}}, {\"id\": \"ql00\", \"type\": \"quick_list\", \"data\": {\"quick_list_name\": \"Outpatient Patients\", \"col\": 6}}]",
+ "creation": "2026-11-13 09:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "stethoscope",
+ "idx": 0,
+ "indicator_color": "",
+ "is_hidden": 0,
+ "label": "Outpatient Queue",
+ "links": [],
+ "modified": "2026-11-13 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Visit",
+ "name": "Outpatient Queue",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "Patient Visit",
+   "label": "Outpatient Patients",
+   "quick_list_filter": "[[\"Patient Visit\", \"current_department\", \"=\", \"Outpatient\"], [\"Patient Visit\", \"status\", \"in\", [\"Registered\", \"In Triage\", \"Routed to Department\", \"In Consultation\", \"Awaiting Laboratory\", \"Awaiting Pharmacy\"]]]"
+  }
+ ],
+ "roles": [
+  {
+   "role": "Clinical Officer"
+  },
+  {
+   "role": "Medical In-Charge"
+  }
+ ],
+ "sequence_id": 60.2,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "format": "{} waiting",
+   "label": "Routed to Outpatient",
+   "link_to": "Patient Visit",
+   "stats_filter": "[[\"Patient Visit\", \"current_department\", \"=\", \"Outpatient\"], [\"Patient Visit\", \"status\", \"in\", [\"Registered\", \"In Triage\", \"Routed to Department\", \"In Consultation\", \"Awaiting Laboratory\", \"Awaiting Pharmacy\"]]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "format": "{} waiting",
+   "label": "Waiting for Consultation",
+   "link_to": "Patient Visit",
+   "stats_filter": "[[\"Patient Visit\", \"current_department\", \"=\", \"Outpatient\"], [\"Patient Visit\", \"status\", \"=\", \"Routed to Department\"]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "format": "{} in consultation",
+   "label": "In Consultation",
+   "link_to": "Patient Visit",
+   "stats_filter": "[[\"Patient Visit\", \"current_department\", \"=\", \"Outpatient\"], [\"Patient Visit\", \"status\", \"=\", \"In Consultation\"]]",
+   "type": "DocType"
+  }
+ ],
+ "title": "Outpatient Queue",
+ "type": "Workspace"
+}
