@@ -11,7 +11,8 @@
   "column_break_prefix",
   "help",
   "rules_section",
-  "rules"
+  "rules",
+  "seeded_doctypes"
  ],
  "fields": [
   {
@@ -46,11 +47,19 @@
    "fieldtype": "Table",
    "label": "Rules",
    "options": "EMR Naming Rule"
+  },
+  {
+   "fieldname": "seeded_doctypes",
+   "fieldtype": "Small Text",
+   "label": "Seeded Record Types",
+   "hidden": 1,
+   "read_only": 1,
+   "description": "Internal: record types whose default rule was offered once."
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-11-13 15:00:00.000000",
+ "modified": "2026-11-13 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Onerc Healthcare",
  "name": "EMR Naming Settings",

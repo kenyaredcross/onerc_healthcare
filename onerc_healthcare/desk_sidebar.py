@@ -29,6 +29,56 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"link_to": "Patient Visit",
 				"icon": "clipboard-list",
 			},
+			{"key": "krcs-referral", "label": "Referral", "link_to": "Referral", "icon": "send"},
+			# Phase 2 front desk, pharmacy and data protection
+			{"key": "krcs-frontdesk-section", "type": "Section Break", "label": "Front Desk"},
+			{"key": "krcs-visitor-record", "label": "Visitor Record", "link_to": "Visitor Record"},
+			{"key": "krcs-screening-record", "label": "Screening Record", "link_to": "Screening Record"},
+			{
+				"key": "krcs-daily-entry",
+				"label": "Daily Facility Entry",
+				"link_type": "Report",
+				"link_to": "Daily Facility Entry",
+			},
+			{"key": "krcs-pharmacy-section", "type": "Section Break", "label": "Pharmacy"},
+			{
+				"key": "krcs-pharmacy-worklist",
+				"label": "Pharmacy Worklist",
+				"link_type": "Report",
+				"link_to": "Pharmacy Worklist",
+			},
+			{"key": "krcs-dispensing-record", "label": "Dispensing Record", "link_to": "Dispensing Record"},
+			{"key": "krcs-privacy-section", "type": "Section Break", "label": "Data Protection"},
+			{"key": "krcs-patient-consent", "label": "Patient Consent", "link_to": "Patient Consent"},
+			{
+				"key": "krcs-consent-exceptions",
+				"label": "Consent Exceptions",
+				"link_type": "Report",
+				"link_to": "Consent Exceptions",
+			},
+			{
+				"key": "krcs-data-access-request",
+				"label": "Data Access Request",
+				"link_to": "Data Access Request",
+			},
+			{
+				"key": "krcs-access-audit",
+				"label": "Access Audit",
+				"link_type": "Report",
+				"link_to": "Access Audit",
+			},
+		],
+	),
+	"Diagnostics": (
+		None,
+		[
+			{"key": "krcs-lab-section", "type": "Section Break", "label": "KRCS Laboratory"},
+			{
+				"key": "krcs-lab-worklist",
+				"label": "Laboratory Worklist",
+				"link_type": "Report",
+				"link_to": "Laboratory Worklist",
+			},
 		],
 	),
 	"Healthcare Setup": (
@@ -51,6 +101,14 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"label": "Residence Location",
 				"link_to": "Residence Location",
 			},
+			{"key": "krcs-referral-facility", "label": "Referral Facility", "link_to": "Referral Facility"},
+			{
+				"key": "krcs-screening-parameter",
+				"label": "Screening Parameter",
+				"link_to": "Screening Parameter",
+			},
+			{"key": "krcs-consent-statement", "label": "Consent Statement", "link_to": "Consent Statement"},
+			{"key": "krcs-access-log-entry", "label": "Access Log Entry", "link_to": "Access Log Entry"},
 		],
 	),
 }
@@ -61,7 +119,7 @@ def _row_values(row: dict) -> dict:
 	return {
 		"type": row.get("type", "Link"),
 		"label": row["label"],
-		"link_type": "DocType",
+		"link_type": row.get("link_type", "DocType"),
 		"link_to": row.get("link_to") if is_link else None,
 		"icon": row.get("icon"),
 		"is_default_module": 1 if is_link else 0,
@@ -72,9 +130,21 @@ def _row_values(row: dict) -> dict:
 
 
 def _desired_rows(sidebar: str) -> list[dict]:
-	"""Our rows for `sidebar`, skipping links to DocTypes that do not exist on this site."""
+	"""Our rows for `sidebar`, skipping links to DocTypes/Reports that do not exist on this site, and
+	section breaks left with nothing under them."""
 	_anchor, rows = SIDEBAR_ROWS[sidebar]
-	return [r for r in rows if r.get("type") == "Section Break" or frappe.db.exists("DocType", r["link_to"])]
+	kept = [
+		r
+		for r in rows
+		if r.get("type") == "Section Break" or frappe.db.exists(r.get("link_type", "DocType"), r["link_to"])
+	]
+	# Drop a section break followed by another section break or by nothing (its links do not exist yet).
+	return [
+		r
+		for i, r in enumerate(kept)
+		if r.get("type") != "Section Break"
+		or (i + 1 < len(kept) and kept[i + 1].get("type") != "Section Break")
+	]
 
 
 def install() -> bool:

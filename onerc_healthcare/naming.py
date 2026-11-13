@@ -41,6 +41,13 @@ DEFAULT_RULES = (
 	("Medication Administration", "{prefix}-MA-.YYYY.-"),
 	("Emergency Record", "{prefix}-ED-.YYYY.-"),
 	("Patient Appointment", "{prefix}-APP-.YYYY.-"),
+	# Phase 2 record types (each must have a Select `naming_series` field and autoname "naming_series:")
+	("Referral", "{prefix}-REF-.YYYY.-"),
+	("Dispensing Record", "{prefix}-DSP-.YYYY.-"),
+	("Patient Consent", "{prefix}-CON-.YYYY.-"),
+	("Data Access Request", "{prefix}-DAR-.YYYY.-"),
+	("Screening Record", "{prefix}-SCR-.YYYY.-"),
+	("Visitor Record", "{prefix}-VIS-.YYYY.-"),
 )
 
 # Series that Marley code sets directly, so they must stay valid options of the field.
@@ -108,20 +115,35 @@ def current_series(doctype: str) -> str | None:
 
 
 def ensure_naming_settings() -> None:
-	"""Seed EMR Naming Settings once per site (prefix = operation abbreviation, default rules) and apply.
+	"""Seed EMR Naming Settings for this site and keep its defaults complete.
 
-	Later runs leave the settings alone: rule changes are made on the settings page.
+	First run: prefix = operation abbreviation, one rule per supported default record type.
+	Later runs: add a default rule only for a record type that was never seeded before (e.g. a DocType
+	that a later phase added). `seeded_doctypes` remembers what was offered, so a rule an admin deleted
+	is not brought back. Everything else is changed on the settings page.
 	"""
 	op = get_operation()
 	if not op or not frappe.db.exists("DocType", SETTINGS_DOCTYPE):
 		return
 	settings = frappe.get_single(SETTINGS_DOCTYPE)
-	if settings.id_prefix:
-		return
-	settings.id_prefix = get_operation_config(op)["abbr"]
-	settings.set("rules", [])
+	seeded = set(filter(None, (settings.get("seeded_doctypes") or "").splitlines()))
+	if not settings.id_prefix:
+		settings.id_prefix = get_operation_config(op)["abbr"]
+		settings.set("rules", [])
+	elif not seeded:
+		# Sites seeded before `seeded_doctypes` existed: everything that has a rule counts as seeded.
+		seeded = {row.document_type for row in settings.rules}
+	existing = {row.document_type for row in settings.rules}
+	added = False
 	for doctype, series in DEFAULT_RULES:
-		if supports_series(doctype):
-			settings.append("rules", {"document_type": doctype, "series": series, "enabled": 1})
-	settings.flags.ignore_permissions = True
-	settings.save()
+		if doctype in seeded or doctype in existing or not supports_series(doctype):
+			continue
+		settings.append("rules", {"document_type": doctype, "series": series, "enabled": 1})
+		seeded.add(doctype)
+		added = True
+	seeded |= existing
+	new_seeded = "\n".join(sorted(seeded))
+	if added or not settings.get("seeded_doctypes") or settings.seeded_doctypes != new_seeded:
+		settings.seeded_doctypes = new_seeded
+		settings.flags.ignore_permissions = True
+		settings.save()

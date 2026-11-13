@@ -603,6 +603,14 @@ class TestReviewFixes(EMRTestCase):
 		)
 		visit.insert(ignore_permissions=True)
 		self.assertIn(IDENTIFIER_POL, visit.patient_identifier)
+		# Phase 2: a patient with an open visit cannot be merged; close it first.
+		with self.assertRaises(frappe.ValidationError):
+			api.merge_patients(source.name, target.name, "duplicate")
+		from onerc_healthcare.visit.engine import transition
+
+		transition(
+			visit.name, "close_visit", closure_reason="Registered in error", comment="Duplicate record"
+		)
 		api.merge_patients(source.name, target.name, "duplicate")
 		row = frappe.db.get_value(
 			"Patient Visit", visit.name, ["patient", "patient_name", "patient_identifier"], as_dict=True

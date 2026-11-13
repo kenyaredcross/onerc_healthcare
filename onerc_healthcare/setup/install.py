@@ -194,14 +194,26 @@ def apply_healthcare_settings() -> None:
 
 def _install_workstreams() -> None:
 	from onerc_healthcare import desk_sidebar
+	from onerc_healthcare.clinical import setup as clinical_setup
 	from onerc_healthcare.coding import setup as coding_setup
+	from onerc_healthcare.frontdesk import setup as frontdesk_setup
+	from onerc_healthcare.lab import setup as lab_setup
 	from onerc_healthcare.naming import ensure_naming_settings
+	from onerc_healthcare.pharmacy import setup as pharmacy_setup
+	from onerc_healthcare.privacy import setup as privacy_setup
 	from onerc_healthcare.registration import setup as registration_setup
 	from onerc_healthcare.security import setup as security_setup
 	from onerc_healthcare.visit import setup as visit_setup
 
 	registration_setup.install()
 	visit_setup.install()
+	# Phase 2 workstreams (B1 clinical, B2 lab, B3 pharmacy + front desk, B4 privacy)
+	clinical_setup.install()
+	lab_setup.install()
+	pharmacy_setup.install()
+	frontdesk_setup.install()
+	privacy_setup.install()
+	# Security last among the workstreams: it applies perms/archive fields over everything that exists.
 	security_setup.install()
 	coding_setup.install()
 	ensure_naming_settings()

@@ -8,6 +8,9 @@ import frappe
 from frappe.utils import nowdate, nowtime
 
 from onerc_healthcare.constants import (
+	DEFAULT_APPOINTMENT_TYPE,
+	ENCOUNTER_DOCTYPE,
+	ENCOUNTER_VISIT_FIELD,
 	ROLE_CLINICIAN,
 	ROLE_HEAD_OPS,
 	ROLE_HIS,
@@ -100,3 +103,54 @@ def get_triage_level() -> str:
 		.insert(ignore_permissions=True)
 		.name
 	)
+
+
+def get_test_practitioner() -> str:
+	"""A T- Healthcare Practitioner with no user (so Marley adds no User Permission)."""
+	name = frappe.db.get_value("Healthcare Practitioner", {"first_name": "T-Practitioner"}, "name")
+	if name:
+		return name
+	doc = frappe.get_doc(
+		{"doctype": "Healthcare Practitioner", "first_name": "T-Practitioner", "status": "Active"}
+	)
+	doc.flags.ignore_mandatory = True
+	return doc.insert(ignore_permissions=True).name
+
+
+def get_test_appointment_type() -> str:
+	if not frappe.db.exists("Appointment Type", DEFAULT_APPOINTMENT_TYPE):
+		frappe.get_doc(
+			{
+				"doctype": "Appointment Type",
+				"appointment_type": DEFAULT_APPOINTMENT_TYPE,
+				"allow_booking_for": "Practitioner",
+			}
+		).insert(ignore_permissions=True)
+	return DEFAULT_APPOINTMENT_TYPE
+
+
+def make_submitted_encounter(patient: str, visit: str | None = None, link: bool = True, submit: bool = True):
+	"""A minimal Patient Encounter for `patient`, submitted, and linked to `visit` (engine.link_encounter)."""
+	from onerc_healthcare.setup.operations import get_company
+	from onerc_healthcare.visit.engine import link_encounter
+
+	values = {
+		"doctype": ENCOUNTER_DOCTYPE,
+		"patient": patient,
+		"practitioner": get_test_practitioner(),
+		"appointment_type": get_test_appointment_type(),
+		"encounter_date": nowdate(),
+		"encounter_time": nowtime(),
+		"company": get_company(),
+	}
+	if visit and frappe.get_meta(ENCOUNTER_DOCTYPE).has_field(ENCOUNTER_VISIT_FIELD):
+		values[ENCOUNTER_VISIT_FIELD] = visit
+	doc = frappe.get_doc(values)
+	doc.flags.ignore_mandatory = True
+	doc.insert(ignore_permissions=True)
+	if submit:
+		doc.flags.ignore_mandatory = True
+		doc.submit()
+	if visit and link:
+		link_encounter(visit, doc.name)
+	return doc

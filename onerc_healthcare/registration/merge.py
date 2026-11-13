@@ -210,6 +210,25 @@ def _lock_patients(*names: str) -> None:
 		frappe.db.sql("select name from `tabPatient` where name = %s for update", (name,))
 
 
+def _refuse_open_visit(source: str) -> None:
+	"""Phase 2 audit A2 #12: relinking moves visits by direct update, which would bypass the
+	one-open-visit rule and leave the surviving patient with two open visits. Close it first."""
+	from onerc_healthcare.constants import VISIT_DOCTYPE, VISIT_OPEN_STATUSES
+
+	if not frappe.db.exists("DocType", VISIT_DOCTYPE):
+		return
+	open_visit = frappe.db.get_value(
+		VISIT_DOCTYPE, {"patient": source, "status": ("in", VISIT_OPEN_STATUSES)}, "name"
+	)
+	if open_visit:
+		frappe.throw(
+			_("Patient {0} has an open visit {1}. Close or finish that visit before merging.").format(
+				source, get_link_to_form(VISIT_DOCTYPE, open_visit)
+			),
+			title=_("Invalid Merge"),
+		)
+
+
 def merge_patients(source: str, target: str, reason: str) -> dict:
 	"""Merge `source` into `target` without deleting anything. Caller checks roles."""
 	reason = (reason or "").strip()
@@ -243,6 +262,8 @@ def merge_patients(source: str, target: str, reason: str) -> dict:
 			_("Patient {0} is disabled. Enable it before merging another record into it.").format(target),
 			title=_("Invalid Merge"),
 		)
+
+	_refuse_open_visit(source)
 
 	# Identifiers first, so records that copy the patient's identifier get the surviving one.
 	moved, kept = _move_identifiers(source_doc, target_doc)

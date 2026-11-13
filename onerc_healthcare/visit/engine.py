@@ -3,15 +3,36 @@
 """Patient Visit state machine (FR-7, SDD §4.4). Status changes only through transition().
 
 Human actions are restricted by role. System events (`request_lab`, `lab_results_ready`, `prescribe`,
-`dispensed`) are raised by code in later phases with ``system=True`` (or by Administrator).
+`dispensed`, `receive_referral`) are raised by code with ``system=True`` (or by Administrator), normally
+through `onerc_healthcare.visit.tasks.raise_event`, which never fails a lab/pharmacy record because of
+the visit's state.
 
-Laboratory and pharmacy tasks can be open together (SDD §4.4): `lab_open` / `pharmacy_open` carry the
-open tasks, and `status` shows the one that currently holds the patient. An open laboratory task takes
-precedence, because its results bring the patient back to consultation.
+Each `Transition` has a status precondition (`from_statuses`) and an optional `guard(doc)` that returns
+an error message when the action is impossible in the current flag state. `transition()` raises the
+guard message; `get_available_actions()` hides the action. Both use the same checks.
+
+"Completed" below means the consultation is complete: the visit's `encounter` is a submitted Patient
+Encounter (`is_consultation_complete`).
+
+Invariants (kept by every action):
+
+1. Closed (Discharged / Referred) visits never change status again. `closed_at` is set exactly when the
+   visit enters a closed status. Close Visit and Discharge leave no open task; Referred may keep open
+   tasks, and the lab/pharmacy events then only clear the flags.
+2. Discharged by `discharge` or by a system event requires ``lab_open == pharmacy_open == 0``.
+3. Before completion an open laboratory task takes precedence: ``lab_open`` implies Awaiting Laboratory
+   (the results bring the patient back to In Consultation). ``pharmacy_open`` alone gives Awaiting
+   Pharmacy, or In Consultation once results have come back.
+4. After completion an open pharmacy task takes precedence (the patient goes to the pharmacy while
+   results are pending): ``pharmacy_open`` gives Awaiting Pharmacy, else ``lab_open`` gives Awaiting
+   Laboratory, else the visit is Discharged. A completed visit is never In Consultation.
+5. Awaiting Laboratory implies ``lab_open``; Awaiting Pharmacy implies ``pharmacy_open``.
+6. Registered, In Triage and Routed to Department have no open tasks.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import frappe
@@ -21,11 +42,17 @@ from frappe.utils import now_datetime
 from onerc_healthcare.constants import (
 	DEPT_RECEPTION,
 	DEPT_TRIAGE,
+	ENCOUNTER_DOCTYPE,
+	REFERRAL_DOCTYPE,
 	ROLE_CLINICIAN,
 	ROLE_MHO,
+	ROLE_MIC,
+	ROLE_RECEPTIONIST,
 	ROLE_TRIAGE,
 	VISIT_CLOSED_STATUSES,
+	VISIT_CLOSURE_REASONS,
 	VISIT_DOCTYPE,
+	VISIT_OPEN_STATUSES,
 	VISIT_STATUS_AWAITING_LAB,
 	VISIT_STATUS_AWAITING_PHARMACY,
 	VISIT_STATUS_DISCHARGED,
@@ -48,8 +75,12 @@ ACTION_PRESCRIBE = "prescribe"
 ACTION_DISPENSED = "dispensed"
 ACTION_DISCHARGE = "discharge"
 ACTION_REFER = "refer"
+ACTION_COMPLETE_CONSULTATION = "complete_consultation"
+ACTION_CLOSE_VISIT = "close_visit"
+ACTION_RECEIVE_REFERRAL = "receive_referral"
 
 CONSULTING_ROLES = (ROLE_CLINICIAN, ROLE_MHO)
+CLOSE_VISIT_ROLES = (ROLE_RECEPTIONIST, ROLE_TRIAGE, ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC)
 
 # Intake departments: a visit is never routed *to* them. Reception and Triage queues filter on status
 # (Registered / In Triage), so a visit "Routed to Department" there would show in no queue. A patient
@@ -65,8 +96,60 @@ class TriageVitalsMissingError(frappe.ValidationError):
 	"""Routing without submitted triage vital signs and without an emergency reason (FR-9)."""
 
 
-class PharmacyTaskOpenError(frappe.ValidationError):
+class VisitGuardError(IllegalVisitTransitionError):
+	"""The action's guard failed: it is not possible in the visit's current task / encounter state."""
+
+
+class PharmacyTaskOpenError(VisitGuardError):
 	"""Discharge attempted while a pharmacy task is still open."""
+
+
+class GuardFailure(str):
+	"""A guard message that carries a more specific exception class."""
+
+	exc: type[Exception] = VisitGuardError
+
+	def __new__(cls, message: str, exc: type[Exception] = VisitGuardError):
+		obj = super().__new__(cls, message)
+		obj.exc = exc
+		return obj
+
+
+def is_consultation_complete(doc) -> bool:
+	"""The visit's encounter is a submitted Patient Encounter."""
+	encounter = doc.get("encounter")
+	return bool(encounter) and frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, "docstatus") == 1
+
+
+def _guard_lab_open(doc) -> str | None:
+	if not doc.lab_open:
+		return _("Visit {0} has no open laboratory task.").format(doc.name)
+	return None
+
+
+def _guard_pharmacy_open(doc) -> str | None:
+	if not doc.pharmacy_open:
+		return _("Visit {0} has no open pharmacy task.").format(doc.name)
+	return None
+
+
+def _guard_no_open_tasks(doc) -> str | None:
+	if doc.pharmacy_open:
+		return GuardFailure(
+			_("Visit {0} cannot be discharged while a pharmacy task is open.").format(doc.name),
+			PharmacyTaskOpenError,
+		)
+	if doc.lab_open:
+		return _("Visit {0} cannot be discharged while a laboratory task is open.").format(doc.name)
+	return None
+
+
+def _guard_encounter_submitted(doc) -> str | None:
+	if not is_consultation_complete(doc):
+		return _("Submit the consultation (Patient Encounter) for visit {0} before completing it.").format(
+			doc.name
+		)
+	return None
 
 
 @dataclass(frozen=True)
@@ -79,7 +162,10 @@ class Transition:
 	roles: tuple[str, ...] = ()
 	needs_department: bool = False
 	needs_comment: bool = False
+	needs_closure_reason: bool = False
 	timestamp_field: str | None = None
+	# guard(doc) -> error message when the action is impossible in the current flag / encounter state.
+	guard: Callable | None = None
 
 	@property
 	def is_system(self) -> bool:
@@ -131,8 +217,9 @@ TRANSITIONS: dict[str, Transition] = {
 	),
 	ACTION_LAB_RESULTS_READY: Transition(
 		_("Laboratory Results Ready"),
-		(VISIT_STATUS_AWAITING_LAB,),
-		VISIT_STATUS_IN_CONSULTATION,
+		(VISIT_STATUS_AWAITING_LAB, VISIT_STATUS_AWAITING_PHARMACY, VISIT_STATUS_REFERRED),
+		None,
+		guard=_guard_lab_open,
 	),
 	ACTION_PRESCRIBE: Transition(
 		_("Prescription Submitted"),
@@ -148,13 +235,22 @@ TRANSITIONS: dict[str, Transition] = {
 			VISIT_STATUS_REFERRED,
 		),
 		None,
+		guard=_guard_pharmacy_open,
 	),
 	ACTION_DISCHARGE: Transition(
 		_("Discharge"),
-		(VISIT_STATUS_IN_CONSULTATION, VISIT_STATUS_AWAITING_PHARMACY),
+		(VISIT_STATUS_IN_CONSULTATION,),
 		VISIT_STATUS_DISCHARGED,
 		CONSULTING_ROLES,
 		timestamp_field="closed_at",
+		guard=_guard_no_open_tasks,
+	),
+	ACTION_COMPLETE_CONSULTATION: Transition(
+		_("Complete Consultation"),
+		(VISIT_STATUS_IN_CONSULTATION, VISIT_STATUS_AWAITING_LAB, VISIT_STATUS_AWAITING_PHARMACY),
+		None,
+		CONSULTING_ROLES,
+		guard=_guard_encounter_submitted,
 	),
 	ACTION_REFER: Transition(
 		_("Refer"),
@@ -163,6 +259,22 @@ TRANSITIONS: dict[str, Transition] = {
 		CONSULTING_ROLES,
 		needs_comment=True,
 		timestamp_field="closed_at",
+	),
+	ACTION_CLOSE_VISIT: Transition(
+		_("Close Visit"),
+		VISIT_OPEN_STATUSES,
+		VISIT_STATUS_DISCHARGED,
+		CLOSE_VISIT_ROLES,
+		needs_comment=True,
+		needs_closure_reason=True,
+		timestamp_field="closed_at",
+	),
+	ACTION_RECEIVE_REFERRAL: Transition(
+		_("Receive Internal Referral"),
+		(VISIT_STATUS_REGISTERED,),
+		VISIT_STATUS_ROUTED,
+		needs_department=True,
+		timestamp_field="routed_at",
 	),
 }
 
@@ -180,6 +292,9 @@ WORKFLOW_FIELDS = (
 	"triage_level",
 	"triage_vital_signs",
 	"routed_without_vitals",
+	"encounter",
+	"referred_from",
+	"closure_reason",
 )
 # Fields set by the server at registration and never changed by hand afterwards.
 REGISTRATION_FIELDS = ("visit_date", "arrived_at", "queue_number", "patient_identifier", "company")
@@ -189,6 +304,7 @@ STATUS_LOG_FIELDS = ("from_status", "to_status", "action", "user", "timestamp", 
 # Longest comment kept on a status-log row (NFR-10); also the limit for an emergency routing reason.
 MAX_COMMENT_LENGTH = 1000
 WITHOUT_VITALS_PREFIX = "Routed without vital signs: "
+CLOSED_PREFIX = "Closed: "
 
 
 def transition(visit: str, action: str, **kwargs):
@@ -200,6 +316,8 @@ def transition(visit: str, action: str, **kwargs):
 	- ``vital_signs``: Vital Signs to link as the triage record (``start_triage`` / ``route``).
 	- ``without_vitals_reason``: emergency override for ``route`` when no triage vital signs have been
 	  submitted (FR-9); stored on the log row and flags the visit ``routed_without_vitals``.
+	- ``closure_reason``: one of ``VISIT_CLOSURE_REASONS`` (``close_visit``).
+	- ``referral``: the Referral that created this visit (``receive_referral``).
 	- ``system``: True when called by system code (lab/pharmacy events in later phases).
 
 	Raises ``frappe.PermissionError`` for a wrong role and ``frappe.ValidationError`` for an illegal
@@ -226,7 +344,17 @@ def transition(visit: str, action: str, **kwargs):
 			IllegalVisitTransitionError,
 		)
 
+	failure = rule.guard(doc) if rule.guard else None
+	if failure:
+		frappe.throw(failure, getattr(failure, "exc", VisitGuardError), title=_("Not Possible Now"))
+
 	_validate_comment(rule, comment)
+	if action == ACTION_COMPLETE_CONSULTATION and doc.lab_open and not comment:
+		frappe.throw(
+			_("Laboratory results are still pending. Give a reason to complete the consultation now."),
+			IllegalVisitTransitionError,
+			title=_("Reason Required"),
+		)
 	if vital_signs:
 		link_vital_signs(doc, vital_signs, save=False)
 
@@ -234,6 +362,10 @@ def transition(visit: str, action: str, **kwargs):
 	to_status = _apply(doc, action, rule, department=department)
 	if action == ACTION_ROUTE:
 		comment = _check_triage_vitals(doc, kwargs.get("without_vitals_reason"), comment)
+	elif action == ACTION_CLOSE_VISIT:
+		comment = _apply_closure(doc, kwargs.get("closure_reason"), comment)
+	elif action == ACTION_RECEIVE_REFERRAL:
+		_set_referral(doc, kwargs.get("referral"))
 
 	now = now_datetime()
 	if rule.timestamp_field and not doc.get(rule.timestamp_field):
@@ -257,6 +389,10 @@ def transition(visit: str, action: str, **kwargs):
 		},
 	)
 	_save_from_workflow(doc)
+	if action == ACTION_CLOSE_VISIT:
+		from onerc_healthcare.visit.tasks import on_visit_closed
+
+		on_visit_closed(doc)
 	return doc
 
 
@@ -314,7 +450,7 @@ def _apply(doc, action: str, rule: Transition, department: str | None = None) ->
 		if frappe.db.exists("Medical Department", DEPT_TRIAGE):
 			doc.current_department = DEPT_TRIAGE
 
-	elif action in (ACTION_ROUTE, ACTION_REROUTE):
+	elif action in (ACTION_ROUTE, ACTION_REROUTE, ACTION_RECEIVE_REFERRAL):
 		_validate_route_target(doc, action, department)
 		doc.current_department = department
 		if action == ACTION_REROUTE:
@@ -327,44 +463,71 @@ def _apply(doc, action: str, rule: Transition, department: str | None = None) ->
 
 	elif action == ACTION_REQUEST_LAB:
 		doc.lab_open = 1
+		to_status = _completed_status(doc) if is_consultation_complete(doc) else VISIT_STATUS_AWAITING_LAB
 
 	elif action == ACTION_LAB_RESULTS_READY:
-		if not doc.lab_open:
-			frappe.throw(
-				_("Visit {0} has no open laboratory task.").format(doc.name), IllegalVisitTransitionError
-			)
 		doc.lab_open = 0
+		if doc.status in VISIT_CLOSED_STATUSES:
+			to_status = doc.status  # Referred: only the task closes
+		elif is_consultation_complete(doc):
+			to_status = _completed_status(doc)
+		else:
+			to_status = VISIT_STATUS_IN_CONSULTATION  # results bring the patient back
 
 	elif action == ACTION_PRESCRIBE:
 		doc.pharmacy_open = 1
-		to_status = VISIT_STATUS_AWAITING_LAB if doc.lab_open else VISIT_STATUS_AWAITING_PHARMACY
+		if is_consultation_complete(doc):
+			to_status = _completed_status(doc)
+		else:
+			to_status = VISIT_STATUS_AWAITING_LAB if doc.lab_open else VISIT_STATUS_AWAITING_PHARMACY
 
 	elif action == ACTION_DISPENSED:
-		if not doc.pharmacy_open:
-			frappe.throw(
-				_("Visit {0} has no open pharmacy task.").format(doc.name), IllegalVisitTransitionError
-			)
 		doc.pharmacy_open = 0
-		# Awaiting Pharmacy -> Discharged once dispensing is complete (SDD §4.4); otherwise the
-		# visit stays where it is and only the pharmacy task closes.
-		if doc.status == VISIT_STATUS_AWAITING_PHARMACY and not doc.lab_open:
-			to_status = VISIT_STATUS_DISCHARGED
+		if doc.status in VISIT_CLOSED_STATUSES:
+			to_status = doc.status  # Referred: only the task closes
+		elif is_consultation_complete(doc):
+			to_status = _completed_status(doc)
+		elif doc.status == VISIT_STATUS_AWAITING_PHARMACY:
+			# Not completed yet: back to the clinician (lab_open would have meant Awaiting Laboratory).
+			to_status = VISIT_STATUS_IN_CONSULTATION
 		else:
 			to_status = doc.status
 
-	elif action == ACTION_DISCHARGE:
-		if doc.pharmacy_open:
-			frappe.throw(
-				_("Visit {0} cannot be discharged while a pharmacy task is open.").format(doc.name),
-				PharmacyTaskOpenError,
-			)
-		if doc.lab_open:
-			frappe.throw(
-				_("Visit {0} cannot be discharged while a laboratory task is open.").format(doc.name),
-				IllegalVisitTransitionError,
-			)
+	elif action == ACTION_COMPLETE_CONSULTATION:
+		to_status = _completed_status(doc)
 
 	return to_status
+
+
+def _completed_status(doc) -> str:
+	"""Status of a completed consultation from its open tasks (invariant 4)."""
+	if doc.pharmacy_open:
+		return VISIT_STATUS_AWAITING_PHARMACY
+	if doc.lab_open:
+		return VISIT_STATUS_AWAITING_LAB
+	return VISIT_STATUS_DISCHARGED
+
+
+def _apply_closure(doc, closure_reason: str | None, comment: str | None) -> str:
+	"""Close Visit: reason category from VISIT_CLOSURE_REASONS, open tasks dropped. Returns the log text."""
+	if closure_reason not in VISIT_CLOSURE_REASONS:
+		frappe.throw(
+			_("Choose why the visit is closed: {0}.").format(", ".join(_(r) for r in VISIT_CLOSURE_REASONS)),
+			IllegalVisitTransitionError,
+			title=_("Closure Reason Required"),
+		)
+	doc.closure_reason = closure_reason
+	doc.lab_open = doc.pharmacy_open = 0
+	return f"{CLOSED_PREFIX}{closure_reason} — {comment}"
+
+
+def _set_referral(doc, referral: str | None) -> None:
+	if referral:
+		if not frappe.db.exists(REFERRAL_DOCTYPE, referral):
+			frappe.throw(_("Referral {0} does not exist.").format(referral), IllegalVisitTransitionError)
+		doc.referred_from = referral
+	elif frappe.db.table_exists(REFERRAL_DOCTYPE):
+		frappe.throw(_("The Referral that created this visit is required."), IllegalVisitTransitionError)
 
 
 def has_submitted_triage_vitals(doc) -> bool:
@@ -450,16 +613,42 @@ def get_available_actions(doc, user: str | None = None) -> list[dict]:
 			continue
 		if user != "Administrator" and not roles & set(rule.roles):
 			continue
+		if rule.guard and rule.guard(doc):
+			continue
+		needs_comment = rule.needs_comment or (action == ACTION_COMPLETE_CONSULTATION and bool(doc.lab_open))
 		actions.append(
 			{
 				"action": action,
 				"label": rule.label,
 				"needs_department": rule.needs_department,
-				"needs_comment": rule.needs_comment,
+				"needs_comment": needs_comment,
+				"needs_closure_reason": rule.needs_closure_reason,
 				"is_primary": action in (ACTION_START_TRIAGE, ACTION_ROUTE, ACTION_START_CONSULTATION),
 			}
 		)
 	return actions
+
+
+def link_encounter(visit: str, encounter: str):
+	"""Link the visit's consultation (Patient Encounter). Called by the encounter code (B1)."""
+	doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)
+	patient = frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, "patient")
+	if not patient:
+		frappe.throw(
+			_("Patient Encounter {0} does not exist.").format(encounter), IllegalVisitTransitionError
+		)
+	if patient != doc.patient:
+		frappe.throw(
+			_("Patient Encounter {0} belongs to a different patient than visit {1}.").format(
+				encounter, visit
+			),
+			IllegalVisitTransitionError,
+		)
+	if doc.encounter == encounter:
+		return doc
+	doc.encounter = encounter
+	_save_from_workflow(doc)
+	return doc
 
 
 @frappe.whitelist()
@@ -475,6 +664,7 @@ def apply_action(
 	department: str | None = None,
 	comment: str | None = None,
 	without_vitals_reason: str | None = None,
+	closure_reason: str | None = None,
 ) -> dict:
 	"""Perform a visit action as the current user (form buttons, Vital Signs Route action)."""
 	doc = transition(
@@ -483,5 +673,6 @@ def apply_action(
 		department=department,
 		comment=comment,
 		without_vitals_reason=without_vitals_reason,
+		closure_reason=closure_reason,
 	)
 	return {"name": doc.name, "status": doc.status, "current_department": doc.current_department}

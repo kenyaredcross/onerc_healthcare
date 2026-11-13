@@ -14,10 +14,14 @@ from onerc_healthcare.constants import (
 	PATIENT_IDENTIFIER_DOCTYPE,
 	PATIENT_IDENTIFIERS_FIELD,
 	PRIMARY_IDENTIFIER_TYPES,
+	VISIT_CLOSURE_REASONS,
 	VISIT_DOCTYPE,
 	VISIT_OPEN_STATUSES,
 	VISIT_STATUSES,
 )
+
+# Closure reason offered when a new visit replaces a stale open one.
+SUPERSEDED_REASON = "Superseded by a new visit"
 
 # Fields at permlevel 1 that identify the patient; Head of Operations (status only) does not get them.
 PATIENT_FIELDS = ("patient", "patient_name", "patient_identifier", "triage_level")
@@ -131,3 +135,22 @@ def longest_wait_card(filters: str | dict | list | None = None) -> dict:
 	)
 	minutes = waiting_minutes(oldest[0].arrived_at) if oldest else 0
 	return {"value": minutes, "fieldtype": "Int"}
+
+
+@frappe.whitelist()
+def get_open_visit(patient: str) -> dict | None:
+	"""The patient's open visit (any date), for the new-visit form's "Close previous visit" offer."""
+	from onerc_healthcare.emr_visit.doctype.patient_visit.patient_visit import find_open_visit
+	from onerc_healthcare.visit.engine import ACTION_CLOSE_VISIT, TRANSITIONS
+
+	frappe.has_permission(VISIT_DOCTYPE, "read", throw=True)
+	row = find_open_visit(patient)
+	if not row or not frappe.has_permission(VISIT_DOCTYPE, "read", doc=row.name):
+		return None
+	roles = set(frappe.get_roles())
+	row["can_close"] = frappe.session.user == "Administrator" or bool(
+		roles & set(TRANSITIONS[ACTION_CLOSE_VISIT].roles)
+	)
+	row["closure_reasons"] = list(VISIT_CLOSURE_REASONS)
+	row["default_closure_reason"] = SUPERSEDED_REASON if SUPERSEDED_REASON in VISIT_CLOSURE_REASONS else None
+	return row

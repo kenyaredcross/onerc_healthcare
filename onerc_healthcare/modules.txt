@@ -2,3 +2,8 @@ Onerc Healthcare
 EMR Registration
 EMR Visit
 EMR Security
+EMR Clinical
+EMR Laboratory
+EMR Pharmacy
+EMR Front Desk
+EMR Data Protection

@@ -1,4 +1,6 @@
-from onerc_healthcare.constants import CLINICAL_DOCTYPES
+# Underscore aliases: Frappe treats every public module attribute here as a hook.
+from onerc_healthcare.constants import ACCESS_LOGGED_DOCTYPES as _ACCESS_LOGGED_DOCTYPES
+from onerc_healthcare.constants import CLINICAL_DOCTYPES as _CLINICAL_DOCTYPES
 
 app_name = "onerc_healthcare"
 app_title = "Onerc Healthcare"
@@ -56,11 +58,38 @@ doc_events = {
 	"*": {
 		"on_trash": "onerc_healthcare.security.delete_guard.on_trash",
 	},
+	# --- Phase 2 (W0 contract): stubs owned by B1 clinical / B2 lab / B4 privacy ---
+	"Patient Encounter": {
+		"before_validate": "onerc_healthcare.clinical.events.encounter_before_validate",
+		"validate": "onerc_healthcare.clinical.events.encounter_validate",
+		"before_submit": "onerc_healthcare.clinical.events.encounter_before_submit",
+		"before_cancel": "onerc_healthcare.clinical.events.encounter_before_cancel",
+	},
+	"Healthcare Practitioner": {
+		"on_update": "onerc_healthcare.clinical.events.practitioner_on_update",
+	},
+	"Observation": {
+		"on_submit": "onerc_healthcare.lab.events.observation_on_submit",
+		"on_cancel": "onerc_healthcare.lab.events.observation_on_cancel",
+	},
+	"Service Request": {
+		"on_cancel": "onerc_healthcare.lab.events.service_request_on_cancel",
+	},
+	"Sample Collection": {
+		"before_cancel": "onerc_healthcare.lab.events.sample_collection_before_cancel",
+	},
+	"Access Log": {
+		"after_insert": "onerc_healthcare.privacy.access_log.mirror_core_access_log",
+	},
 }
+
+# Access logging of desk record opens (FR-40, NFR-7): `onload` on every logged DocType (B4).
+for _doctype in _ACCESS_LOGGED_DOCTYPES:
+	doc_events.setdefault(_doctype, {})["onload"] = "onerc_healthcare.privacy.access_log.log_open"
 
 # ERPNext "Delete Company Transactions" bulk-deletes company-linked DocTypes with frappe.db.delete,
 # bypassing on_trash. Clinical records must never be deleted (NFR-9, SDD §4.6).
-company_data_to_be_ignored = list(CLINICAL_DOCTYPES)
+company_data_to_be_ignored = list(_CLINICAL_DOCTYPES)
 
 # Desk navigation fix: Marley's workspaces open under their own sidebars (D26).
 boot_session = "onerc_healthcare.boot.boot_session"
@@ -68,12 +97,40 @@ boot_session = "onerc_healthcare.boot.boot_session"
 doctype_js = {
 	"Patient": "registration/patient.js",
 	"Vital Signs": "visit/vital_signs.js",
+	"Patient Encounter": "clinical/patient_encounter.js",
+	"Service Request": "lab/service_request.js",
+	"Medication Request": "pharmacy/medication_request.js",
+}
+
+# Marley endpoints that insert/submit with ignore_permissions and no permission check (Phase 2 audit A3).
+_PE = "healthcare.healthcare.doctype.patient_encounter.patient_encounter"
+override_whitelisted_methods = {
+	f"{_PE}.create_service_request": "onerc_healthcare.clinical.guards.create_service_request",
+	f"{_PE}.create_service_request_from_widget": (
+		"onerc_healthcare.clinical.guards.create_service_request_from_widget"
+	),
+	f"{_PE}.create_patient_referral": "onerc_healthcare.clinical.guards.create_patient_referral",
+	f"{_PE}.cancel_request": "onerc_healthcare.clinical.guards.cancel_request",
+	"healthcare.healthcare.doctype.service_request.service_request.make_observation": (
+		"onerc_healthcare.lab.guards.make_observation"
+	),
+}
+
+# Visit task reconciler (lab/pharmacy completion missed by a race or a skipped event).
+scheduler_events = {
+	"cron": {
+		"*/10 * * * *": ["onerc_healthcare.visit.tasks.reconcile_open_tasks"],
+	},
 }
 
 permission_query_conditions = {
 	"Patient Visit": "onerc_healthcare.visit.permissions.patient_visit_query",
+	"Patient Encounter": "onerc_healthcare.clinical.permissions.encounter_query",
+	"Access Log Entry": "onerc_healthcare.privacy.permissions.access_log_query",
 }
 
 has_permission = {
 	"Patient Visit": "onerc_healthcare.visit.permissions.patient_visit_has_permission",
+	"Patient Encounter": "onerc_healthcare.clinical.permissions.encounter_has_permission",
+	"Access Log Entry": "onerc_healthcare.privacy.permissions.access_log_has_permission",
 }

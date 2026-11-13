@@ -30,6 +30,9 @@
   "triage_level",
   "triage_vital_signs",
   "routed_without_vitals",
+  "encounter",
+  "referred_from",
+  "closure_reason",
   "timestamps_section",
   "triage_started_at",
   "routed_at",
@@ -222,6 +225,36 @@
    "read_only": 1
   },
   {
+   "fieldname": "encounter",
+   "fieldtype": "Link",
+   "label": "Consultation (Encounter)",
+   "no_copy": 1,
+   "options": "Patient Encounter",
+   "permlevel": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Internal referral that created this visit",
+   "fieldname": "referred_from",
+   "fieldtype": "Link",
+   "label": "Referred From",
+   "no_copy": 1,
+   "options": "Referral",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Set by Close Visit",
+   "fieldname": "closure_reason",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Closure Reason",
+   "no_copy": 1,
+   "options": "\nLeft before being seen\nLeft before completion\nSuperseded by a new visit\nRegistered in error\nOther",
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "fieldname": "timestamps_section",
    "fieldtype": "Section Break",
@@ -299,7 +332,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-13 18:00:00.000000",
+ "modified": "2026-11-14 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Visit",
  "name": "Patient Visit",

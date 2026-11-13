@@ -24,8 +24,10 @@ from frappe.utils import cint, get_datetime, getdate, now_datetime, today
 
 from onerc_healthcare.constants import (
 	DEPT_RECEPTION,
+	ROLE_MIC,
 	ROLE_RECEPTIONIST,
 	VISIT_CLOSED_STATUSES,
+	VISIT_CLOSURE_REASONS,
 	VISIT_DOCTYPE,
 	VISIT_STATUS_REGISTERED,
 )
@@ -45,6 +47,26 @@ OUTREACH_SESSION_MAX_LENGTH = 140
 STAGE_TIMESTAMPS = ("triage_started_at", "routed_at", "consultation_started_at", "closed_at")
 
 
+class OpenVisitExistsError(frappe.ValidationError):
+	"""The patient already has an open visit (any date)."""
+
+
+def find_open_visit(patient: str, exclude: str | None = None):
+	"""The patient's open visit (any date), as a dict with name, status and visit_date, or None."""
+	rows = frappe.get_all(
+		VISIT_DOCTYPE,
+		filters={
+			"patient": patient,
+			"status": ["not in", list(VISIT_CLOSED_STATUSES)],
+			"name": ["!=", exclude or ""],
+		},
+		fields=["name", "status", "visit_date"],
+		order_by="creation asc",
+		limit=1,
+	)
+	return rows[0] if rows else None
+
+
 class VisitStatusLockedError(frappe.ValidationError):
 	"""Status, a protected field or the status history was edited outside the visit engine."""
 
@@ -54,6 +76,12 @@ class PatientVisit(Document):
 		self.set_onload("available_actions", get_available_actions(self))
 		self.set_onload("non_routable_departments", list(NON_ROUTABLE_DEPARTMENTS))
 		self.set_onload("has_triage_vitals", has_submitted_triage_vitals(self))
+		self.set_onload("closure_reasons", list(VISIT_CLOSURE_REASONS))
+		self.set_onload(
+			"can_recheck_tasks",
+			bool(self.lab_open or self.pharmacy_open)
+			and (frappe.session.user == "Administrator" or ROLE_MIC in frappe.get_roles()),
+		)
 
 	def validate(self):
 		self.validate_required()
@@ -141,6 +169,7 @@ class PatientVisit(Document):
 			self.set(field, None)
 		self.triage_level = self.triage_vital_signs = None
 		self.routed_without_vitals = 0
+		self.encounter = self.referred_from = self.closure_reason = None
 		self.queue_number = None
 		self.company = self._facility_company or (get_company() if get_operation() else None)
 		self.patient_identifier = get_primary_identifier(self.patient) if self.patient else None
@@ -158,24 +187,23 @@ class PatientVisit(Document):
 		)
 
 	def validate_patient(self):
-		"""Active patient, and one open visit per patient per day, checked under a Patient row lock."""
+		"""Active patient, and no other open visit at any date (decision 2026-11-13), checked under a
+		Patient row lock so two receptionists cannot both register the patient."""
 		lock_patient(self.patient)
 		assert_patient_active(self.patient)
-		existing = frappe.db.get_value(
-			VISIT_DOCTYPE,
-			{
-				"patient": self.patient,
-				"visit_date": self.visit_date,
-				"status": ["not in", list(VISIT_CLOSED_STATUSES)],
-				"name": ["!=", self.name or ""],
-			},
-			"name",
-		)
+		existing = find_open_visit(self.patient, exclude=self.name)
 		if existing:
 			frappe.throw(
-				_("Patient {0} already has an open visit today: {1}.").format(
-					frappe.bold(self.patient_name or self.patient), frappe.bold(existing)
+				_(
+					"Patient {0} already has an open visit {1} ({2}, {3}). Close that visit first"
+					" (Close Visit), then register the new one."
+				).format(
+					frappe.bold(self.patient_name or self.patient),
+					frappe.bold(existing.name),
+					_(existing.status),
+					frappe.format(existing.visit_date, {"fieldtype": "Date"}),
 				),
+				OpenVisitExistsError,
 				title=_("Open Visit Exists"),
 			)
 

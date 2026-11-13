@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 from datetime import timedelta
+from unittest.mock import patch
 
 import frappe
 from frappe.utils import add_days, now_datetime, today
@@ -17,6 +18,7 @@ from onerc_healthcare.constants import (
 	DEPT_OUTPATIENT,
 	DEPT_RECEPTION,
 	DEPT_TRIAGE,
+	VISIT_CLOSURE_REASONS,
 	VISIT_DOCTYPE,
 	VISIT_OPEN_STATUSES,
 	VISIT_STATUS_AWAITING_LAB,
@@ -28,30 +30,47 @@ from onerc_healthcare.constants import (
 	VISIT_STATUS_REGISTERED,
 	VISIT_STATUS_ROUTED,
 )
-from onerc_healthcare.emr_visit.doctype.patient_visit.patient_visit import VisitStatusLockedError
+from onerc_healthcare.emr_visit.doctype.patient_visit.patient_visit import (
+	OpenVisitExistsError,
+	VisitStatusLockedError,
+)
 from onerc_healthcare.security.matrix import BILLING_DOCTYPES
 from onerc_healthcare.tests.base import EMRTestCase
 from onerc_healthcare.tests.factories import get_facility, make_patient
 from onerc_healthcare.tests.visit_factories import (
 	get_triage_level,
+	make_submitted_encounter,
 	make_visit,
 	make_visit_users,
 	make_vital_signs,
 )
-from onerc_healthcare.visit import engine, workspaces
+from onerc_healthcare.visit import engine, tasks, workspaces
 from onerc_healthcare.visit.engine import (
 	IllegalVisitTransitionError,
 	PharmacyTaskOpenError,
 	TriageVitalsMissingError,
+	VisitGuardError,
 	apply_action,
 	transition,
 )
 from onerc_healthcare.visit.events import ImplausibleVitalSignsError, TriageIncompleteError
 from onerc_healthcare.visit.patients import MERGED_INTO_FIELD, InactivePatientError
-from onerc_healthcare.visit.queue import get_queue, longest_wait_card, waiting_minutes
+from onerc_healthcare.visit.queue import get_open_visit, get_queue, longest_wait_card, waiting_minutes
 from onerc_healthcare.visit.setup import VISIT_INDEXES
 
 FUTURE = "2099-03-01"
+CLOSED_CALLS: list[str] = []
+COMPLETE_TASKS: set[str] = set()
+
+
+def _record_closed(visit_doc) -> None:
+	"""Test VISIT_CLOSED_HANDLERS entry."""
+	CLOSED_CALLS.append(visit_doc.name)
+
+
+def _fake_checker(visit: str) -> bool:
+	"""Test TASK_CHECKERS entry: complete when the visit is in COMPLETE_TASKS."""
+	return visit in COMPLETE_TASKS
 
 
 class VisitTestCase(EMRTestCase):
@@ -139,8 +158,24 @@ class TestVisitRegistration(VisitTestCase):
 
 	def test_one_open_visit_per_patient_per_day(self):
 		visit = make_visit()
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaises(OpenVisitExistsError):
 			make_visit(patient=visit.patient)
+
+	def test_one_open_visit_any_date(self):
+		"""Decision 2026-11-13: no other open visit at any date; Close Visit frees the patient."""
+		old = make_visit(system=True, visit_date=add_days(today(), -5))
+		with self.assertRaises(OpenVisitExistsError) as ctx:
+			make_visit(patient=old.patient)
+		self.assertIn(old.name, str(ctx.exception))
+		self.assertIn("Close Visit", str(ctx.exception))
+		with self.as_user("reception"):
+			found = get_open_visit(old.patient)
+		self.assertEqual(found.name, old.name)
+		self.assertTrue(found.can_close)
+		self.assertEqual(found.default_closure_reason, "Superseded by a new visit")
+		self.act(old, "close_visit", "reception", closure_reason="Superseded by a new visit", comment="Stale")
+		self.assertIsNone(get_open_visit(old.patient))
+		self.assertEqual(make_visit(patient=old.patient).status, VISIT_STATUS_REGISTERED)
 
 	def test_disabled_patient_refused(self):
 		"""L1: no visit or triage vital signs for a disabled (or merged) patient."""
@@ -187,6 +222,7 @@ class TestVisitTransitions(VisitTestCase):
 		self.assertEqual(visit.status, VISIT_STATUS_IN_CONSULTATION)
 		self.assertTrue(visit.consultation_started_at)
 
+		make_submitted_encounter(visit.patient, visit.name)
 		visit = self.act(visit, "prescribe")
 		self.assertEqual(visit.status, VISIT_STATUS_AWAITING_PHARMACY)
 		self.assertTrue(visit.pharmacy_open)
@@ -337,13 +373,19 @@ class TestVisitTransitions(VisitTestCase):
 	def test_available_actions_follow_role(self):
 		visit = make_visit()
 		with self.as_user("triage"):
-			self.assertEqual([a["action"] for a in engine.get_available_actions(visit)], ["start_triage"])
+			self.assertEqual(
+				sorted(a["action"] for a in engine.get_available_actions(visit)),
+				["close_visit", "start_triage"],
+			)
 		with self.as_user("clinician"):
+			self.assertEqual([a["action"] for a in engine.get_available_actions(visit)], ["close_visit"])
+		with self.as_user("lab"):
 			self.assertEqual(engine.get_available_actions(visit), [])
 		visit = self.visit_in(VISIT_STATUS_IN_CONSULTATION)
 		with self.as_user("clinician"):
 			self.assertEqual(
-				sorted(a["action"] for a in engine.get_available_actions(visit)), ["discharge", "refer"]
+				sorted(a["action"] for a in engine.get_available_actions(visit)),
+				["close_visit", "discharge", "refer"],
 			)
 
 
@@ -438,7 +480,7 @@ class TestRerouteAndReturnToTriage(VisitTestCase):
 		visit = self.visit_in(VISIT_STATUS_ROUTED)
 		with self.as_user("triage"):
 			actions = {a["action"]: a for a in engine.get_available_actions(visit)}
-		self.assertEqual(set(actions), {"reroute", "return_to_triage"})
+		self.assertEqual(set(actions), {"reroute", "return_to_triage", "close_visit"})
 		self.assertTrue(actions["reroute"]["needs_department"])
 		self.assertFalse(actions["reroute"]["needs_comment"])
 		self.assertTrue(actions["return_to_triage"]["needs_comment"])
@@ -446,7 +488,7 @@ class TestRerouteAndReturnToTriage(VisitTestCase):
 		with self.as_user("clinician"):
 			self.assertEqual(
 				{a["action"] for a in engine.get_available_actions(visit)},
-				{"start_consultation", "return_to_triage"},
+				{"start_consultation", "return_to_triage", "close_visit"},
 			)
 
 	def test_history_stays_append_only(self):
@@ -723,7 +765,8 @@ class TestVisitTasks(VisitTestCase):
 	def test_discharge_blocked_while_pharmacy_open(self):
 		visit = self.visit_in(VISIT_STATUS_IN_CONSULTATION)
 		visit = self.act(visit, "prescribe")
-		with self.assertRaises(PharmacyTaskOpenError):
+		# Discharge is only possible from In Consultation (W0): from Awaiting Pharmacy it is illegal.
+		with self.assertRaises(IllegalVisitTransitionError):
 			self.act(visit, "discharge", "clinician")
 		self.assertEqual(
 			frappe.db.get_value(VISIT_DOCTYPE, visit.name, "status"), VISIT_STATUS_AWAITING_PHARMACY
@@ -1223,3 +1266,294 @@ class TestTriageFieldsMarkedMandatory(EMRTestCase):
 		meta = frappe.get_meta("Vital Signs")
 		for fieldname in ("krcs_triage_level", "krcs_chief_complaint"):
 			self.assertEqual(meta.get_field(fieldname).mandatory_depends_on, "eval:doc.krcs_visit", fieldname)
+
+
+class TestPhase2Engine(VisitTestCase):
+	"""Phase 2 W0: guards, complete_consultation, close_visit, receive_referral, raise_event, reconciler."""
+
+	def consulting_visit(self, user: str = "clinician"):
+		return self.visit_in(VISIT_STATUS_IN_CONSULTATION)
+
+	# -- complete_consultation -------------------------------------------------------------
+	def test_complete_needs_submitted_encounter(self):
+		visit = self.consulting_visit()
+		with self.as_user("clinician"):
+			self.assertNotIn(
+				"complete_consultation", [a["action"] for a in engine.get_available_actions(visit)]
+			)
+		with self.assertRaises(VisitGuardError):
+			self.act(visit, "complete_consultation", "clinician")
+		make_submitted_encounter(visit.patient, visit.name, submit=False)
+		with self.assertRaises(VisitGuardError):
+			self.act(visit, "complete_consultation", "clinician")
+
+	def test_complete_without_tasks_discharges(self):
+		visit = self.consulting_visit()
+		make_submitted_encounter(visit.patient, visit.name)
+		visit.reload()
+		with self.as_user("mho"):
+			self.assertIn("complete_consultation", [a["action"] for a in engine.get_available_actions(visit)])
+		visit = self.act(visit, "complete_consultation", "mho")
+		self.assertEqual(visit.status, VISIT_STATUS_DISCHARGED)
+		self.assertTrue(visit.closed_at)
+
+	def test_complete_roles(self):
+		visit = self.consulting_visit()
+		make_submitted_encounter(visit.patient, visit.name)
+		for user in ("reception", "triage", "lab", "pharmacist", "his", "mic", "hoo"):
+			with self.assertRaises(frappe.PermissionError, msg=user):
+				self.act(visit, "complete_consultation", user)
+
+	def test_complete_with_pharmacy_pending(self):
+		visit = self.consulting_visit()
+		self.act(visit, "request_lab")
+		self.act(visit, "prescribe")
+		visit = self.act(visit, "lab_results_ready")
+		self.assertEqual((visit.status, visit.pharmacy_open), (VISIT_STATUS_IN_CONSULTATION, 1))
+		make_submitted_encounter(visit.patient, visit.name)
+		visit = self.act(visit, "complete_consultation", "clinician")
+		self.assertEqual(visit.status, VISIT_STATUS_AWAITING_PHARMACY)
+		self.assertFalse(visit.closed_at)
+		visit = self.act(visit, "dispensed")
+		self.assertEqual(visit.status, VISIT_STATUS_DISCHARGED)
+		self.assertTrue(visit.closed_at)
+
+	def test_complete_with_results_pending_needs_reason(self):
+		visit = self.consulting_visit()
+		visit = self.act(visit, "request_lab")
+		make_submitted_encounter(visit.patient, visit.name)
+		visit.reload()
+		with self.as_user("clinician"):
+			action = next(
+				a for a in engine.get_available_actions(visit) if a["action"] == "complete_consultation"
+			)
+		self.assertTrue(action["needs_comment"])
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(visit, "complete_consultation", "clinician")
+		visit = self.act(visit, "complete_consultation", "clinician", comment="Malaria RDT pending; treated")
+		self.assertEqual((visit.status, visit.lab_open), (VISIT_STATUS_AWAITING_LAB, 1))
+		visit = self.act(visit, "lab_results_ready")
+		self.assertEqual(visit.status, VISIT_STATUS_DISCHARGED)
+		self.assertFalse(visit.lab_open)
+
+	def test_complete_with_lab_and_pharmacy_pending(self):
+		visit = self.consulting_visit()
+		self.act(visit, "request_lab")
+		visit = self.act(visit, "prescribe")
+		self.assertEqual(visit.status, VISIT_STATUS_AWAITING_LAB)
+		make_submitted_encounter(visit.patient, visit.name)
+		visit = self.act(visit, "complete_consultation", "clinician", comment="Results to follow")
+		self.assertEqual(visit.status, VISIT_STATUS_AWAITING_PHARMACY)  # pharmacy first after completion
+		self.assertTrue(visit.lab_open and visit.pharmacy_open)
+		visit = self.act(visit, "dispensed")
+		self.assertEqual(
+			(visit.status, visit.lab_open, visit.pharmacy_open), (VISIT_STATUS_AWAITING_LAB, 1, 0)
+		)
+		visit = self.act(visit, "lab_results_ready")
+		self.assertEqual(visit.status, VISIT_STATUS_DISCHARGED)
+
+	def test_dispensed_before_completion_returns_to_consultation(self):
+		visit = self.consulting_visit()
+		visit = self.act(visit, "prescribe")
+		self.assertEqual(visit.status, VISIT_STATUS_AWAITING_PHARMACY)
+		visit = self.act(visit, "dispensed")
+		self.assertEqual(visit.status, VISIT_STATUS_IN_CONSULTATION)
+		self.assertFalse(visit.closed_at)
+
+	def test_discharge_only_from_consultation_with_no_tasks(self):
+		visit = self.consulting_visit()
+		self.act(visit, "request_lab")
+		self.act(visit, "prescribe")
+		visit = self.act(visit, "lab_results_ready")
+		with self.as_user("clinician"):
+			self.assertNotIn("discharge", [a["action"] for a in engine.get_available_actions(visit)])
+		with self.assertRaises(PharmacyTaskOpenError):
+			self.act(visit, "discharge", "clinician")
+
+	# -- close_visit -----------------------------------------------------------------------
+	def test_close_visit_from_every_open_status(self):
+		reason = VISIT_CLOSURE_REASONS[0]
+		cases = [
+			(VISIT_STATUS_REGISTERED, "reception"),
+			(VISIT_STATUS_IN_TRIAGE, "triage"),
+			(VISIT_STATUS_ROUTED, "mic"),
+			(VISIT_STATUS_IN_CONSULTATION, "mho"),
+		]
+		for status, user in cases:
+			visit = self.visit_in(status)
+			visit = self.act(visit, "close_visit", user, closure_reason=reason, comment="Gone home")
+			self.assertEqual(visit.status, VISIT_STATUS_DISCHARGED, status)
+			self.assertEqual(visit.closure_reason, reason)
+			self.assertTrue(visit.closed_at)
+			self.assertEqual(visit.status_log[-1].comment, f"Closed: {reason} — Gone home")
+		for flags in (("request_lab",), ("prescribe",)):
+			visit = self.consulting_visit()
+			for action in flags:
+				self.act(visit, action)
+			visit = self.act(visit, "close_visit", "clinician", closure_reason=reason, comment="Absconded")
+			self.assertEqual(
+				(visit.status, visit.lab_open, visit.pharmacy_open), (VISIT_STATUS_DISCHARGED, 0, 0)
+			)
+
+	def test_close_visit_refused(self):
+		visit = make_visit()
+		reason = VISIT_CLOSURE_REASONS[-1]
+		for user in ("lab", "pharmacist", "his", "hoo", "sysadmin"):
+			with self.assertRaises(frappe.PermissionError, msg=user):
+				self.act(visit, "close_visit", user, closure_reason=reason, comment="x")
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(visit, "close_visit", "reception", closure_reason="Bored", comment="x")
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(visit, "close_visit", "reception", closure_reason=reason)
+		self.act(visit, "close_visit", "reception", closure_reason=reason, comment="Error")
+		with self.assertRaises(IllegalVisitTransitionError):
+			self.act(visit, "close_visit", "reception", closure_reason=reason, comment="again")
+		with self.as_user("reception"):
+			self.assertEqual(engine.get_available_actions(frappe.get_doc(VISIT_DOCTYPE, visit.name)), [])
+
+	def test_close_visit_calls_registered_handlers(self):
+		CLOSED_CALLS.clear()
+		visit = make_visit()
+		with patch.object(
+			tasks, "VISIT_CLOSED_HANDLERS", ["onerc_healthcare.tests.test_visit._record_closed"]
+		):
+			with self.as_user("reception"):
+				apply_action(
+					visit.name,
+					"close_visit",
+					comment="Wrong patient",
+					closure_reason=VISIT_CLOSURE_REASONS[3],
+				)
+		self.assertEqual(CLOSED_CALLS, [visit.name])
+
+	# -- receive_referral ------------------------------------------------------------------
+	def test_receive_referral(self):
+		visit = make_visit()
+		kwargs = {}
+		if frappe.db.table_exists("Referral"):
+			with self.assertRaises(IllegalVisitTransitionError):
+				self.act(visit, "receive_referral", department=DEPT_MENTAL_HEALTH)
+			self.skipTest("Referral DocType exists; B1's tests cover a real referral")
+		with self.assertRaises(frappe.PermissionError):
+			self.act(visit, "receive_referral", "triage", department=DEPT_MENTAL_HEALTH)
+		for dept in (DEPT_TRIAGE, DEPT_RECEPTION, None):
+			with self.assertRaises(IllegalVisitTransitionError, msg=str(dept)):
+				self.act(visit, "receive_referral", department=dept)
+		visit = self.act(visit, "receive_referral", department=DEPT_MENTAL_HEALTH, **kwargs)
+		self.assertEqual(visit.status, VISIT_STATUS_ROUTED)  # no triage vitals needed
+		self.assertEqual(visit.current_department, DEPT_MENTAL_HEALTH)
+		self.assertFalse(visit.routed_without_vitals)
+		self.assertTrue(visit.routed_at)
+		self.assertEqual(visit.status_log[-1].action, "receive_referral")
+
+	# -- guards == available actions ---------------------------------------------------------
+	def test_available_actions_agree_with_transition(self):
+		visits = [self.visit_in(s) for s in (VISIT_STATUS_REGISTERED, VISIT_STATUS_ROUTED)]
+		c = self.consulting_visit()
+		visits.append(c)
+		lab = self.consulting_visit()
+		self.act(lab, "request_lab")
+		visits.append(lab)
+		done = self.consulting_visit()
+		make_submitted_encounter(done.patient, done.name)
+		self.act(done, "prescribe")
+		visits.append(done)
+		for visit in visits:
+			visit = frappe.get_doc(VISIT_DOCTYPE, visit.name)
+			offered = {a["action"] for a in engine.get_available_actions(visit, user="Administrator")}
+			for action, rule in engine.TRANSITIONS.items():
+				if rule.is_system:
+					continue
+				legal = tasks.blocked_reason(visit, action) is None
+				self.assertEqual(action in offered, legal, f"{action} on {visit.status}")
+
+	# -- raise_event / reconcile -------------------------------------------------------------
+	def test_raise_event_skips_illegal_events(self):
+		visit = self.consulting_visit()
+		self.act(visit, "request_lab")
+		self.act(visit, "close_visit", "clinician", closure_reason=VISIT_CLOSURE_REASONS[1], comment="Left")
+		self.assertFalse(tasks.raise_event(visit.name, "lab_results_ready", comment="Result entered"))
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, visit.name, "status"), VISIT_STATUS_DISCHARGED)
+		self.assertTrue(
+			frappe.db.exists(
+				"Comment",
+				{
+					"reference_doctype": VISIT_DOCTYPE,
+					"reference_name": visit.name,
+					"content": ["like", "Skipped lab_results_ready:%"],
+				},
+			)
+		)
+		other = self.consulting_visit()
+		self.assertTrue(tasks.raise_event(other.name, "request_lab"))
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, other.name, "status"), VISIT_STATUS_AWAITING_LAB)
+		with self.assertRaises(ValueError):
+			tasks.raise_event(other.name, "teleport")
+		with self.assertRaises(frappe.DoesNotExistError):
+			tasks.raise_event("PV-NO-SUCH-VISIT", "request_lab")
+
+	def test_reconciler_with_fake_checkers(self):
+		visit = self.consulting_visit()
+		self.act(visit, "request_lab")
+		self.act(visit, "prescribe")
+		checkers = {
+			"lab": "onerc_healthcare.tests.test_visit._fake_checker",
+			"pharmacy": "onerc_healthcare.tests.test_visit._fake_checker",
+		}
+		COMPLETE_TASKS.clear()
+		with patch.object(tasks, "TASK_CHECKERS", checkers):
+			tasks.reconcile_open_tasks()
+			self.assertEqual(
+				frappe.db.get_value(VISIT_DOCTYPE, visit.name, "status"), VISIT_STATUS_AWAITING_LAB
+			)
+			COMPLETE_TASKS.add(visit.name)
+			tasks.reconcile_open_tasks()
+			doc = frappe.get_doc(VISIT_DOCTYPE, visit.name)
+			self.assertEqual((doc.lab_open, doc.pharmacy_open), (0, 0))
+			self.assertEqual(doc.status, VISIT_STATUS_IN_CONSULTATION)
+			self.assertEqual(
+				[r.comment for r in doc.status_log if r.action in ("lab_results_ready", "dispensed")],
+				["Reconciled", "Reconciled"],
+			)
+			other = self.consulting_visit()
+			self.act(other, "request_lab")
+			COMPLETE_TASKS.add(other.name)
+			with self.as_user("clinician"), self.assertRaises(frappe.PermissionError):
+				tasks.recheck_tasks(other.name)
+			with self.as_user("mic"):
+				out = tasks.recheck_tasks(other.name)
+			self.assertEqual(out["raised"], ["lab_results_ready"])
+			self.assertEqual(out["status"], VISIT_STATUS_IN_CONSULTATION)
+		COMPLETE_TASKS.clear()
+
+	def test_reconcile_without_checkers_is_noop(self):
+		with patch.object(tasks, "TASK_CHECKERS", {}):
+			self.assertEqual(tasks.reconcile_open_tasks(), 0)
+
+	# -- encounter link and protected fields ----------------------------------------------------
+	def test_link_encounter(self):
+		visit = self.consulting_visit()
+		enc = make_submitted_encounter(visit.patient, visit.name)
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, visit.name, "encounter"), enc.name)
+		self.assertEqual(tasks.visit_for_encounter(enc.name), visit.name)
+		other = self.consulting_visit()
+		with self.assertRaises(IllegalVisitTransitionError):
+			engine.link_encounter(other.name, enc.name)
+
+	def test_new_fields_protected(self):
+		visit = self.consulting_visit()
+		enc = make_submitted_encounter(visit.patient)
+		for field, value in (
+			("encounter", enc.name),
+			("closure_reason", VISIT_CLOSURE_REASONS[0]),
+		):
+			doc = frappe.get_doc(VISIT_DOCTYPE, visit.name)
+			doc.set(field, value)
+			with self.assertRaises(VisitStatusLockedError, msg=field):
+				doc.save(ignore_permissions=True)
+		forged = make_visit(encounter=enc.name, closure_reason=VISIT_CLOSURE_REASONS[0])
+		self.assertFalse(forged.encounter or forged.closure_reason or forged.referred_from)
+		meta = frappe.get_meta(VISIT_DOCTYPE)
+		self.assertEqual(meta.get_field("encounter").permlevel, 1)
+		self.assertEqual(meta.get_field("referred_from").permlevel, 1)
+		self.assertEqual(meta.get_field("closure_reason").permlevel, 0)

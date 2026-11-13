@@ -16,7 +16,14 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.utils import cint
 
-from onerc_healthcare.constants import ALL_ROLES, CLINICAL_DOCTYPES, ROLE_SYSADMIN, VISIT_DOCTYPE
+from onerc_healthcare.constants import (
+	ACCESS_LOG_DOCTYPE,
+	ALL_ROLES,
+	APP_MODULES,
+	CLINICAL_DOCTYPES,
+	ROLE_SYSADMIN,
+	VISIT_DOCTYPE,
+)
 from onerc_healthcare.security import matrix
 from onerc_healthcare.security.delete_guard import ARCHIVED_FIELD
 
@@ -46,6 +53,7 @@ def install() -> None:
 	hide_billing_fields()
 	add_archived_fields()
 	apply_session_security()
+	apply_log_retention()
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +76,16 @@ def apply_role_settings() -> None:
 # Permissions (FR-39) and delete lock-down (NFR-9)
 # ---------------------------------------------------------------------------
 def clinical_doctypes_with_custom_perms() -> list[str]:
-	"""Clinical DocTypes we own the perms of. Patient Visit is ours: its perms live in its JSON."""
-	return [dt for dt in CLINICAL_DOCTYPES if dt != VISIT_DOCTYPE and doctype_exists(dt)]
+	"""Marley/ERPNext clinical DocTypes whose perms we manage through Custom DocPerm.
+
+	Our own DocTypes (any module in APP_MODULES, e.g. Patient Visit, Referral) are skipped: their perms
+	live in their JSON, and copying them into Custom DocPerm would freeze later JSON changes.
+	"""
+	return [dt for dt in CLINICAL_DOCTYPES if doctype_exists(dt) and not is_app_doctype(dt)]
+
+
+def is_app_doctype(doctype: str) -> bool:
+	return frappe.db.get_value("DocType", doctype, "module") in APP_MODULES
 
 
 def apply_permissions() -> None:
@@ -136,7 +152,8 @@ def add_archived_fields() -> None:
 	"""
 	fields = {}
 	for dt in CLINICAL_DOCTYPES:
-		if not doctype_exists(dt):
+		# The Access Log Entry is append-only (no updates at all), so an archive flag means nothing there.
+		if dt == ACCESS_LOG_DOCTYPE or not doctype_exists(dt):
 			continue
 		last = _last_field(dt)
 		if not last:
@@ -347,3 +364,28 @@ def _set_field_property(doctype: str, df, prop: str, value: int) -> bool:
 		validate_fields_for_doctype=False,
 	)
 	return True
+
+
+# ---------------------------------------------------------------------------
+# Log retention (NFR-7): logins (Activity Log) and prints/exports (Access Log) kept 10 years
+# instead of Frappe's default auto-clear. First run only, so an admin's later choice survives.
+# ---------------------------------------------------------------------------
+LOG_RETENTION_MARKER = "krcs_log_retention_v1"
+LOG_RETENTION_DAYS = 3650
+RETAINED_LOGS = ("Activity Log", "Access Log")
+
+
+def apply_log_retention() -> None:
+	if frappe.db.get_default(LOG_RETENTION_MARKER) or not frappe.db.exists("DocType", "Log Settings"):
+		return
+	settings = frappe.get_single("Log Settings")
+	rows = {row.ref_doctype: row for row in settings.get("logs_to_clear") or []}
+	for doctype in RETAINED_LOGS:
+		if doctype in rows:
+			rows[doctype].days = LOG_RETENTION_DAYS
+		else:
+			settings.append("logs_to_clear", {"ref_doctype": doctype, "days": LOG_RETENTION_DAYS})
+	settings.flags.ignore_permissions = True
+	settings.flags.ignore_validate = True
+	settings.save()
+	frappe.db.set_default(LOG_RETENTION_MARKER, "1")
