@@ -12,7 +12,9 @@ import {
   buildVisitCapture,
   diagnosisFromIcd,
   firstInvalidStep,
+  lineQuantity,
   loadDraft,
+  withDefaultQuantity,
   saveDraft,
   validateStep,
   type DraftLab,
@@ -211,7 +213,7 @@ function PrescriptionsStep({ draft, update, errors, rd }: { draft: VisitDraft; u
         .slice(0, 20)
     : [];
   const setRx = (id: string, patch: Partial<DraftPrescription>) =>
-    update((d) => ({ ...d, prescriptions: d.prescriptions.map((p) => (p.line_id === id ? { ...p, ...patch } : p)) }));
+    update((d) => ({ ...d, prescriptions: d.prescriptions.map((p) => (p.line_id === id ? withDefaultQuantity(p, { ...p, ...patch }, rd) : p)) }));
   return (
     <div className="space-y-4">
       {draft.prescriptions.map((p) => (
@@ -236,6 +238,11 @@ function PrescriptionsStep({ draft, update, errors, rd }: { draft: VisitDraft; u
           <Field label="Comment">
             <TextInput value={p.comment} onChange={(e) => setRx(p.line_id, { comment: e.target.value })} />
           </Field>
+          {lineQuantity(p, rd) !== null ? (
+            <div className="text-sm text-slate-700">
+              Prescribed quantity: <span className="font-semibold">{lineQuantity(p, rd)}</span>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex min-h-12 items-center gap-2">
               <input
@@ -247,8 +254,14 @@ function PrescriptionsStep({ draft, update, errors, rd }: { draft: VisitDraft; u
               Dispensed now
             </label>
             {p.dispensed ? (
-              <Field label="Quantity">
-                <TextInput className="w-32" inputMode="decimal" value={p.quantity} onChange={(e) => setRx(p.line_id, { quantity: e.target.value })} />
+              <Field label={lineQuantity(p, rd) !== null ? `Quantity (at most ${lineQuantity(p, rd)})` : "Quantity"}>
+                <TextInput
+                  className="w-32"
+                  inputMode="decimal"
+                  aria-label="Quantity dispensed"
+                  value={p.quantity}
+                  onChange={(e) => setRx(p.line_id, { quantity: e.target.value })}
+                />
               </Field>
             ) : (
               <span className="text-sm text-slate-600">Otherwise it goes to the facility pharmacy.</span>
@@ -415,7 +428,7 @@ export default function VisitScreen() {
       await finishVisit(requireKeys(), { session: profile!.session, deviceId: await getDeviceId() }, d, rd);
       await refresh();
       void sync("record");
-      navigate(`/patients/${encodeURIComponent(d.patient.key)}`, { replace: true });
+      navigate(d.correcting ? "/sync" : `/patients/${encodeURIComponent(d.patient.key)}`, { replace: true });
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -425,7 +438,12 @@ export default function VisitScreen() {
 
   const props = { draft: d, update, errors, rd };
   return (
-    <Page title={d.patient.display} back="/">
+    <Page title={d.correcting ? `Correct visit: ${d.patient.display}` : d.patient.display} back={d.correcting ? "/sync" : "/"}>
+      {d.correcting ? (
+        <Alert kind="warn">
+          You are correcting a visit the server refused. Saving sends it again as the same record (captured {d.started_at}), so it is never saved twice.
+        </Alert>
+      ) : null}
       <nav className="-mx-1 flex gap-1 overflow-x-auto pb-1" aria-label="Visit steps">
         {STEPS.map((s, i) => (
           <button
@@ -464,7 +482,7 @@ export default function VisitScreen() {
             </button>
           ) : (
             <button type="button" className="btn-primary flex-1" disabled={busy} onClick={finish}>
-              {busy ? "Saving…" : "Finish visit"}
+              {busy ? "Saving…" : d.correcting ? "Save and send again" : "Finish visit"}
             </button>
           )}
         </div>

@@ -5,6 +5,7 @@ import { Alert, Page, errorText } from "../components/ui";
 import { ApiError } from "../lib/api";
 import { downloadPackage, type DownloadProgress } from "../lib/package";
 import { deviceCredentials, getProfile, markAuthRequired, requireKeys } from "../lib/session";
+import { noteRefusal } from "../lib/sessionStatus";
 
 export default function DownloadScreen() {
   const navigate = useNavigate();
@@ -30,6 +31,8 @@ export default function DownloadScreen() {
       navigate("/", { replace: true });
     } catch (e) {
       if (e instanceof ApiError && e.needsSignIn) await markAuthRequired();
+      // a Closed or Cancelled session refuses the package (F1): remember it, the home screen explains
+      if (await noteRefusal(e)) await refresh();
       setError(errorText(e));
     } finally {
       setBusy(false);

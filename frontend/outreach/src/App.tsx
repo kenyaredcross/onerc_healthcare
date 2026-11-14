@@ -4,6 +4,7 @@ import { Spinner } from "./components/ui";
 import ActivityScreen from "./screens/Activity";
 import DownloadScreen from "./screens/Download";
 import EditPatientScreen from "./screens/EditPatient";
+import FixRecordScreen from "./screens/FixRecord";
 import HomeScreen from "./screens/Home";
 import PatientScreen from "./screens/Patient";
 import PickSessionScreen from "./screens/PickSession";
@@ -55,6 +56,7 @@ export default function App() {
       <Route path="/visit/:id" element={<VisitScreen />} />
       <Route path="/activity" element={<ActivityScreen />} />
       <Route path="/sync" element={<SyncScreen />} />
+      <Route path="/sync/fix/:uuid" element={<FixRecordScreen />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -3,8 +3,10 @@
 """Host page of the offline outreach app (Phase 4, O3; SDD §5.6, OUT-04/05, NFR-18).
 
 - `/outreach` and `/outreach/<path>` (hooks.website_route_rules) render the app shell: the hashed bundle
-  from the Vite manifest (`public/outreach/.vite/manifest.json`, built by `bench build`) plus the boot
-  info (CSRF token, site timezone, signed-in user).
+  from the Vite manifest (`public/outreach/.vite/manifest.json`, built by `bench build`) plus the page boot
+  info (site name, timezone, service worker URL, build). The service worker caches this page for offline
+  use, so it carries **no** CSRF token and **no** user (protocol §6 F7): the app reads those from
+  `get_boot` when it is online.
 - `/outreach/sw.js` returns the built service worker as JavaScript with `Service-Worker-Allowed:
   /outreach/` and `Cache-Control: no-cache`, so it can control the whole /outreach/ scope (a worker
   served from /assets/... could not).
@@ -74,14 +76,11 @@ def get_assets() -> dict | None:
 	}
 
 
-def _boot() -> dict:
-	user = frappe.session.user
-	signed_in = user and user != "Guest"
+def _page_boot() -> dict:
+	"""What the cached app shell may carry: nothing tied to a user or a browser session (F7)."""
 	return {
 		"site_name": frappe.local.site,
-		"csrf_token": frappe.sessions.get_csrf_token() if signed_in else None,
 		"timezone": get_system_timezone(),
-		"user": {"name": user, "full_name": get_fullname(user)} if signed_in else None,
 		"sw_url": SW_URL,
 		"build": str(int(os.path.getmtime(os.path.join(_build_dir(), ".vite", "manifest.json"))))
 		if _read_manifest()
@@ -89,9 +88,20 @@ def _boot() -> dict:
 	}
 
 
+def _boot() -> dict:
+	user = frappe.session.user
+	signed_in = user and user != "Guest"
+	return {
+		**_page_boot(),
+		"csrf_token": frappe.sessions.get_csrf_token() if signed_in else None,
+		"user": {"name": user, "full_name": get_fullname(user)} if signed_in else None,
+	}
+
+
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_boot() -> dict:
-	"""Boot info for the app after an online sign-in (fresh CSRF token) and under `yarn dev`."""
+	"""Boot info with the CSRF token and the signed-in user. Never cached by the service worker (`/api/`);
+	the app calls it at start when online and after an online sign-in."""
 	return _boot()
 
 
@@ -129,5 +139,5 @@ def get_context(context):
 	context.title = "KRCS Outreach"
 	context.asset_base = ASSET_BASE
 	context.outreach_assets = get_assets()
-	context.boot_json = _script_json(_boot())
+	context.boot_json = _script_json(_page_boot())
 	return context

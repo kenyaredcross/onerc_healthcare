@@ -4,9 +4,15 @@
  */
 import type { Keys } from "./crypto";
 import { normaliseIdentifier } from "./names";
-import { addRecord } from "./outbox";
+import { addRecord, allRows, getRow, readSecret, requeueFailed, NotCorrectableError } from "./outbox";
 import { fullName, getPatient, patientKey, putPatient, type LocalPatient } from "./patients";
 import {
+  type CommunityActivityPayload,
+  type Envelope,
+  type PatientRegisterPayload,
+  type PatientUpdateKey,
+  type PatientUpdatePayload,
+  type VisitCapturePayload,
   RECORD_COMMUNITY_ACTIVITY,
   RECORD_PATIENT_REGISTER,
   RECORD_PATIENT_UPDATE,
@@ -22,6 +28,7 @@ import {
   type RegisterForm,
 } from "./protocol";
 import type { LoadedReference } from "./reference";
+import { isSyncRunning } from "./sync";
 import { siteNow, siteToday } from "./time";
 import { buildVisitCapture, deleteDraft, firstInvalidStep, type VisitDraft } from "./visit";
 
@@ -136,7 +143,64 @@ export async function registerPatient(keys: Keys, ctx: RecordContext, form: Regi
   return patient;
 }
 
-/** Demographic edit of a package patient (patient.update with the package's `modified`). */
+/** Fields of LocalPatient that hold the downloaded (or last known) value of a `patient.update` key. */
+const LOCAL_FIELD: Partial<Record<PatientUpdateKey, keyof LocalPatient>> = {
+  first_name: "first_name",
+  middle_name: "middle_name",
+  last_name: "last_name",
+  sex: "sex",
+  dob: "dob",
+  mobile: "mobile",
+  residence: "residence",
+  allergies: "allergies",
+};
+
+/**
+ * `base_values` of an edit (F4): the value each changed field had on the device before the edit. For the
+ * first edit after a download that is the downloaded value; for a later edit still pending, it is the value
+ * after the previous edit (the local row already holds it). `estimated_age_*` are not in the package, so the
+ * device has no base for them and leaves them out.
+ */
+export function baseValuesOf(patient: LocalPatient, changes: PatientChanges): PatientChanges {
+  const base: PatientChanges = {};
+  for (const key of Object.keys(changes) as PatientUpdateKey[]) {
+    const field = LOCAL_FIELD[key];
+    if (field) base[key] = (patient[field] as string | null | undefined) ?? null;
+  }
+  return base;
+}
+
+/** The latest patient.update of `patientName` that has no final result yet (the edit a new one chains on). */
+async function lastOpenUpdate(keys: Keys, patientName: string): Promise<string | null> {
+  const rows = (await allRows()).filter((r) => r.type === RECORD_PATIENT_UPDATE && !r.final);
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const env = (await readSecret(keys, rows[i]!)).envelope as Envelope<"patient.update">;
+    if (env.payload.patient === patientName) return env.client_uuid;
+  }
+  return null;
+}
+
+function applyChangesLocally(patient: LocalPatient, changes: PatientChanges, now: number): LocalPatient {
+  const updated: LocalPatient = {
+    ...patient,
+    ...(Object.fromEntries(Object.entries(changes).filter(([k]) => !k.startsWith("estimated_age"))) as Partial<LocalPatient>),
+  };
+  if (changes.estimated_age_years !== undefined) {
+    updated.dob = estimateDob(siteToday(now), Number(changes.estimated_age_years ?? 0), Number(changes.estimated_age_months ?? 0));
+    updated.dob_estimated = 1;
+  } else if (changes.dob) updated.dob_estimated = 0;
+  return updated;
+}
+
+/**
+ * Demographic edit of a package patient (patient.update with the local base `modified` and `base_values`).
+ *
+ * Consecutive edits of one patient made before the first is final CHAIN (F4, chosen over merging): each
+ * is its own record with `base_values` = the values after the previous edit, the same `base_modified`, and
+ * `depends_on` = the previous open edit, so the server applies them in order (and holds the second while
+ * the first is in conflict). Records already queued are never rewritten, so an edit that may already have
+ * reached the server is never changed behind its client_uuid.
+ */
 export async function updatePatient(
   keys: Keys,
   ctx: RecordContext,
@@ -148,31 +212,22 @@ export async function updatePatient(
     throw new Error("This patient was registered on this device; edit after the next package download.");
   }
   const now = ctx.now ?? Date.now();
-  const payload = buildPatientUpdate(patient.name, patient.modified, changes, addIdentifiers);
+  const payload = buildPatientUpdate(patient.name, patient.modified, changes, addIdentifiers, baseValuesOf(patient, changes));
   if (!Object.keys(payload.changes).length && !payload.add_identifiers.length) {
     throw new Error("Nothing was changed.");
   }
+  const previous = await lastOpenUpdate(keys, patient.name);
   const env = buildEnvelope(RECORD_PATIENT_UPDATE, payload, {
     session: ctx.session,
     device_id: ctx.deviceId,
     captured_at: siteNow(now),
+    depends_on: previous ? [previous] : [],
   });
   const updated: LocalPatient = {
-    ...patient,
-    ...(Object.fromEntries(
-      Object.entries(payload.changes).filter(([k]) => !k.startsWith("estimated_age")),
-    ) as Partial<LocalPatient>),
+    ...applyChangesLocally(patient, payload.changes, now),
     identifiers: [...patient.identifiers, ...payload.add_identifiers],
     pending_updates: patient.pending_updates + 1,
   };
-  if (payload.changes.estimated_age_years !== undefined) {
-    updated.dob = estimateDob(
-      siteToday(now),
-      Number(payload.changes.estimated_age_years ?? 0),
-      Number(payload.changes.estimated_age_months ?? 0),
-    );
-    updated.dob_estimated = 1;
-  } else if (payload.changes.dob) updated.dob_estimated = 0;
   await putPatient(keys, updated);
   await addRecord(keys, env, `Demographics: ${fullName(updated)}`, patient.key, now);
   return updated;
@@ -188,6 +243,7 @@ export async function finishVisit(
   if (invalid >= 0) throw new Error("Some steps still need attention.");
   const now = ctx.now ?? Date.now();
   const payload = buildVisitCapture(draft);
+  if (draft.correcting) return correctVisit(keys, draft, payload, now);
   const env = buildEnvelope(RECORD_VISIT_CAPTURE, payload, {
     session: ctx.session,
     device_id: ctx.deviceId,
@@ -245,4 +301,182 @@ export async function recordActivity(keys: Keys, ctx: RecordContext, form: Commu
   });
   await addRecord(keys, env, `${payload.activity_type}: ${payload.topic ?? payload.location ?? payload.activity_date}`, null, now);
   return env.client_uuid;
+}
+
+// ----- corrections of failed records (fix round 1, F2) ---------------------------------------------
+
+/** The failed record `uuid` and its decrypted secret; refuses anything else, and refuses during a sync. */
+export async function loadFailed(keys: Keys, uuid: string) {
+  if (isSyncRunning()) throw new NotCorrectableError("A sync is running. Wait for it to finish, then correct the record.");
+  const row = await getRow(uuid);
+  if (!row) throw new NotCorrectableError("This record is no longer on the device.");
+  if (row.final || row.status !== "failed") throw new NotCorrectableError();
+  return { row, secret: await readSecret(keys, row) };
+}
+
+/** A registration refused by the server, corrected: same client_uuid, local patient updated. */
+export async function correctRegistration(keys: Keys, uuid: string, form: RegisterForm, now: number = Date.now()): Promise<LocalPatient | null> {
+  const { secret } = await loadFailed(keys, uuid);
+  if (secret.envelope.type !== RECORD_PATIENT_REGISTER) throw new NotCorrectableError("This is not a registration.");
+  const payload = buildPatientRegister(form);
+  const patient = secret.patient_key ? await getPatient(keys, secret.patient_key) : null;
+  let updated: LocalPatient | null = null;
+  if (patient) {
+    updated = {
+      ...patient,
+      first_name: payload.first_name,
+      middle_name: payload.middle_name,
+      last_name: payload.last_name,
+      sex: payload.sex,
+      dob: payload.dob ?? estimateDob(captureDate(secret.envelope.captured_at, now), payload.estimated_age_years ?? 0, payload.estimated_age_months ?? 0),
+      dob_estimated: payload.dob ? 0 : 1,
+      mobile: payload.mobile,
+      residence: payload.residence,
+      allergies: payload.allergies,
+      is_walk_in: payload.is_walk_in,
+      identifiers: payload.identifiers,
+    };
+    await putPatient(keys, updated);
+  }
+  await requeueFailed(keys, uuid, payload, { summary: `Registration: ${fullName(payload)}`, now });
+  return updated;
+}
+
+function captureDate(capturedAt: string, now: number): string {
+  return /^\d{4}-\d{2}-\d{2}/.test(capturedAt) ? capturedAt.slice(0, 10) : siteToday(now);
+}
+
+const UNKNOWN_BASE = "\u0000unknown";
+
+/**
+ * The form of a failed patient.update: the patient as the device shows it, with the record's changes, and
+ * the base each field is compared with (the record's `base_values`; a key changed by the record without a
+ * known base is always sent again).
+ */
+export function correctionBase(patient: LocalPatient, payload: PatientUpdatePayload): LocalPatient {
+  const base: LocalPatient = { ...patient };
+  for (const key of Object.keys(payload.changes) as PatientUpdateKey[]) {
+    const field = LOCAL_FIELD[key];
+    if (!field) continue;
+    const known = payload.base_values && key in payload.base_values;
+    (base as unknown as Record<string, unknown>)[field] = known ? (payload.base_values![key] ?? null) : UNKNOWN_BASE;
+  }
+  return base;
+}
+
+/** A demographic edit refused by the server, corrected: same client_uuid, base_modified and depends_on. */
+export async function correctPatientUpdate(
+  keys: Keys,
+  uuid: string,
+  changes: PatientChanges,
+  addIdentifiers: Identifier[],
+  now: number = Date.now(),
+): Promise<LocalPatient | null> {
+  const { secret } = await loadFailed(keys, uuid);
+  if (secret.envelope.type !== RECORD_PATIENT_UPDATE) throw new NotCorrectableError("This is not a demographic edit.");
+  const old = secret.envelope.payload;
+  const patient = secret.patient_key ? await getPatient(keys, secret.patient_key) : null;
+  // base_values: the record's own, else the device value for keys the record did not change before
+  const base: PatientChanges = {};
+  for (const key of Object.keys(changes) as PatientUpdateKey[]) {
+    if (old.base_values && key in old.base_values) base[key] = old.base_values[key] ?? null;
+    else if (!(key in old.changes) && patient && LOCAL_FIELD[key]) base[key] = (patient[LOCAL_FIELD[key]!] as string | null) ?? null;
+  }
+  const allKnown = Object.keys(changes).every((k) => k in base || k.startsWith("estimated_age"));
+  const payload = buildPatientUpdate(old.patient, old.base_modified, changes, addIdentifiers, allKnown ? base : undefined);
+  if (!Object.keys(payload.changes).length && !payload.add_identifiers.length) {
+    throw new Error("Nothing to send: change at least one field or add an identifier.");
+  }
+  let updated: LocalPatient | null = null;
+  if (patient) {
+    // undo the old edit where nothing later changed the value, then apply the corrected one
+    let p: LocalPatient = { ...patient };
+    for (const key of Object.keys(old.changes) as PatientUpdateKey[]) {
+      const field = LOCAL_FIELD[key];
+      if (!field || key in payload.changes) continue;
+      if (old.base_values && key in old.base_values && p[field] === (old.changes[key] ?? null)) {
+        (p as unknown as Record<string, unknown>)[field] = old.base_values[key] ?? null;
+      }
+    }
+    p = applyChangesLocally(p, payload.changes, now);
+    const sameId = (a: Identifier, b: Identifier) =>
+      a.identifier_type === b.identifier_type && normaliseIdentifier(a.identifier_value) === normaliseIdentifier(b.identifier_value);
+    p.identifiers = [...p.identifiers.filter((i) => !old.add_identifiers.some((o) => sameId(i, o))), ...payload.add_identifiers];
+    updated = p;
+    await putPatient(keys, updated);
+  }
+  await requeueFailed(keys, uuid, payload, { summary: `Demographics: ${updated ? fullName(updated) : old.patient}`, now });
+  return updated;
+}
+
+/** A community activity refused by the server, corrected: same client_uuid. */
+export async function correctActivity(keys: Keys, uuid: string, form: CommunityActivityForm, now: number = Date.now()): Promise<void> {
+  const { secret } = await loadFailed(keys, uuid);
+  if (secret.envelope.type !== RECORD_COMMUNITY_ACTIVITY) throw new NotCorrectableError("This is not a community activity.");
+  const payload = buildCommunityActivity(form);
+  await requeueFailed(keys, uuid, payload, {
+    summary: `${payload.activity_type}: ${payload.topic ?? payload.location ?? payload.activity_date}`,
+    now,
+  });
+}
+
+async function correctVisit(keys: Keys, draft: VisitDraft, payload: VisitCapturePayload, now: number): Promise<string> {
+  const uuid = draft.correcting!;
+  const { secret } = await loadFailed(keys, uuid);
+  if (secret.envelope.type !== RECORD_VISIT_CAPTURE) throw new NotCorrectableError("This is not a visit.");
+  const old = secret.envelope.payload;
+  // the patient (and so depends_on) of the record cannot change
+  const fixed: VisitCapturePayload = { ...payload, patient: old.patient, patient_ref: old.patient_ref };
+  await requeueFailed(keys, uuid, fixed, { summary: `Visit: ${draft.patient.display} (${draft.department})`, now });
+  const patient = await getPatient(keys, draft.patient.key);
+  if (patient) {
+    patient.outreach_visits = patient.outreach_visits.map((v) =>
+      v.client_uuid === uuid
+        ? {
+            ...v,
+            department: draft.department,
+            diagnoses: draft.consultation.diagnoses.map((d) => ({ code: d.code_value, title: d.title, case_type: d.case_type })),
+            prescriptions: draft.prescriptions.map((p) => p.label),
+          }
+        : v,
+    );
+    await putPatient(keys, patient);
+  }
+  await deleteDraft(draft.id);
+  return uuid;
+}
+
+// ----- forms prefilled from a stored payload --------------------------------------------------------
+
+const str = (v: string | number | null | undefined): string => (v === null || v === undefined ? "" : String(v));
+
+export function registerFormFromPayload(p: PatientRegisterPayload): RegisterForm {
+  const exact = Boolean(p.dob) || (p.estimated_age_years === null && p.estimated_age_months === null);
+  return {
+    first_name: p.first_name ?? "",
+    middle_name: p.middle_name ?? "",
+    last_name: p.last_name ?? "",
+    sex: p.sex ?? "",
+    dob_mode: exact ? "exact" : "estimated",
+    dob: p.dob ?? "",
+    age_years: str(p.estimated_age_years),
+    age_months: str(p.estimated_age_months),
+    mobile: p.mobile ?? "",
+    residence: p.residence ?? "",
+    allergies: p.allergies ?? "",
+    is_walk_in: Boolean(p.is_walk_in),
+    identifiers: (p.identifiers ?? []).map((i) => ({ ...i })),
+  };
+}
+
+export function activityFormFromPayload(p: CommunityActivityPayload): CommunityActivityForm {
+  return {
+    activity_type: p.activity_type,
+    activity_date: p.activity_date,
+    location: p.location ?? "",
+    topic: p.topic ?? "",
+    participants_male: str(p.participants_male),
+    participants_female: str(p.participants_female),
+    notes: p.notes ?? "",
+  };
 }

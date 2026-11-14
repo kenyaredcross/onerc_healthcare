@@ -4,15 +4,28 @@
  * that acknowledgement. Failed, held and conflict records are never purged.
  */
 import { decryptJson, encryptJson, type Keys } from "./crypto";
-import { aad, db, getMeta, setMeta, type AckRow, type OutboxRow, type OutboxStatus } from "./db";
+import { aad, db, delMeta, getMeta, setMeta, type AckRow, type OutboxRow, type OutboxStatus } from "./db";
 import type { AnyEnvelope, RecordResult } from "./protocol";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * One line of a record's local history (fix round 1, F2): every distinct server error, and every
+ * correction made on the device. Kept encrypted with the record; never sent.
+ */
+export interface HistoryEntry {
+  kind: "failed" | "corrected";
+  at: number; // epoch ms (first time, for a repeated error)
+  last_at?: number; // epoch ms of the last identical answer
+  count?: number; // how many identical answers in a row
+  error?: string | null;
+}
 
 export interface OutboxSecret {
   envelope: AnyEnvelope;
   summary: string; // what the user sees in the sync screen, e.g. "Visit: Amina Hassan (Outpatient)"
   patient_key: string | null;
+  history?: HistoryEntry[];
 }
 
 export interface OutboxItem {
@@ -161,7 +174,13 @@ export async function applyResult(
       status = "failed";
   }
   const final = status === "accepted" || status === "duplicate" || status === "resolved";
-  const updated: OutboxRow = { ...row, status, final: final ? 1 : 0, acked_at: final ? now : null };
+  let enc = row.enc;
+  if (status === "failed") {
+    const secret = await readSecret(keys, row);
+    secret.history = addFailure(secret.history ?? [], result.error ?? null, now);
+    enc = await encryptJson(keys, secret, aad("outbox", row.client_uuid));
+  }
+  const updated: OutboxRow = { ...row, status, final: final ? 1 : 0, acked_at: final ? now : null, enc };
   const ack: AckRow = {
     client_uuid: row.client_uuid,
     result: result.result,
@@ -172,6 +191,58 @@ export async function applyResult(
   await tx.objectStore("outbox").put(updated);
   await tx.objectStore("acks").put(ack);
   await tx.done;
+  return updated;
+}
+
+/** Append a server error to the history, or count it again when it repeats the last line. */
+export function addFailure(history: HistoryEntry[], error: string | null, now: number): HistoryEntry[] {
+  const last = history[history.length - 1];
+  if (last && last.kind === "failed" && (last.error ?? null) === error) {
+    return [...history.slice(0, -1), { ...last, last_at: now, count: (last.count ?? 1) + 1 }];
+  }
+  return [...history, { kind: "failed", at: now, error, count: 1 }];
+}
+
+export class NotCorrectableError extends Error {
+  constructor(message = "Only a record the server refused (failed) can be corrected.") {
+    super(message);
+    this.name = "NotCorrectableError";
+  }
+}
+
+/**
+ * Correct a failed record (fix round 1, F2): store the new payload under the SAME client_uuid, with the
+ * same type, session, device, captured_at and depends_on, and queue it again. The server re-applies a
+ * Failed record with the payload it receives; nothing else changes on the device.
+ */
+export async function requeueFailed(
+  keys: Keys,
+  uuid: string,
+  payload: AnyEnvelope["payload"],
+  opts: { summary?: string; now?: number } = {},
+): Promise<OutboxRow> {
+  const now = opts.now ?? Date.now();
+  const d = await db();
+  const row = await d.get("outbox", uuid);
+  if (!row) throw new NotCorrectableError("This record is no longer on the device.");
+  if (row.final || row.status !== "failed") throw new NotCorrectableError();
+  const secret = await readSecret(keys, row);
+  const envelope = { ...secret.envelope, payload } as AnyEnvelope;
+  const updatedSecret: OutboxSecret = {
+    ...secret,
+    envelope,
+    summary: opts.summary ?? secret.summary,
+    history: [...(secret.history ?? []), { kind: "corrected", at: now }],
+  };
+  const updated: OutboxRow = {
+    ...row,
+    status: "pending",
+    enc: await encryptJson(keys, updatedSecret, aad("outbox", uuid)),
+  };
+  await d.put("outbox", updated);
+  // A batch whose answer never arrived must not be re-sent under its old batch_id with the new payload.
+  const inflight = await getMeta<{ batch_id: string; uuids: string[] }>("inflight_batch");
+  if (inflight?.uuids.includes(uuid)) await delMeta("inflight_batch");
   return updated;
 }
 

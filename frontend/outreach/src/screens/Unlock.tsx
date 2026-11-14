@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../app/AppContext";
 import { RenewPanel } from "../components/Renew";
+import { SessionEndedPanel } from "../components/SessionEnded";
 import { Alert, Field, Page, TextInput, errorText } from "../components/ui";
 import { SignInForm } from "./SignIn";
 import { ExpiredError, LockedOutError, PinError, recoverKey, resetDevice, unlock } from "../lib/session";
@@ -12,7 +13,7 @@ function ResetDevice() {
   if (!counts || counts.unsynced > 0) return null;
   return (
     <details className="card">
-      <summary className="cursor-pointer text-sm font-semibold">Use this device for another user or session</summary>
+      <summary className="cursor-pointer text-sm font-semibold">Start a new session, or use this device for another user</summary>
       <p className="mt-2 text-sm text-slate-700">
         Nothing is waiting to be synced. Resetting removes the downloaded package and any unfinished visits from this device.
       </p>
@@ -141,6 +142,7 @@ export default function UnlockScreen() {
           <Recover />
         </>
       ) : null}
+      <SessionEndedPanel />
       <ResetDevice />
     </Page>
   );

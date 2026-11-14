@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { fetchBoot, setCsrfToken } from "../lib/api";
+import { fetchBoot } from "../lib/api";
 import { getMeta } from "../lib/db";
 import { counts as outboxCounts, type OutboxCounts } from "../lib/outbox";
 import { countPatients } from "../lib/patients";
@@ -7,6 +7,7 @@ import { clearReferenceCache, loadReference, type LoadedReference } from "../lib
 import {
   IdleLock,
   adoptOnlineUser,
+  checkSessionStatus,
   deviceCredentials,
   getDeviceId,
   getKeys,
@@ -21,6 +22,7 @@ import {
   type Profile,
 } from "../lib/session";
 import { getSyncState, isSyncRunning, onSyncChange, runSync, type SyncReport, type SyncState, type SyncTrigger } from "../lib/sync";
+import { getSessionStatus, onSessionStatusChange, type SessionStatusInfo } from "../lib/sessionStatus";
 import { setSiteTimezone } from "../lib/time";
 import { countDrafts } from "../lib/visit";
 import { pageBoot } from "../boot";
@@ -42,6 +44,8 @@ export interface AppState {
   syncState: SyncState | null;
   syncing: boolean;
   authRequired: boolean;
+  /** What the device knows about its session on the server (F1); null when nothing is known. */
+  sessionStatus: SessionStatusInfo | null;
   refresh: () => Promise<void>;
   sync: (trigger: SyncTrigger) => Promise<SyncReport | null>;
   lockNow: () => void;
@@ -71,10 +75,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncState: null,
     syncing: false,
     authRequired: false,
+    sessionStatus: null,
   });
 
   const refresh = useCallback(async () => {
-    const [lock, profile, deviceId, counts, patients, drafts, syncState, authRequired, packageAt] = await Promise.all([
+    const [lock, profile, deviceId, counts, patients, drafts, syncState, authRequired, packageAt, sessionStatus] = await Promise.all([
       lockState(),
       getProfile(),
       getDeviceId(),
@@ -84,6 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       getSyncState(),
       isAuthRequired(),
       getMeta<number>("package_at"),
+      getSessionStatus(),
     ]);
     const keys = getKeys();
     const reference = lock === "unlocked" && keys ? await loadReference(keys) : null;
@@ -103,6 +109,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       syncState,
       syncing: isSyncRunning(),
       authRequired,
+      sessionStatus,
     }));
   }, []);
 
@@ -133,31 +140,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     lockSession();
   }, []);
 
-  // boot: timezone, CSRF token, an existing browser session
+  // boot. The cached page (www/outreach.py) carries only the site timezone and asset info, never the
+  // CSRF token or the user (F7): those come from get_boot when the server can be reached.
   useEffect(() => {
+    let cancelled = false;
     const boot = pageBoot();
-    if (boot) {
-      setSiteTimezone(boot.timezone);
-      adoptOnlineUser(boot.user, boot.csrf_token);
-      void refresh();
-    } else {
-      // `yarn dev` (no server-rendered boot): ask the bench, but work offline without it
-      fetchBoot()
-        .then((b) => {
-          setSiteTimezone(b.timezone);
-          adoptOnlineUser(b.user, b.csrf_token);
-          setCsrfToken(b.csrf_token);
-        })
-        .catch(() => undefined)
-        .finally(() => void refresh());
-    }
+    if (boot?.timezone) setSiteTimezone(boot.timezone);
+    void refresh();
+    fetchBoot()
+      .then(async (b) => {
+        if (cancelled) return;
+        setSiteTimezone(b.timezone);
+        adoptOnlineUser(b.user, b.csrf_token);
+        if (b.user && b.user.name !== "Guest") await checkSessionStatus();
+      })
+      .catch(() => undefined) // offline: the app works without it
+      .finally(() => {
+        if (!cancelled) void refresh();
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   useEffect(() => {
     const offSession = onSessionChange(() => void refresh());
+    const offStatus = onSessionStatusChange(() => void refresh());
     const offSync = onSyncChange(() => setState((s) => ({ ...s, syncing: isSyncRunning() })));
     return () => {
       offSession();
+      offStatus();
       offSync();
     };
   }, [refresh]);

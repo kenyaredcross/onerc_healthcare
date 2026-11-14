@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../app/AppContext";
 import { IdentifiersEditor } from "../components/Identifiers";
@@ -10,7 +10,7 @@ import { updatePatient, validateIdentifiers } from "../lib/records";
 import { getDeviceId, requireKeys } from "../lib/session";
 import { siteToday } from "../lib/time";
 
-interface EditForm {
+export interface EditForm {
   first_name: string;
   middle_name: string;
   last_name: string;
@@ -42,40 +42,79 @@ export function diffChanges(p: LocalPatient, f: EditForm): PatientChanges {
   return changes;
 }
 
+export function editFormOf(p: LocalPatient): EditForm {
+  return {
+    first_name: p.first_name ?? "",
+    middle_name: p.middle_name ?? "",
+    last_name: p.last_name ?? "",
+    sex: p.sex ?? "",
+    dob_mode: "keep",
+    dob: p.dob ?? "",
+    age_years: "",
+    age_months: "",
+    mobile: p.mobile ?? "",
+    residence: p.residence ?? "",
+    allergies: p.allergies ?? "",
+  };
+}
+
 export default function EditPatientScreen() {
   const { key = "" } = useParams();
+  const { profile } = useApp();
+  const [patient, setPatient] = useState<LocalPatient | null | undefined>(undefined);
+
+  useEffect(() => {
+    void getPatient(requireKeys(), key).then(setPatient);
+  }, [key]);
+
+  if (patient === undefined) return <Spinner />;
+  if (!patient || !profile) return null;
+  return (
+    <EditPatientEditor
+      title="Edit demographics"
+      patient={patient}
+      base={patient}
+      initialForm={editFormOf(patient)}
+      initialIds={[]}
+      onSave={async (changes, ids) => {
+        await updatePatient(requireKeys(), { session: profile.session, deviceId: await getDeviceId() }, patient, changes, ids);
+      }}
+    />
+  );
+}
+
+/**
+ * The demographic edit form. `base` is what each field is compared with to find the changes: the patient
+ * as shown for a new edit, or the refused record's `base_values` for a correction (F2).
+ */
+export function EditPatientEditor({
+  title,
+  patient,
+  base,
+  initialForm,
+  initialIds,
+  onSave,
+  intro,
+  done,
+}: {
+  title: string;
+  patient: LocalPatient;
+  base: LocalPatient;
+  initialForm: EditForm;
+  initialIds: Identifier[];
+  onSave: (changes: PatientChanges, ids: Identifier[]) => Promise<void>;
+  intro?: ReactNode;
+  done?: string;
+}) {
   const navigate = useNavigate();
   const { reference, profile, refresh, sync } = useApp();
-  const [patient, setPatient] = useState<LocalPatient | null | undefined>(undefined);
-  const [form, setForm] = useState<EditForm | null>(null);
-  const [newIds, setNewIds] = useState<Identifier[]>([]);
+  const [form, setForm] = useState<EditForm | null>(initialForm);
+  const [newIds, setNewIds] = useState<Identifier[]>(initialIds);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    void getPatient(requireKeys(), key).then((p) => {
-      setPatient(p);
-      if (p) {
-        setForm({
-          first_name: p.first_name ?? "",
-          middle_name: p.middle_name ?? "",
-          last_name: p.last_name ?? "",
-          sex: p.sex ?? "",
-          dob_mode: "keep",
-          dob: p.dob ?? "",
-          age_years: "",
-          age_months: "",
-          mobile: p.mobile ?? "",
-          residence: p.residence ?? "",
-          allergies: p.allergies ?? "",
-        });
-      }
-    });
-  }, [key]);
-
-  if (patient === undefined || !form) return <Spinner />;
-  if (!patient || !reference || !profile) return null;
+  if (!form || !reference || !profile) return null;
   const set = <K extends keyof EditForm>(k: K, v: EditForm[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
 
   async function submit(e: FormEvent) {
@@ -90,10 +129,10 @@ export default function EditPatientScreen() {
     setBusy(true);
     setError(null);
     try {
-      await updatePatient(requireKeys(), { session: profile.session, deviceId: await getDeviceId() }, patient, diffChanges(patient, form), newIds);
+      await onSave(diffChanges(base, form), newIds);
       await refresh();
       void sync("record");
-      navigate(`/patients/${encodeURIComponent(patient.key)}`, { replace: true });
+      navigate(done ?? `/patients/${encodeURIComponent(patient.key)}`, { replace: true });
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -102,7 +141,8 @@ export default function EditPatientScreen() {
   }
 
   return (
-    <Page title="Edit demographics" back={`/patients/${encodeURIComponent(patient.key)}`}>
+    <Page title={title} back={done ?? `/patients/${encodeURIComponent(patient.key)}`}>
+      {intro}
       <Alert>Changes are sent to the facility at sync. If the record was changed there meanwhile, the HIS Officer reviews both versions.</Alert>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <div className="card grid gap-4 sm:grid-cols-3">

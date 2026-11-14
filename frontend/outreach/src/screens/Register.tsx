@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../app/AppContext";
 import { IdentifiersEditor } from "../components/Identifiers";
 import { ResidencePicker } from "../components/Residence";
 import { Alert, Choice, Field, Page, TextArea, TextInput, errorText } from "../components/ui";
-import { findSimilar, fullName, type SimilarPatient } from "../lib/patients";
+import { findSimilar, fullName, type LocalPatient, type SimilarPatient } from "../lib/patients";
 import type { RegisterForm } from "../lib/protocol";
 import { estimateDob, registerPatient, validateRegister } from "../lib/records";
 import { getDeviceId, requireKeys } from "../lib/session";
@@ -27,12 +27,46 @@ const EMPTY: RegisterForm = {
 };
 
 export default function RegisterScreen() {
+  const { reference, profile } = useApp();
+  if (!reference || !profile) return null;
+  return (
+    <RegisterEditor
+      title="Register patient"
+      back="/patients"
+      submitLabel="Register"
+      initial={{
+        ...EMPTY,
+        identifiers: reference.identifier_types.filter((t) => t.is_primary).slice(0, 1).map((t) => ({ identifier_type: t.name, identifier_value: "" })),
+      }}
+      onSave={async (form) => registerPatient(requireKeys(), { session: profile.session, deviceId: await getDeviceId() }, form)}
+    />
+  );
+}
+
+/**
+ * The registration form: a new registration, or the correction of a refused one (F2, same client_uuid;
+ * `excludeKey` keeps the patient being corrected out of the duplicate warning). Validated the same way.
+ */
+export function RegisterEditor({
+  title,
+  back,
+  submitLabel,
+  initial,
+  onSave,
+  excludeKey,
+  intro,
+}: {
+  title: string;
+  back: string;
+  submitLabel: string;
+  initial: RegisterForm;
+  onSave: (form: RegisterForm) => Promise<LocalPatient | null>;
+  excludeKey?: string;
+  intro?: ReactNode;
+}) {
   const navigate = useNavigate();
   const { reference, profile, refresh, sync } = useApp();
-  const [form, setForm] = useState<RegisterForm>(() => ({
-    ...EMPTY,
-    identifiers: reference?.identifier_types.filter((t) => t.is_primary).slice(0, 1).map((t) => ({ identifier_type: t.name, identifier_value: "" })) ?? [],
-  }));
+  const [form, setForm] = useState<RegisterForm>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [similar, setSimilar] = useState<SimilarPatient[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -67,16 +101,16 @@ export default function RegisterScreen() {
           dob_estimated: form.dob_mode === "estimated",
           residence: form.residence || null,
           identifiers: form.identifiers,
-        });
+        }, excludeKey);
         if (found.length) {
           setSimilar(found);
           return;
         }
       }
-      const patient = await registerPatient(keys, { session: profile.session, deviceId: await getDeviceId() }, form);
+      const patient = await onSave(form);
       await refresh();
       void sync("record");
-      navigate(`/patients/${encodeURIComponent(patient.key)}`, { replace: true });
+      navigate(patient ? `/patients/${encodeURIComponent(patient.key)}` : "/sync", { replace: true });
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -86,7 +120,8 @@ export default function RegisterScreen() {
 
   const sameId = similar?.some((s) => s.sameIdentifier);
   return (
-    <Page title="Register patient" back="/patients">
+    <Page title={title} back={back}>
+      {intro}
       <form onSubmit={(e) => submit(e)} className="space-y-4" noValidate>
         <div className="card grid gap-4 sm:grid-cols-3">
           <Field label="First name" error={errors.first_name} htmlFor="first_name">
@@ -171,7 +206,7 @@ export default function RegisterScreen() {
         {error ? <Alert kind="error">{error}</Alert> : null}
         {Object.keys(errors).length ? <Alert kind="error">Check the highlighted fields.</Alert> : null}
         <button type="submit" className="btn-primary w-full" disabled={busy}>
-          {busy ? "Checking…" : "Register"}
+          {busy ? "Checking…" : submitLabel}
         </button>
       </form>
     </Page>

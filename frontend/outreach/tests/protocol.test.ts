@@ -107,15 +107,20 @@ describe("payloads match docs/OUTREACH_PROTOCOL.md exactly", () => {
     expect([est.dob, est.estimated_age_years, est.estimated_age_months, est.is_walk_in]).toEqual([null, 4, 6, 1]);
   });
 
-  it("patient.update keeps only the allowed change keys", () => {
+  it("patient.update keeps only the allowed change keys, with base_values for the changed keys (F4)", () => {
     const p = buildPatientUpdate(
       "KLB-PAT-2026-00012",
       "2026-11-10 08:01:02.123456",
       { mobile: "0712000000", residence: "R", ...({ owner: "x" } as object) },
       [{ identifier_type: "Alien ID", identifier_value: "A1" }],
+      { mobile: null, residence: "Old", allergies: "not changed, not sent" },
     );
     expect(shape(p)).toEqual(shape(fixtures["patient.update"]));
+    expect(Object.keys(p)).toEqual(Object.keys(fixtures["patient.update"]));
     expect(p.changes).toEqual({ mobile: "0712000000", residence: "R" });
+    expect(p.base_values).toEqual({ mobile: null, residence: "Old" });
+    // without a known base the key is left out (the server then applies the base_modified rule)
+    expect("base_values" in buildPatientUpdate("P", "2026-11-10 08:01:02", { mobile: "1" }, [])).toBe(false);
   });
 
   it("visit.capture with every section", () => {

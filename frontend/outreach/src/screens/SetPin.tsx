@@ -35,7 +35,8 @@ export default function SetPinScreen() {
   return (
     <Page title="Set your PIN">
       <Alert>
-        The PIN unlocks this app offline and protects the patient records on this device. Use at least {min} digits and do not share it.
+        The PIN unlocks this app offline and protects the patient records on this device. Use at least {min} digits and do not share it. The PIN
+        only protects this app: the tablet's own encryption and screen lock must also be on.
       </Alert>
       <form onSubmit={submit} className="card space-y-4">
         <Field label={`New PIN (${min}+ digits)`} htmlFor="pin">

@@ -163,7 +163,7 @@ describe("patients on the device", () => {
     expect((await searchPatients(keys, "fatuma")).map((h) => h.patient.key)).toEqual([p.key]);
   });
 
-  it("edits demographics with base_modified and applies them locally", async () => {
+  it("edits demographics with base_modified and base_values and applies them locally", async () => {
     const [p] = await load(pkg("P1", "Amina", "Hassan"));
     const updated = await updatePatient(keys, { session: "S", deviceId: "D" }, p!, { mobile: "0712345678" }, [{ identifier_type: "National ID", identifier_value: "1234" }]);
     expect(updated.mobile).toBe("0712345678");
@@ -173,6 +173,7 @@ describe("patients on the device", () => {
       patient: "P1",
       base_modified: "2026-11-10 08:01:02.123456",
       changes: { mobile: "0712345678" },
+      base_values: { mobile: null },
       add_identifiers: [{ identifier_type: "National ID", identifier_value: "1234" }],
     });
     expect((await getPatient(keys, p!.key))!.identifiers).toHaveLength(1);

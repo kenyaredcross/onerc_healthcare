@@ -4,7 +4,9 @@
  *
  * - Precaches the built bundle (hashed JS/CSS, icons, manifest) from /assets/onerc_healthcare/outreach/.
  * - Navigations under /outreach/ go to the network first and fall back to the cached app shell, so the
- *   app opens offline. The shell is the /outreach page itself (it carries the boot info).
+ *   app opens offline. The shell is the /outreach page itself: it carries the site timezone and asset
+ *   info only, never the CSRF token or the user (fix round 1, F7; the app reads those from get_boot).
+ *   Shell caches of earlier versions (which could hold a token) are deleted on activation.
  * - /api/ responses are never cached: they carry patient data and must stay in encrypted IndexedDB.
  */
 import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
@@ -12,7 +14,8 @@ import { clientsClaim } from "workbox-core";
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> };
 
-const SHELL_CACHE = "krcs-outreach-shell-v1";
+const SHELL_CACHE = "krcs-outreach-shell-v2";
+const SHELL_PREFIX = "krcs-outreach-shell-";
 const SHELL_URL = "/outreach/";
 const NAV_TIMEOUT_MS = 5000;
 
@@ -40,6 +43,14 @@ async function refreshShell(): Promise<void> {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(refreshShell());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((names) => Promise.all(names.filter((n) => n.startsWith(SHELL_PREFIX) && n !== SHELL_CACHE).map((n) => caches.delete(n)))),
+  );
 });
 
 async function handleNavigation(request: Request): Promise<Response> {

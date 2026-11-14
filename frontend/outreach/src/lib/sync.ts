@@ -7,13 +7,18 @@
  * - Stops cleanly on a network error; the next run sends only what is still unacknowledged.
  * - Keeps every record until a final result; failed records are re-sent, held/conflict records are
  *   polled with sync.status until resolved. Final records are purged `purge_after_days` later.
- * - On 401 the records are kept and an online sign-in is requested.
+ * - On 401 the records are kept and an online sign-in is requested. A Closed session still syncs with
+ *   its grant (fix round 1, F1); a refusal that names the session status is remembered (sessionStatus).
+ * - A failed record is re-sent unchanged at every run (the server retries it) until the user corrects
+ *   it (F2, same client_uuid); records that depend on it wait and are sent after it is accepted.
+ * - An accepted patient.update carries the patient's new `modified`: it becomes the local base (F4).
  */
 import { ApiError, NetworkError, callMethod, outreachMethod, type DeviceCredentials } from "./api";
 import type { Keys } from "./crypto";
 import { getMeta, setMeta, delMeta, type OutboxRow } from "./db";
 import { allRows, applyResult, getRow, markAttempt, orderForSend, purge, readSecret, waitingRows } from "./outbox";
 import { getPatient, putPatient } from "./patients";
+import { noteRefusal, noteSyncAccepted } from "./sessionStatus";
 import {
   RECORD_PATIENT_REGISTER,
   RECORD_PATIENT_UPDATE,
@@ -109,9 +114,17 @@ async function afterFinal(keys: Keys, row: OutboxRow, result: RecordResult): Pro
   const patient = await getPatient(keys, secret.patient_key);
   if (!patient) return;
   if (row.type === RECORD_PATIENT_REGISTER && result.name && result.doctype === "Patient" && !patient.name) {
-    await putPatient(keys, { ...patient, name: result.name });
-  } else if (row.type === RECORD_PATIENT_UPDATE && patient.pending_updates > 0) {
-    await putPatient(keys, { ...patient, pending_updates: patient.pending_updates - 1 });
+    // A `modified` (if the server sends one) lets this device edit the new patient before a package update.
+    await putPatient(keys, { ...patient, name: result.name, ...(result.modified ? { modified: result.modified } : {}) });
+  } else if (row.type === RECORD_PATIENT_UPDATE) {
+    // F4: the server's new version becomes the local base, so the next edit on this device chains. The
+    // local values already hold this edit (they were applied when it was made).
+    const modified = result.modified && !result.discarded ? result.modified : null;
+    await putPatient(keys, {
+      ...patient,
+      pending_updates: Math.max(0, patient.pending_updates - 1),
+      ...(modified ? { modified } : {}),
+    });
   }
 }
 
@@ -146,10 +159,12 @@ async function doSync(ctx: SyncContext, trigger: SyncTrigger): Promise<SyncRepor
       report.stoppedBy = "network";
       report.error = e.message;
     } else if (e instanceof ApiError && e.needsSignIn) {
+      await noteRefusal(e);
       report.stoppedBy = "auth";
       report.error = "The server needs an online sign-in before it accepts this device again. Your records are kept.";
       await ctx.onAuthRequired?.();
     } else if (e instanceof ApiError) {
+      await noteRefusal(e);
       report.stoppedBy = "server";
       report.error = e.message;
     } else {
@@ -211,6 +226,7 @@ async function doSync(ctx: SyncContext, trigger: SyncTrigger): Promise<SyncRepor
       break;
     }
     report.sent += records.length;
+    await noteSyncAccepted();
     const answered = new Set<string>();
     for (const result of res.results ?? []) {
       if (!byUuid.has(result.client_uuid)) continue;
@@ -234,6 +250,7 @@ async function doSync(ctx: SyncContext, trigger: SyncTrigger): Promise<SyncRepor
           params: { session: ctx.session, uuids: chunk },
           device: ctx.credentials,
         });
+        await noteSyncAccepted();
         for (const result of res.results ?? []) {
           if (chunk.includes(result.client_uuid)) await record(ctx.keys, result, now(), true, report);
         }

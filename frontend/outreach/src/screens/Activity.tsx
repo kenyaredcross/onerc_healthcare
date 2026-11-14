@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../app/AppContext";
 import { Alert, Choice, Field, Page, TextArea, TextInput, errorText } from "../components/ui";
@@ -8,17 +8,51 @@ import { getDeviceId, requireKeys } from "../lib/session";
 import { siteToday } from "../lib/time";
 
 export default function ActivityScreen() {
+  const { reference, profile } = useApp();
+  if (!reference || !profile) return null;
+  return (
+    <ActivityEditor
+      title="Community activity"
+      back="/"
+      done="/"
+      submitLabel="Save activity"
+      initial={{
+        activity_type: reference.community_activity_types[0] ?? "",
+        activity_date: siteToday(),
+        location: "",
+        topic: "",
+        participants_male: "",
+        participants_female: "",
+        notes: "",
+      }}
+      onSave={async (form) => {
+        await recordActivity(requireKeys(), { session: profile.session, deviceId: await getDeviceId() }, form);
+      }}
+    />
+  );
+}
+
+/** The community activity form: a new record, or the correction of a refused one (F2). */
+export function ActivityEditor({
+  title,
+  back,
+  done,
+  submitLabel,
+  initial,
+  onSave,
+  intro,
+}: {
+  title: string;
+  back: string;
+  done: string;
+  submitLabel: string;
+  initial: CommunityActivityForm;
+  onSave: (form: CommunityActivityForm) => Promise<void>;
+  intro?: ReactNode;
+}) {
   const navigate = useNavigate();
   const { reference, profile, refresh, sync } = useApp();
-  const [form, setForm] = useState<CommunityActivityForm>({
-    activity_type: reference?.community_activity_types[0] ?? "",
-    activity_date: siteToday(),
-    location: "",
-    topic: "",
-    participants_male: "",
-    participants_female: "",
-    notes: "",
-  });
+  const [form, setForm] = useState<CommunityActivityForm>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,10 +69,10 @@ export default function ActivityScreen() {
     setBusy(true);
     setError(null);
     try {
-      await recordActivity(requireKeys(), { session: profile.session, deviceId: await getDeviceId() }, form);
+      await onSave(form);
       await refresh();
       void sync("record");
-      navigate("/", { replace: true });
+      navigate(done, { replace: true });
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -47,7 +81,8 @@ export default function ActivityScreen() {
   }
 
   return (
-    <Page title="Community activity" back="/">
+    <Page title={title} back={back}>
+      {intro}
       <form onSubmit={submit} className="card space-y-4" noValidate>
         <Field label="Activity" error={errors.activity_type}>
           <Choice name="Activity" options={reference.community_activity_types} value={form.activity_type} onChange={(v) => set("activity_type", v)} />
@@ -77,7 +112,7 @@ export default function ActivityScreen() {
         </Field>
         {error ? <Alert kind="error">{error}</Alert> : null}
         <button type="submit" className="btn-primary w-full" disabled={busy}>
-          {busy ? "Saving…" : "Save activity"}
+          {busy ? "Saving…" : submitLabel}
         </button>
       </form>
     </Page>

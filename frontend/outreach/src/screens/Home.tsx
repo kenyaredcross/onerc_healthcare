@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../app/AppContext";
 import { RenewPanel } from "../components/Renew";
+import { SessionEndedPanel } from "../components/SessionEnded";
 import { Alert, Page, Stat, errorText, formatWhen } from "../components/ui";
 import { SignInForm } from "./SignIn";
 import { getKeys, markSessionReturned } from "../lib/session";
@@ -32,6 +33,7 @@ export default function HomeScreen() {
         <br />
         Offline use until {profile?.expires_at}
       </div>
+      <SessionEndedPanel />
       {authRequired ? <RenewPanel reason="The server did not accept this device. Sign in online to keep syncing; nothing has been lost." onDone={() => void app.sync("manual")} /> : null}
       {!online ? <Alert kind="warn">Offline: everything you record is kept on this device and synced when you are back online.</Alert> : null}
 
@@ -67,16 +69,22 @@ export default function HomeScreen() {
           {draftList.map((d) => (
             <div key={d.id} className="card flex items-center gap-3">
               <button type="button" className="min-w-0 flex-1 text-left" onClick={() => navigate(`/visit/${d.id}`)}>
-                <div className="truncate font-medium">{d.patient.display}</div>
+                <div className="truncate font-medium">
+                  {d.correcting ? "Correction: " : ""}
+                  {d.patient.display}
+                </div>
                 <div className="text-sm text-slate-600">
-                  {d.department} · started {d.started_at}
+                  {d.department} · {d.correcting ? "captured" : "started"} {d.started_at}
                 </div>
               </button>
               <button
                 type="button"
                 className="btn-danger min-h-11 px-3 text-sm"
                 onClick={async () => {
-                  if (!window.confirm(`Discard the unfinished visit of ${d.patient.display}?`)) return;
+                  const what = d.correcting
+                    ? `Discard this correction of ${d.patient.display}'s visit? The failed record stays on the device as it was.`
+                    : `Discard the unfinished visit of ${d.patient.display}?`;
+                  if (!window.confirm(what)) return;
                   await deleteDraft(d.id);
                   await refresh();
                 }}
@@ -94,7 +102,26 @@ export default function HomeScreen() {
         </Link>
       </div>
       <TeamLead />
+      <About />
     </Page>
+  );
+}
+
+/** About the app, with the device-security note (review M5, accepted risk). */
+export function About() {
+  return (
+    <details className="card">
+      <summary className="cursor-pointer text-sm font-semibold">About this app and device security</summary>
+      <div className="mt-3 space-y-2 text-sm text-slate-700">
+        <p>
+          KRCS Outreach keeps the session's package and every record you capture encrypted on this device until the facility server has saved them.
+        </p>
+        <p className="font-medium">
+          The PIN only protects this app. The tablet's own encryption and screen lock must be switched on (Settings, Security), and the tablet must
+          never be shared unlocked. A lost or stolen tablet must be reported to the HIS Officer at once so the device can be revoked.
+        </p>
+      </div>
+    </details>
   );
 }
 

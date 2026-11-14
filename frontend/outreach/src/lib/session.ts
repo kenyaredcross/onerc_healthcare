@@ -35,6 +35,7 @@ import {
   type OutreachSessionSummary,
   type RecoverKeyResponse,
 } from "./protocol";
+import { noteRefusal, refreshSessionStatus } from "./sessionStatus";
 import { parseSiteTime } from "./time";
 
 export const IDLE_LOCK_MS = 15 * 60 * 1000;
@@ -176,8 +177,15 @@ export async function signInOnline(usr: string, pwd: string): Promise<{ name: st
   setCsrfToken(boot.csrf_token);
   if (!boot.user) throw new ApiError(401, "Sign-in did not start a session. Check that cookies are allowed.");
   mem.onlineUser = boot.user;
+  await checkSessionStatus();
   changed();
   return boot.user;
+}
+
+/** Online: learn whether this device's session is still open (F1). No-op without a profile. */
+export async function checkSessionStatus(): Promise<void> {
+  const profile = await getProfile();
+  if (profile && mem.onlineUser) await refreshSessionStatus(profile.session);
 }
 
 /** Adopt an existing browser session (the page boot said a user is signed in). */
@@ -215,10 +223,17 @@ async function enrolWith(
   label: string,
 ): Promise<Profile> {
   const deviceId = await getDeviceId();
-  const res = await callMethod<EnrolResponse>(outreachMethod("devices.enrol"), {
-    method: "POST",
-    body: { session: session.name, device_id: deviceId, device_label: label, data_key: toBase64(raw) },
-  });
+  let res: EnrolResponse;
+  try {
+    res = await callMethod<EnrolResponse>(outreachMethod("devices.enrol"), {
+      method: "POST",
+      body: { session: session.name, device_id: deviceId, device_label: label, data_key: toBase64(raw) },
+    });
+  } catch (e) {
+    // A Cancelled session refuses the renewal: remember it, so the app says who to contact (F1).
+    if ((await getProfile())?.session === session.name) await noteRefusal(e);
+    throw e;
+  }
   const keys = await importKeys(raw);
   const profile: Profile = {
     user: res.user.name,
@@ -397,6 +412,25 @@ export async function deviceCredentials(): Promise<DeviceCredentials> {
 export async function resetDevice(): Promise<void> {
   if ((await pendingOutboxCount()) > 0) {
     throw new Error("Records on this device are not synced yet.");
+  }
+  await wipeAll(["device_id"]);
+  lock();
+}
+
+/**
+ * Fix round 1 (F1): after the session was closed (or cancelled) and every record has a final result,
+ * prepare the device for a new session. Removes the profile, the package, the acknowledged records and
+ * the keys (no patient data stays); keeps the device id and the online sign-in, so the next screen is
+ * the session picker. Refused while any record is not final or a visit is unfinished: nothing is lost.
+ */
+export async function startNewSession(): Promise<void> {
+  const pending = await pendingOutboxCount();
+  if (pending > 0) {
+    throw new Error(`${pending} record(s) on this device have no final result yet. They are kept; nothing is deleted.`);
+  }
+  const drafts = await (await db()).count("drafts");
+  if (drafts > 0) {
+    throw new Error(`${drafts} unfinished visit(s) are on this device. Finish them (they still sync) or discard them first.`);
   }
   await wipeAll(["device_id"]);
   lock();

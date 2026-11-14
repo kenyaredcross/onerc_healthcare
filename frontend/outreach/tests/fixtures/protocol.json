@@ -1,31 +1,129 @@
 {
   "_source": "apps/onerc_healthcare/docs/OUTREACH_PROTOCOL.md (examples copied verbatim; keep in sync)",
-  "envelope": {"client_uuid": "6f1c...", "type": "visit.capture", "session": "KLB-OUT-2026-00001",
-    "device_id": "a3b2...", "captured_at": "2026-11-20 10:42:00", "depends_on": ["<client_uuid>"],
-    "payload": {}},
-  "patient.register": {"first_name": "...", "middle_name": null, "last_name": "...", "sex": "Female",
-    "dob": "1990-05-01", "estimated_age_years": null, "estimated_age_months": null,
-    "mobile": null, "residence": "<Residence Location>", "allergies": null,
-    "is_walk_in": 0, "identifiers": [{"identifier_type": "UNHCR ID", "identifier_value": "..."}]},
-  "patient.update": {"patient": "KLB-PAT-2026-00012", "base_modified": "2026-11-10 08:01:02.123456",
-    "changes": {"mobile": "0712...", "residence": "..."},
-    "add_identifiers": [{"identifier_type": "Alien ID", "identifier_value": "..."}]},
-  "visit.capture": {"patient": "KLB-PAT-2026-00012", "patient_ref": null,
+  "envelope": {
+    "client_uuid": "6f1c...",
+    "type": "visit.capture",
+    "session": "KLB-OUT-2026-00001",
+    "device_id": "a3b2...",
+    "captured_at": "2026-11-20 10:42:00",
+    "depends_on": [
+      "<client_uuid>"
+    ],
+    "payload": {}
+  },
+  "patient.register": {
+    "first_name": "...",
+    "middle_name": null,
+    "last_name": "...",
+    "sex": "Female",
+    "dob": "1990-05-01",
+    "estimated_age_years": null,
+    "estimated_age_months": null,
+    "mobile": null,
+    "residence": "<Residence Location>",
+    "allergies": null,
+    "is_walk_in": 0,
+    "identifiers": [
+      {
+        "identifier_type": "UNHCR ID",
+        "identifier_value": "..."
+      }
+    ]
+  },
+  "patient.update": {
+    "patient": "KLB-PAT-2026-00012",
+    "base_modified": "2026-11-10 08:01:02.123456",
+    "changes": {
+      "mobile": "0712...",
+      "residence": "..."
+    },
+    "base_values": {
+      "mobile": null,
+      "residence": "..."
+    },
+    "add_identifiers": [
+      {
+        "identifier_type": "Alien ID",
+        "identifier_value": "..."
+      }
+    ]
+  },
+  "visit.capture": {
+    "patient": "KLB-PAT-2026-00012",
+    "patient_ref": null,
     "department": "Outpatient",
-    "vitals": {"triage_level": "Non-urgent", "chief_complaint": "...", "temperature": 37.2, "pulse": 88,
-      "respiratory_rate": 18, "bp_systolic": 120, "bp_diastolic": 80, "weight": 60.5, "height": 1.62,
-      "spo2": 98},
-    "consultation": {"presenting_complaint": "...", "history": "...", "examination_findings": "...",
-      "management_plan": "...", "no_diagnosis_reason": null,
-      "diagnoses": [{"code": "<Code Value name>", "case_type": "New", "is_primary": 1}]},
-    "lab_requests": [{"line_id": "l1", "observation_template": "Malaria Rapid Diagnostic Test",
-      "poc_result": {"result": "Positive - P. falciparum", "resulted_at": "2026-11-20 10:55:00"}}],
-    "prescriptions": [{"line_id": "p1", "medication": "...", "dosage": "BD", "period": "3 Day",
-      "dosage_form": "Tablet", "comment": null,
-      "dispensed": {"quantity": 6, "dispensed_at": "2026-11-20 11:05:00"}}],
-    "outcome": "Discharged home"},
-  "community.activity": {"activity_type": "Health talk", "activity_date": "2026-11-20", "location": "Village 3 market",
-    "topic": "...", "participants_male": 12, "participants_female": 25, "participants_total": 37, "notes": null},
-  "push": {"session": "KLB-OUT-2026-00001", "device_id": "a3b2...", "batch_id": "...", "records": []},
-  "enrol": {"session": "KLB-OUT-2026-00001", "device_id": "a3b2...", "device_label": "Tablet", "data_key": "..."}
+    "vitals": {
+      "triage_level": "Non-urgent",
+      "chief_complaint": "...",
+      "temperature": 37.2,
+      "pulse": 88,
+      "respiratory_rate": 18,
+      "bp_systolic": 120,
+      "bp_diastolic": 80,
+      "weight": 60.5,
+      "height": 1.62,
+      "spo2": 98
+    },
+    "consultation": {
+      "presenting_complaint": "...",
+      "history": "...",
+      "examination_findings": "...",
+      "management_plan": "...",
+      "no_diagnosis_reason": null,
+      "diagnoses": [
+        {
+          "code": "<Code Value name>",
+          "case_type": "New",
+          "is_primary": 1
+        }
+      ]
+    },
+    "lab_requests": [
+      {
+        "line_id": "l1",
+        "observation_template": "Malaria Rapid Diagnostic Test",
+        "poc_result": {
+          "result": "Positive - P. falciparum",
+          "resulted_at": "2026-11-20 10:55:00"
+        }
+      }
+    ],
+    "prescriptions": [
+      {
+        "line_id": "p1",
+        "medication": "...",
+        "dosage": "BD",
+        "period": "3 Day",
+        "dosage_form": "Tablet",
+        "comment": null,
+        "dispensed": {
+          "quantity": 6,
+          "dispensed_at": "2026-11-20 11:05:00"
+        }
+      }
+    ],
+    "outcome": "Discharged home"
+  },
+  "community.activity": {
+    "activity_type": "Health talk",
+    "activity_date": "2026-11-20",
+    "location": "Village 3 market",
+    "topic": "...",
+    "participants_male": 12,
+    "participants_female": 25,
+    "participants_total": 37,
+    "notes": null
+  },
+  "push": {
+    "session": "KLB-OUT-2026-00001",
+    "device_id": "a3b2...",
+    "batch_id": "...",
+    "records": []
+  },
+  "enrol": {
+    "session": "KLB-OUT-2026-00001",
+    "device_id": "a3b2...",
+    "device_label": "Tablet",
+    "data_key": "..."
+  }
 }

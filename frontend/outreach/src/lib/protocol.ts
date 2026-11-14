@@ -149,6 +149,10 @@ export interface ReferenceData {
   community_activity_types: string[];
   outcomes: string[];
   genders: string[];
+  /** Fix round 1 (F3): doses per day of each Prescription Dosage. Absent from an older server. */
+  dosage_units?: Record<string, number>;
+  /** Fix round 1 (F3): days of each Prescription Duration. Absent from an older server. */
+  period_days?: Record<string, number>;
 }
 
 export type ReferenceResponse =
@@ -229,6 +233,8 @@ export interface PatientUpdatePayload {
   patient: string;
   base_modified: string;
   changes: PatientChanges;
+  /** Fix round 1 (F4): the value each changed field had on the device before this edit. */
+  base_values?: PatientChanges;
   add_identifiers: Identifier[];
 }
 
@@ -332,6 +338,8 @@ export interface RecordResult {
   conflict: string | null;
   error: string | null;
   discarded?: boolean;
+  /** Fix round 1 (F4): the patient's new `modified` on an accepted patient.update. */
+  modified?: string | null;
 }
 
 export interface PushResponse {
@@ -421,20 +429,30 @@ export function buildPatientRegister(form: RegisterForm): PatientRegisterPayload
   };
 }
 
+/**
+ * `baseValues` (F4): the value of each changed field as the device knew it before the edit. Only keys that
+ * are also in `changes` are sent; `base_values` is left out when none is known.
+ */
 export function buildPatientUpdate(
   patient: string,
   baseModified: string,
   changes: PatientChanges,
   addIdentifiers: Identifier[],
+  baseValues?: PatientChanges,
 ): PatientUpdatePayload {
   const clean: PatientChanges = {};
+  const base: PatientChanges = {};
   for (const key of PATIENT_UPDATE_KEYS) {
-    if (key in changes) clean[key] = changes[key] ?? null;
+    if (key in changes) {
+      clean[key] = changes[key] ?? null;
+      if (baseValues && key in baseValues) base[key] = baseValues[key] ?? null;
+    }
   }
   return {
     patient,
     base_modified: baseModified,
     changes: clean,
+    ...(Object.keys(base).length ? { base_values: base } : {}),
     add_identifiers: addIdentifiers
       .map((i) => ({ identifier_type: i.identifier_type, identifier_value: i.identifier_value.trim() }))
       .filter((i) => i.identifier_type && i.identifier_value),
@@ -464,4 +482,36 @@ export function buildCommunityActivity(form: CommunityActivityForm): CommunityAc
     participants_total: male + female,
     notes: blank(form.notes),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Prescribed quantity (fix round 1, F3)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The prescribed quantity of a line, as the server computes it: `dosage_units[dosage] × period_days[period]`,
+ * at least 1 (daily interval, DEFECT-RX-1; Marley `DrugPrescription.get_quantity`). A missing dosage counts
+ * as one dose a day and a missing period as one day. Returns null (no limit) when the reference has no
+ * `dosage_units` / `period_days` (an older server) or does not know the chosen dosage or period.
+ */
+export function prescribedQuantity(
+  ref: Pick<ReferenceData, "dosage_units" | "period_days">,
+  dosage: string | null | undefined,
+  period: string | null | undefined,
+): number | null {
+  if (!ref.dosage_units || !ref.period_days) return null;
+  let units = 1;
+  let days = 1;
+  if (dosage) {
+    const u = ref.dosage_units[dosage];
+    if (typeof u !== "number" || !Number.isFinite(u)) return null;
+    units = u;
+  }
+  if (period) {
+    const d = ref.period_days[period];
+    if (typeof d !== "number" || !Number.isFinite(d)) return null;
+    days = d;
+  }
+  const q = Math.round(units * days * 1000) / 1000;
+  return q > 0 ? Math.max(1, q) : 1;
 }
