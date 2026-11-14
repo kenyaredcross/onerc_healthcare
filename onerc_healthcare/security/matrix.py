@@ -107,7 +107,8 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 # (configuration); the Head of Operations reads the operational masters for the queue overview.
 MASTER_MATRIX: dict[str, dict[str, str]] = {
 	"Medical Department": {**_ALL_READ, ROLE_HEAD_OPS: "r", ROLE_SYSADMIN: "rwc"},
-	"Healthcare Service Unit": {**_ALL_READ, ROLE_HEAD_OPS: "r", ROLE_SYSADMIN: "rwc"},
+	# Phase 3: the Outreach Team Member picks the facility on a Community Activity Record.
+	"Healthcare Service Unit": {**_ALL_READ, ROLE_HEAD_OPS: "r", ROLE_OUTREACH: "r", ROLE_SYSADMIN: "rwc"},
 	"Triage Level": {**_ALL_READ, ROLE_HEAD_OPS: "r", ROLE_SYSADMIN: "rwc"},
 	"Code System": {**_ALL_READ, ROLE_SYSADMIN: "rwc"},
 	"Code Value": {**_ALL_READ, ROLE_SYSADMIN: "rwc"},

@@ -44,11 +44,13 @@ from onerc_healthcare.constants import (
 	DEPT_TRIAGE,
 	DISPENSING_DOCTYPE,
 	ENCOUNTER_DOCTYPE,
+	MOH_RUN_DOCTYPE,
 	REFERRAL_DOCTYPE,
 	REPORT_ACCESS_AUDIT,
 	REPORT_CONSENT_EXCEPTIONS,
 	REPORT_DAILY_ENTRY,
 	REPORT_LAB_WORKLIST,
+	REPORT_MOH_UNMAPPED,
 	REPORT_PHARMACY_WORKLIST,
 	SCREENING_DOCTYPE,
 	VISIT_CLOSED_STATUSES,
@@ -267,10 +269,24 @@ def department_block(dept: str) -> dict:
 			),
 			_report_shortcut(f"{dept}: Consent Exceptions", REPORT_CONSENT_EXCEPTIONS, CONSENT_DOCTYPE),
 			_shortcut(f"{dept}: Routed to {dept}", department_filters(dept), "Blue"),
+			# Phase 3 (FR-29..31): MOH report runs and the ICD-11 mapping exceptions.
+			_doc_shortcut(
+				f"{dept}: MOH Runs to Submit",
+				MOH_RUN_DOCTYPE,
+				[[MOH_RUN_DOCTYPE, "status", "=", "Generated"]],
+				"Orange",
+				"{} to submit",
+			),
+			_report_shortcut(f"{dept}: Unmapped Diagnoses", REPORT_MOH_UNMAPPED, "MOH Diagnosis Mapping"),
 		]
 		quick_lists = [
 			_quick_list(f"{dept} Queue", department_filters(dept)),
 			_doc_quick_list(f"{dept}: Open Data Access Requests", DATA_ACCESS_REQUEST_DOCTYPE, [not_closed]),
+			_doc_quick_list(
+				f"{dept}: Open MOH Runs",
+				MOH_RUN_DOCTYPE,
+				[[MOH_RUN_DOCTYPE, "status", "in", ["Draft", "Generated"]]],
+			),
 		]
 	else:
 		shortcuts = [

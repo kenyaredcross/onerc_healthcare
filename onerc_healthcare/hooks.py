@@ -185,3 +185,5 @@ after_request = ["onerc_healthcare.privacy.read_log.after_request"]
 # Phase 3: conditions that remove rows from every MOH count (`reporting.filters`). Reserved for migrated
 # SmartCare history (FR-43, waits for OI-4). Each entry: dotted path fn(ctx) -> SQL condition or "".
 krcs_report_exclusions = []
+# Phase 3: stored in each MOH Report Run snapshot so a later mapping change is visible (R2).
+krcs_report_fingerprints = ["onerc_healthcare.reporting.mapping.report_fingerprint"]

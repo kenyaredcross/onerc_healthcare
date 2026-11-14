@@ -93,6 +93,16 @@ def after_migrate() -> None:
 	_install_workstreams()
 
 
+# Phase 3: MOH counts filter encounters by date (R2 EXPLAIN: full scan without it).
+REPORT_INDEXES = (("Patient Encounter", ("encounter_date",)),)
+
+
+def ensure_report_indexes() -> None:
+	for doctype, columns in REPORT_INDEXES:
+		if frappe.db.table_exists(doctype):
+			frappe.db.add_index(doctype, list(columns))  # no-op when the index exists
+
+
 # Phase 3: the "compiled by" line of MOH reports needs the user's job title.
 USER_CUSTOM_FIELDS = {
 	"User": [
@@ -242,5 +252,6 @@ def _install_workstreams() -> None:
 	reporting_mapping.install()
 	reporting_workload.install()
 	community_setup.install()
+	ensure_report_indexes()
 	ensure_naming_settings()
 	desk_sidebar.install()
