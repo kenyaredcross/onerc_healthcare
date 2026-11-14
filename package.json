@@ -1,0 +1,9 @@
+{
+  "name": "onerc_healthcare",
+  "private": true,
+  "description": "Frontend builds of the KRCS EMR app. `bench build --app onerc_healthcare` runs `yarn build` here.",
+  "scripts": {
+    "build": "cd frontend/outreach && yarn install --frozen-lockfile --non-interactive && yarn build",
+    "test": "cd frontend/outreach && yarn test"
+  }
+}

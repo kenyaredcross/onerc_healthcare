@@ -1,0 +1,34 @@
+{%- if sw_source -%}
+{{ sw_source }}
+{%- else -%}
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<meta name="theme-color" content="#b91c1c">
+	<meta name="robots" content="noindex">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<title>KRCS Outreach</title>
+	<link rel="manifest" href="{{ asset_base }}manifest.webmanifest">
+	<link rel="icon" href="{{ asset_base }}icons/icon.svg" type="image/svg+xml">
+	<link rel="apple-touch-icon" href="{{ asset_base }}icons/apple-touch-icon.png">
+	{%- if outreach_assets %}
+	{%- for href in outreach_assets.styles %}
+	<link rel="stylesheet" href="{{ href }}">
+	{%- endfor %}
+	{%- endif %}
+</head>
+<body>
+	<div id="root"></div>
+	<script>window.__OUTREACH_BOOT__ = {{ boot_json }};</script>
+	{%- if outreach_assets %}
+	{%- for src in outreach_assets.scripts %}
+	<script type="module" src="{{ src }}"></script>
+	{%- endfor %}
+	{%- else %}
+	<p style="font-family: sans-serif; padding: 1rem">The outreach app is not built on this server. Run <code>bench build --app onerc_healthcare</code>.</p>
+	{%- endif %}
+</body>
+</html>
+{%- endif -%}
