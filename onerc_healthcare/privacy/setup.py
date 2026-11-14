@@ -5,13 +5,15 @@
 - Seeds one provisional English Consent Statement, Active, when the site has no English statement at
   all (an admin's statements, edits and retirements are never touched).
 - Seeds Data Protection Settings `response_days` = 7 (provisional) when it has never been set.
+- Secures record extracts made before the H1 fix (`secure_legacy_extracts`).
 """
 
 import frappe
 
-from onerc_healthcare.constants import CONSENT_STATEMENT_DOCTYPE
+from onerc_healthcare.constants import CONSENT_STATEMENT_DOCTYPE, DATA_ACCESS_REQUEST_DOCTYPE
 from onerc_healthcare.privacy.dar import DEFAULT_RESPONSE_DAYS, SETTINGS_DOCTYPE
 from onerc_healthcare.privacy.lifecycle import append_log
+from onerc_healthcare.privacy.permissions import EXTRACT_FIELD
 from onerc_healthcare.privacy.statements import ACTION_ACTIVATE, STATUS_ACTIVE
 
 SEED_LANGUAGE = "en"
@@ -34,6 +36,7 @@ from receiving care.</p>
 def install() -> None:
 	seed_consent_statement()
 	seed_settings()
+	secure_legacy_extracts()
 
 
 def seed_consent_statement() -> None:
@@ -69,3 +72,57 @@ def seed_settings() -> None:
 	if frappe.db.get_single_value(SETTINGS_DOCTYPE, "response_days"):
 		return
 	frappe.db.set_single_value(SETTINGS_DOCTYPE, "response_days", DEFAULT_RESPONSE_DAYS)
+
+
+def secure_legacy_extracts() -> None:
+	"""Treat every existing Data Access Request extract exactly as new ones are handled (H1).
+
+	Extracts made before the fix were attached to their request through the old Attach field and owned by
+	the HIS Officer who generated them, so Frappe's own `/private/files` check (`File.is_downloadable`)
+	let the owner and every reader of the request download them. Each extract File is detached and
+	re-owned to Administrator, and the request's `extract_file` is set to its path when missing.
+	Idempotent: files already detached and owned by Administrator are left alone.
+	"""
+	if not frappe.db.table_exists(DATA_ACCESS_REQUEST_DOCTYPE) or not frappe.db.table_exists("File"):
+		return
+	files = frappe.get_all(
+		"File",
+		filters={"attached_to_doctype": DATA_ACCESS_REQUEST_DOCTYPE, "attached_to_field": EXTRACT_FIELD},
+		fields=["name", "file_url", "owner", "attached_to_doctype", "attached_to_name"],
+	)
+	urls = frappe.get_all(
+		DATA_ACCESS_REQUEST_DOCTYPE,
+		filters={EXTRACT_FIELD: ("is", "set")},
+		pluck=EXTRACT_FIELD,
+	)
+	if urls:
+		seen = {f.name for f in files}
+		files += [
+			f
+			for f in frappe.get_all(
+				"File",
+				filters={"file_url": ("in", urls)},
+				fields=["name", "file_url", "owner", "attached_to_doctype", "attached_to_name"],
+			)
+			if f.name not in seen
+		]
+	for f in files:
+		if not f.attached_to_doctype and f.owner == "Administrator":
+			continue  # already secured
+		request = f.attached_to_name
+		if request and frappe.db.exists(DATA_ACCESS_REQUEST_DOCTYPE, request):
+			if not frappe.db.get_value(DATA_ACCESS_REQUEST_DOCTYPE, request, EXTRACT_FIELD):
+				frappe.db.set_value(
+					DATA_ACCESS_REQUEST_DOCTYPE, request, EXTRACT_FIELD, f.file_url, update_modified=False
+				)
+		frappe.db.set_value(
+			"File",
+			f.name,
+			{
+				"attached_to_doctype": None,
+				"attached_to_name": None,
+				"attached_to_field": None,
+				"owner": "Administrator",
+			},
+			update_modified=False,
+		)

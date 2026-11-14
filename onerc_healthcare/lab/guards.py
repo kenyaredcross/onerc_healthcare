@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 """Overrides for Marley's Service Request endpoints (hooks.py `override_whitelisted_methods`). Owned by B2.
 
+`set_observation_status` / `approve_all_observations` / `reject_all_observations` check access and lock the
+visit before any Observation (lock order Visit -> Observation; see below).
 `make_lab_test` / `make_clinical_procedure` (unused legacy routes, D5) are Administrator-only;
 `make_appointment` requires read on the order and always enforces permissions. `make_observation`:
 
@@ -100,3 +102,64 @@ def make_appointment(
 
 	frappe.has_permission("Service Request", "read", doc=source_name, throw=True)
 	return _orig(source_name, target_doc, ignore_permissions=False)
+
+
+# --- Marley's approve / reject endpoints (Phase 2 review M6) --------------------------------------------
+# They submit or cancel several Observations in one transaction. Each submit locks its Observation row
+# (Frappe's check_if_latest) before our before_submit hook locks the visit, so without this the order would
+# be Observation -> Visit -> next Observation, and two technicians on one encounter could deadlock. These
+# overrides check access, lock the visit first (lock order Visit -> Observation), then delegate.
+
+OBS_STATUS_PTYPE = {"Approved": "submit", "Rejected": "cancel"}
+
+
+def _lock_visit_first(visit: str | None) -> None:
+	from onerc_healthcare.lab.events import _lock_visit
+
+	_lock_visit(visit)
+
+
+@frappe.whitelist(methods=["POST"])
+def set_observation_status(
+	observation: str,
+	status: str,
+	reason: str | None = None,
+	parent_obs: str | None = None,
+	repeat_test: bool = False,
+) -> None:
+	from healthcare.healthcare.doctype.observation.observation import set_observation_status as _orig
+
+	from onerc_healthcare.lab.events import visit_for_observation
+
+	ptype = OBS_STATUS_PTYPE.get(status)
+	if not ptype:
+		frappe.throw(_("An Observation can only be Approved or Rejected here."))
+	frappe.has_permission("Observation", ptype, doc=observation, throw=True)
+	_lock_visit_first(visit_for_observation(observation))
+	return _orig(observation, status, reason=reason, parent_obs=parent_obs, repeat_test=repeat_test)
+
+
+@frappe.whitelist(methods=["POST"])
+def approve_all_observations(diagnostic_report: str) -> dict[str, list[str]]:
+	from healthcare.healthcare.doctype.observation.observation import approve_all_observations as _orig
+
+	from onerc_healthcare.lab.events import visit_for_report
+
+	frappe.has_permission("Diagnostic Report", "write", doc=diagnostic_report, throw=True)
+	frappe.has_permission("Observation", "submit", throw=True)
+	_lock_visit_first(visit_for_report(diagnostic_report))
+	return _orig(diagnostic_report)
+
+
+@frappe.whitelist(methods=["POST"])
+def reject_all_observations(
+	diagnostic_report: str, reason: str, repeat_test: bool = False
+) -> dict[str, list[str]]:
+	from healthcare.healthcare.doctype.observation.observation import reject_all_observations as _orig
+
+	from onerc_healthcare.lab.events import visit_for_report
+
+	frappe.has_permission("Diagnostic Report", "write", doc=diagnostic_report, throw=True)
+	frappe.has_permission("Observation", "cancel", throw=True)
+	_lock_visit_first(visit_for_report(diagnostic_report))
+	return _orig(diagnostic_report, reason, repeat_test=repeat_test)

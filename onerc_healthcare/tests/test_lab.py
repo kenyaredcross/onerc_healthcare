@@ -36,7 +36,7 @@ from onerc_healthcare.constants import (
 	VISIT_STATUS_IN_CONSULTATION,
 )
 from onerc_healthcare.emr_laboratory.report.laboratory_worklist import laboratory_worklist
-from onerc_healthcare.lab import api, guards, setup, tasks
+from onerc_healthcare.lab import api, events, guards, setup, tasks
 from onerc_healthcare.lab.guards import make_observation
 from onerc_healthcare.lab.orders import ensure_observations
 from onerc_healthcare.tests.base import EMRTestCase
@@ -796,6 +796,100 @@ class TestLockOrder(LabTestCase):
 			self.assertFalse(tasks.EncounterLab(enc.name, lock=True).is_done(mrdt))
 		self.assertTrue(tasks.EncounterLab(enc.name).is_done(mrdt), "an unlocked read is unaffected")
 		self.assertTrue(obs)
+
+	def assert_visit_locked_first(self, queries: list[str], *writes: tuple[str, ...]) -> None:
+		visit_lock = first_index(queries, "from `tabPatient Visit`", "for update")
+		self.assertGreaterEqual(visit_lock, 0, "the visit is locked")
+		for needles in writes:
+			at = first_index(queries, *needles)
+			self.assertGreaterEqual(at, 0, f"expected a query with {needles}")
+			self.assertLess(visit_lock, at, f"visit lock must precede {needles}")
+
+	def panel_ready(self):
+		visit = self.visit_in_consultation()
+		enc, (cbc,) = self.send_lab_orders(visit, [CBC])
+		self.collect_all(enc.name)
+		root = self.root(cbc)
+		self.enter(self.leaves(root), "4.4")
+		report = frappe.db.get_value("Diagnostic Report", {"docname": enc.name}, "name")
+		return visit, root, report
+
+	OBS_LOCKED = ("from `tabObservation`", "for update")
+	OBS_WRITE = ("update `tabObservation` set",)
+
+	def test_bulk_approve_locks_visit_first(self):
+		visit, _root, report = self.panel_ready()
+		with observation_lock_hooks(), capture_sql() as queries, self.as_user("lab"):
+			guards.approve_all_observations(report)
+		self.assert_visit_locked_first(queries, self.OBS_LOCKED, self.OBS_WRITE)
+		self.assertEqual(self.visit(visit.name).status, VISIT_STATUS_IN_CONSULTATION)
+
+	def test_panel_status_locks_visit_first(self):
+		visit, root, _report = self.panel_ready()
+		with observation_lock_hooks(), capture_sql() as queries, self.as_user("lab"):
+			guards.set_observation_status(root, "Approved")
+		self.assert_visit_locked_first(queries, self.OBS_LOCKED, self.OBS_WRITE)
+		self.assertEqual(frappe.db.get_value("Observation", root, "docstatus"), 1)
+		self.assertEqual(self.visit(visit.name).status, VISIT_STATUS_IN_CONSULTATION)
+
+	def test_bulk_reject_locks_visit_first(self):
+		visit, _root, report = self.panel_ready()
+		with self.as_user("lab"):
+			guards.approve_all_observations(report)
+		with observation_lock_hooks(), capture_sql() as queries, self.as_user("lab"):
+			result = guards.reject_all_observations(report, "T- clotted sample")
+		self.assertTrue(result["rejected"])
+		self.assert_visit_locked_first(queries, self.OBS_LOCKED, self.OBS_WRITE)
+		self.assertEqual(self.visit(visit.name).status, VISIT_STATUS_AWAITING_LAB)
+
+	def test_hook_lock_is_nowait_and_reports_busy(self):
+		"""A submit outside the endpoints already holds its Observation row: it must not wait on the visit."""
+		from onerc_healthcare.lab.events import VisitBusyError
+
+		visit = self.visit_in_consultation()
+		enc, (mrdt,) = self.send_lab_orders(visit, [MRDT])
+		self.collect_all(enc.name)
+		obs = self.root(mrdt)
+		self.enter([obs], "Negative")
+		with observation_lock_hooks(), capture_sql() as queries, self.as_user("lab"):
+			frappe.get_doc("Observation", obs).submit()
+		self.assertGreaterEqual(first_index(queries, "from `tabPatient Visit`", "for update nowait"), 0)
+
+		real_get_value = frappe.db.get_value
+
+		def busy(doctype, *args, **kwargs):
+			if doctype == VISIT_DOCTYPE and kwargs.get("for_update") and kwargs.get("wait") is False:
+				raise frappe.QueryTimeoutError("Lock wait timeout exceeded")
+			return real_get_value(doctype, *args, **kwargs)
+
+		with observation_lock_hooks(), patch.object(frappe.db, "get_value", side_effect=busy):
+			with self.assertRaises(VisitBusyError):
+				events.observation_before_cancel(frappe.get_doc("Observation", obs))
+
+	def test_endpoint_permissions(self):
+		_visit, root, report = self.panel_ready()
+		for key in ("reception", "clinician", "pharmacist"):
+			with self.subTest(user=key), self.as_user(key):
+				with self.assertRaises(frappe.PermissionError):
+					guards.set_observation_status(root, "Approved")
+				with self.assertRaises(frappe.PermissionError):
+					guards.approve_all_observations(report)
+				with self.assertRaises(frappe.PermissionError):
+					guards.reject_all_observations(report, "T- reason")
+		with self.as_user("lab"), self.assertRaises(frappe.ValidationError):
+			guards.set_observation_status(root, "Final")
+
+	def test_sample_collection_cancel_locks_visit_first(self):
+		visit = self.visit_in_consultation()
+		enc, _srs = self.send_lab_orders(visit, [MRDT])
+		self.collect_all(enc.name)
+		collection = frappe.get_doc("Sample Collection", self.sample_rows(enc.name)[0].parent)
+		collection.submit()
+		with capture_sql() as queries:
+			collection.cancel()
+		self.assert_visit_locked_first(
+			queries, ("update `tabDiagnostic Report` set",), self.OBS_LOCKED, self.OBS_WRITE
+		)
 
 
 class TestMarleyMappingGuards(LabTestCase):

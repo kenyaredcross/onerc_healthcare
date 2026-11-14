@@ -316,7 +316,7 @@
  ],
  "links": [],
  "make_attachments_public": 0,
- "modified": "2026-11-14 10:00:00.000000",
+ "modified": "2026-11-14 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Data Protection",
  "name": "Data Access Request",
@@ -345,7 +345,8 @@
    "permlevel": 0,
    "read": 1,
    "print": 1,
-   "report": 1
+   "report": 1,
+   "write": 1
   },
   {
    "role": "HIS Officer",

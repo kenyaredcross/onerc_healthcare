@@ -117,6 +117,7 @@ doctype_js = {
 # Marley endpoints that insert/submit with ignore_permissions and no permission check (Phase 2 audit A3).
 _PE = "healthcare.healthcare.doctype.patient_encounter.patient_encounter"
 _SR = "healthcare.healthcare.doctype.service_request.service_request"
+_OBS = "healthcare.healthcare.doctype.observation.observation"
 override_whitelisted_methods = {
 	f"{_PE}.create_service_request": "onerc_healthcare.clinical.guards.create_service_request",
 	f"{_PE}.create_service_request_from_widget": (
@@ -133,12 +134,24 @@ override_whitelisted_methods = {
 	f"{_SR}.make_lab_test": "onerc_healthcare.lab.guards.make_lab_test",
 	f"{_SR}.make_clinical_procedure": "onerc_healthcare.lab.guards.make_clinical_procedure",
 	f"{_SR}.make_appointment": "onerc_healthcare.lab.guards.make_appointment",
+	# M6: Marley's bulk/panel approve and reject take the visit lock first (no Observation -> Visit cycle; B2)
+	f"{_OBS}.set_observation_status": "onerc_healthcare.lab.guards.set_observation_status",
+	f"{_OBS}.approve_all_observations": "onerc_healthcare.lab.guards.approve_all_observations",
+	f"{_OBS}.reject_all_observations": "onerc_healthcare.lab.guards.reject_all_observations",
 	# M4: read access logging for logged doctypes/reports (wrappers keep upstream signatures; B4)
 	"frappe.client.get": "onerc_healthcare.privacy.read_log.get",
 	"frappe.client.get_value": "onerc_healthcare.privacy.read_log.get_value",
 	"frappe.desk.reportview.get": "onerc_healthcare.privacy.read_log.reportview_get",
 	"frappe.desk.reportview.export_query": "onerc_healthcare.privacy.read_log.reportview_export_query",
 	"frappe.desk.query_report.export_query": "onerc_healthcare.privacy.read_log.query_report_export_query",
+	# M4 round 2: list APIs, link fetch, print preview, Data Import record export (B4)
+	"frappe.client.get_list": "onerc_healthcare.privacy.read_log.get_list",
+	"frappe.desk.reportview.get_list": "onerc_healthcare.privacy.read_log.reportview_get_list",
+	"frappe.client.validate_link_and_fetch": "onerc_healthcare.privacy.read_log.validate_link_and_fetch",
+	"frappe.www.printview.get_html_and_style": "onerc_healthcare.privacy.read_log.get_html_and_style",
+	"frappe.core.doctype.data_import.data_import.download_template": (
+		"onerc_healthcare.privacy.read_log.download_template"
+	),
 	# L6: no forged access-log entries over HTTP (B4)
 	"frappe.core.doctype.access_log.access_log.make_access_log": (
 		"onerc_healthcare.privacy.access_log.make_access_log"

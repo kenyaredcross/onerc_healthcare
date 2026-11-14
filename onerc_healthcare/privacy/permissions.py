@@ -31,20 +31,28 @@ def access_log_has_permission(doc, ptype: str | None = None, user: str | None = 
 	return (ptype or "read") in READ_PTYPES
 
 
+EXTRACT_FIELD = "extract_file"
+
+
 def is_extract_file(doc) -> bool:
-	"""A file attached to a Data Access Request, or the private extract a request points at."""
-	if doc.get("attached_to_doctype") == DATA_ACCESS_REQUEST_DOCTYPE:
+	"""A Data Access Request record extract: the file a request's `extract_file` points at, or a legacy
+	extract still attached to its request through the old Attach field. Other files attached to a
+	request (e.g. a scanned authorisation) are not extracts."""
+	if (
+		doc.get("attached_to_doctype") == DATA_ACCESS_REQUEST_DOCTYPE
+		and doc.get("attached_to_field") == EXTRACT_FIELD
+	):
 		return True
 	url = doc.get("file_url")
-	return bool(
-		doc.get("is_private") and url and frappe.db.exists(DATA_ACCESS_REQUEST_DOCTYPE, {"extract_file": url})
-	)
+	return bool(url and frappe.db.exists(DATA_ACCESS_REQUEST_DOCTYPE, {EXTRACT_FIELD: url}))
 
 
 def file_has_permission(doc, ptype: str | None = None, user: str | None = None, **kwargs) -> bool:
-	"""has_permission hook on File (H1): Data Access Request files are closed to every user.
+	"""has_permission hook on File (H1): record extracts are closed to every user, for every ptype.
 
-	The record extract is served only by `privacy.extract.download_extract` (HIS Officer, Medical
-	In-Charge), which logs each download. Administrator is let through by Frappe before this hook.
+	The extract is served only by `privacy.extract.download_extract` (HIS Officer, Medical In-Charge),
+	which logs each download. Every other file, including other attachments of a Data Access Request,
+	follows Frappe's own rules (read follows the request; attaching needs write on it). Administrator
+	is let through by Frappe before this hook.
 	"""
 	return not is_extract_file(doc)

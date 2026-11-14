@@ -1071,7 +1071,8 @@ class TestAccessLog(PrivacyTestCase):
 			filters=json.dumps({"patient_name": "T- Secret Name"}),
 		)
 		rows = self.entries(user=self.users["reception"])
-		self.assertEqual({r["action"] for r in rows}, {"Print", "Export"})
+		# The unreferenced PDF row (report_to_pdf shape) is not mirrored at all; the export is.
+		self.assertEqual({r["action"] for r in rows}, {"Export"})
 		for r in rows:
 			self.assertNotIn("secret", (r["details"] or "").lower())
 		export = next(r for r in rows if r["action"] == "Export")
@@ -1281,44 +1282,41 @@ class TestExtractProtection(PrivacyTestCase):
 		self.download_as("mic")
 		self.assertEqual(len(self.entries(action="Download", reference_name=self.request.name)), 2)
 
-	def test_file_hook_denies_files_attached_to_a_request(self):
+	def test_file_hook_denies_extract_files_only(self):
+		"""The hook denies the extract (by path) and a legacy extract still attached through the old Attach
+		field; any other file, including another attachment of the request, is left to Frappe's rules."""
 		from onerc_healthcare.privacy.permissions import file_has_permission
 
-		attached = frappe.get_doc(
+		legacy = frappe.get_doc(
 			{
 				"doctype": "File",
-				"file_name": "T-attached-extract.html",
+				"file_name": "T-legacy-extract.html",
 				"attached_to_doctype": DATA_ACCESS_REQUEST_DOCTYPE,
 				"attached_to_name": self.request.name,
+				"attached_to_field": "extract_file",
 				"is_private": 1,
 				"content": "<p>T-</p>",
 			}
 		).insert(ignore_permissions=True)
-		for key in self.users:
-			self.assertFalse(file_has_permission(attached, "read", user=self.users[key]), key)
-			self.assertFalse(file_has_permission(self.file_doc, "read", user=self.users[key]), key)
-		other = frappe.get_doc(
-			{"doctype": "File", "file_name": "T-other.txt", "is_private": 1, "content": "T-"}
+		scan = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": "T-scan.txt",
+				"attached_to_doctype": DATA_ACCESS_REQUEST_DOCTYPE,
+				"attached_to_name": self.request.name,
+				"is_private": 1,
+				"content": "T- scan",
+			}
 		).insert(ignore_permissions=True)
-		self.assertTrue(file_has_permission(other, "read", user=self.users["his"]))
-		# Through frappe.has_permission, with the hook wired as the integrator will wire it.
+		for key in self.users:
+			for ptype in ("read", "write", "create"):
+				self.assertFalse(file_has_permission(legacy, ptype, user=self.users[key]), key)
+				self.assertFalse(file_has_permission(self.file_doc, ptype, user=self.users[key]), key)
+			self.assertTrue(file_has_permission(scan, "read", user=self.users[key]), key)
 		hook = "onerc_healthcare.privacy.permissions.file_has_permission"
-		original = frappe.get_hooks
-
-		def get_hooks(name=None, *args, **kwargs):
-			value = original(name, *args, **kwargs)
-			if name == "has_permission" and hook not in value.get("File", []):
-				value = frappe._dict(value)
-				value["File"] = [*value.get("File", []), hook]
-			return value
-
-		recep = self.users["reception"]
-		# The hook is wired in hooks.py (integration); without it the File would inherit the request's read.
 		self.assertIn(hook, frappe.get_hooks("has_permission").get("File", []))
-		self.assertFalse(frappe.has_permission("File", "read", doc=attached, user=recep))
-		self.assertFalse(frappe.has_permission("File", "read", doc=attached, user=self.users["his"]))
-		with patch.object(frappe, "get_hooks", get_hooks):  # idempotent when already wired
-			self.assertFalse(frappe.has_permission("File", "read", doc=attached, user=recep))
+		for key in ("reception", "his", "mic"):
+			self.assertFalse(frappe.has_permission("File", "read", doc=legacy, user=self.users[key]), key)
 
 	def test_extract_stays_unattached_after_saves(self):
 		"""An Attach field would make Frappe attach the file to the request on save (and so expose it to
@@ -1607,3 +1605,292 @@ class TestArchive(PrivacyTestCase):
 		draft.krcs_archived = 1
 		with self.assertRaises(LockedFieldError):
 			draft.save(ignore_permissions=True)
+
+
+# =====================================================================================================
+# Fix round 2: legacy extracts, DAR attachments, remaining read paths, L6 tightening, background export
+# =====================================================================================================
+class TestLegacyExtracts(PrivacyTestCase):
+	"""H1 follow-up: extracts made before the fix (attached, owned by the HIS user) are secured on migrate."""
+
+	def make_legacy(self, clear_field: bool = False):
+		request = self.dar_at("Response Ready")
+		file_name = frappe.db.get_value("File", {"file_url": request.extract_file}, "name")
+		frappe.db.set_value(
+			"File",
+			file_name,
+			{
+				"attached_to_doctype": DATA_ACCESS_REQUEST_DOCTYPE,
+				"attached_to_name": request.name,
+				"attached_to_field": "extract_file",
+				"owner": self.users["his"],
+			},
+			update_modified=False,
+		)
+		if clear_field:
+			frappe.db.set_value(DATA_ACCESS_REQUEST_DOCTYPE, request.name, "extract_file", None)
+		return request, file_name
+
+	def downloadable_for(self, key: str, url: str):
+		from frappe.core.doctype.file.utils import find_file_by_url
+
+		self.as_user(key)
+		try:
+			return find_file_by_url(url)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_install_secures_legacy_extracts(self):
+		request, file_name = self.make_legacy()
+		other, other_file = self.make_legacy(clear_field=True)
+		url = request.extract_file
+		self.assertIsNotNone(self.downloadable_for("reception", url), "legacy extract is open before the fix")
+		privacy_setup.install()
+		privacy_setup.install()  # idempotent
+		for name in (file_name, other_file):
+			row = frappe.db.get_value(
+				"File", name, ["attached_to_doctype", "attached_to_name", "owner"], as_dict=True
+			)
+			self.assertEqual(
+				(row.attached_to_doctype, row.attached_to_name, row.owner), (None, None, "Administrator")
+			)
+		self.assertIsNone(self.downloadable_for("reception", url))
+		self.assertIsNone(self.downloadable_for("his", url))
+		self.assertEqual(
+			frappe.db.get_value(DATA_ACCESS_REQUEST_DOCTYPE, other.name, "extract_file"),
+			frappe.db.get_value("File", other_file, "file_url"),
+		)
+
+
+class TestRequestAttachments(PrivacyTestCase):
+	"""Only the extract is closed; other attachments of a request follow Frappe's rules."""
+
+	def attach_as(self, key: str, request: str):
+		self.as_user(key)
+		try:
+			return frappe.get_doc(
+				{
+					"doctype": "File",
+					"file_name": f"T-authorisation-{key}.txt",
+					"attached_to_doctype": DATA_ACCESS_REQUEST_DOCTYPE,
+					"attached_to_name": request,
+					"is_private": 1,
+					"content": "T- scanned authorisation",
+				}
+			).insert()
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_his_and_mic_attach_and_read_others_follow_request(self):
+		request = self.dar_at("Response Ready")
+		extract = frappe.get_doc("File", {"file_url": request.extract_file})
+		scans = [self.attach_as("his", request.name), self.attach_as("mic", request.name)]
+		with self.assertRaises(frappe.PermissionError):
+			self.attach_as("lab", request.name)
+		for scan in scans:
+			for key, allowed in {
+				"his": True,
+				"mic": True,
+				"reception": True,
+				"lab": False,
+				"sysadmin": False,
+			}.items():
+				self.assertEqual(
+					frappe.has_permission("File", "read", doc=scan, user=self.users[key]),
+					allowed,
+					f"{scan.name}/{key}",
+				)
+		for key in ("his", "mic", "reception"):
+			self.assertFalse(frappe.has_permission("File", "read", doc=extract, user=self.users[key]), key)
+
+	def test_mic_cannot_edit_intake_fields(self):
+		doc = self.make_dar()
+		self.as_user("mic")
+		try:
+			doc = frappe.get_doc(DATA_ACCESS_REQUEST_DOCTYPE, doc.name)
+			doc.save()  # nothing changed: allowed
+			doc.details = "T- changed by the MIC"
+			with self.assertRaises(LockedFieldError):
+				doc.save()
+		finally:
+			frappe.set_user("Administrator")
+
+
+class TestMoreReadPaths(PrivacyTestCase):
+	"""M4 follow-up: list APIs, link fetch, print preview, Data Import export."""
+
+	def setUp(self) -> None:
+		super().setUp()
+		frappe.flags.krcs_list_logged = False
+
+	def tearDown(self) -> None:
+		frappe.flags.krcs_list_logged = False
+		for k in ("filename", "filecontent", "type"):
+			frappe.local.response.pop(k, None)
+		super().tearDown()
+
+	def test_client_get_list(self):
+		patient = make_patient().name
+		self.as_user("reception")
+		read_log.get_list("Patient", filters={"name": patient})
+		read_log.get_list("Medical Department", filters={"name": DEPT_OUTPATIENT})
+		frappe.set_user("Administrator")
+		rows = self.entries(user=self.users["reception"])
+		self.assertEqual([(r["action"], r["patient"]) for r in rows], [("List", patient)])
+		self.assertIn("Rows: 1", rows[0]["details"])
+
+	def test_reportview_get_list(self):
+		patient = make_patient().name
+		self.as_user("reception")
+		try:
+			frappe.local.form_dict = frappe._dict(
+				doctype="Patient", fields=json.dumps(["name"]), filters=json.dumps({"name": patient})
+			)
+			read_log.reportview_get_list()
+		finally:
+			frappe.set_user("Administrator")
+		rows = self.entries(user=self.users["reception"])
+		self.assertEqual([(r["action"], r["patient"]) for r in rows], [("List", patient)])
+
+	def test_rest_list_once_per_request(self):
+		patient = make_patient().name
+		response = SimpleNamespace(
+			status_code=200, get_data=lambda as_text=False: json.dumps({"data": [{"name": patient}]})
+		)
+
+		def hit(path):
+			self.as_user("reception")
+			try:
+				frappe.local.form_dict = frappe._dict(filters=json.dumps({"name": patient}))
+				read_log.after_request(response=response, request=SimpleNamespace(method="GET", path=path))
+			finally:
+				frappe.set_user("Administrator")
+
+		hit("/api/resource/Patient")
+		hit("/api/v2/document/Medical%20Department")  # not logged
+		rows = self.entries(user=self.users["reception"], action="List")
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0]["patient"], patient)
+		self.assertIn("Rows: 1", rows[0]["details"])
+		frappe.flags.krcs_list_logged = True  # a wrapper already logged during this request
+		hit("/api/v2/document/Patient")
+		self.assertEqual(len(self.entries(user=self.users["reception"], action="List")), 1)
+
+	def test_validate_link_and_fetch(self):
+		patient = make_patient().name
+		had = hasattr(frappe.local, "request")
+		old = getattr(frappe.local, "request", None)
+		frappe.local.request = SimpleNamespace(
+			method="POST", path="/api/method/frappe.client.validate_link_and_fetch"
+		)
+		try:
+			self.as_user("reception")
+			result = read_log.validate_link_and_fetch("Patient", patient, fields_to_fetch=["patient_name"])
+			read_log.validate_link_and_fetch("Patient", patient)  # no fetch: link check only
+		finally:
+			if had:
+				frappe.local.request = old
+			else:
+				del frappe.local.request
+			frappe.set_user("Administrator")
+		self.assertTrue(result)
+		rows = self.entries(user=self.users["reception"])
+		self.assertEqual([(r["action"], r["patient"]) for r in rows], [("Read (API)", patient)])
+		self.assertIn("patient_name", rows[0]["details"])
+
+	def test_print_preview(self):
+		patient = make_patient().name
+		self.as_user("reception")
+		try:
+			read_log.get_html_and_style("Patient", patient)
+		finally:
+			frappe.set_user("Administrator")
+		rows = self.entries(user=self.users["reception"])
+		self.assertEqual(
+			[(r["action"], r["reference_name"], r["patient"]) for r in rows], [("Print", patient, patient)]
+		)
+
+	def test_data_import_export_refused_for_emr_roles(self):
+		patient = make_patient().name
+		for key in ("his", "mic", "reception"):
+			self.as_user(key)
+			try:
+				with self.assertRaises(frappe.PermissionError, msg=key):
+					read_log.download_template(
+						"Patient", export_records="all", export_fields=json.dumps({"Patient": ["name"]})
+					)
+			finally:
+				frappe.set_user("Administrator")
+		self.assertEqual(self.entries(action="Export"), [])
+		manager = make_user("dp-sysmanager", ["System Manager"])
+		frappe.set_user(manager)
+		try:
+			read_log.download_template(
+				"Patient",
+				export_records="by_filter",
+				export_fields=json.dumps({"Patient": ["name"]}),
+				export_filters=json.dumps({"name": patient}),
+			)
+		finally:
+			frappe.set_user("Administrator")
+		rows = self.entries(user=manager, action="Export")
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0]["patient"], patient)
+
+
+class TestFixRound2Logging(PrivacyTestCase):
+	def test_readable_report_does_not_vouch_for_a_document(self):
+		from onerc_healthcare.tests.visit_factories import make_vital_signs
+
+		vitals = make_vital_signs(make_patient().name).name
+		self.assertFalse(frappe.has_permission("Vital Signs", "read", doc=vitals, user=self.users["his"]))
+		self.as_user("his")
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				access_log.make_access_log(
+					doctype="Vital Signs",
+					document=vitals,
+					report_name=REPORT_CONSENT_EXCEPTIONS,
+					method="Print",
+				)
+			access_log.make_access_log(report_name=REPORT_CONSENT_EXCEPTIONS, method="Print", file_type="PDF")
+		finally:
+			frappe.set_user("Administrator")
+		self.assertEqual(frappe.db.count("Access Log", {"reference_document": vitals}), 0)
+
+	def test_background_export_logged_once(self):
+		import csv as _csv
+
+		from frappe.desk.query_report import run_export_query_job
+
+		patient = make_patient().name
+		self.as_user("mic")
+		try:
+			frappe.local.form_dict = frappe._dict(
+				report_name=REPORT_CONSENT_EXCEPTIONS,
+				file_format_type="CSV",
+				filters=json.dumps({"patient": patient}),
+				export_in_background=1,
+			)
+			with patch.object(frappe, "enqueue", lambda *a, **k: None):  # queued, not run
+				read_log.query_report_export_query()
+			# The worker: job context, no request flags.
+			frappe.local.job = frappe._dict(method="frappe.desk.query_report.run_export_query_job")
+			with patch("frappe.desk.utils.send_report_email", lambda *a, **k: None):
+				run_export_query_job(
+					"t@test.krcs",
+					frappe._dict(
+						report_name=REPORT_CONSENT_EXCEPTIONS,
+						file_format_type="CSV",
+						filters={"patient": patient},
+						visible_idx=[],
+					),
+					{"delimiter": ",", "quoting": _csv.QUOTE_NONNUMERIC, "decimal_sep": "."},
+				)
+		finally:
+			if hasattr(frappe.local, "job"):
+				del frappe.local.job
+			frappe.set_user("Administrator")
+		rows = self.entries(user=self.users["mic"])
+		self.assertEqual([r["action"] for r in rows], ["Export"])
+		self.assertIn("background export", rows[0]["details"])

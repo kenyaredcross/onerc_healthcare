@@ -13,6 +13,15 @@ annotations and decorators, delegates to the upstream function, then writes **on
 | frappe.desk.reportview.get                 | List         | doctype in ACCESS_LOGGED_DOCTYPES            |
 | frappe.desk.reportview.export_query        | Export       | doctype in ACCESS_LOGGED_DOCTYPES            |
 | frappe.desk.query_report.export_query      | Export       | one of our reports, or a report on a logged DocType |
+| frappe.client.get_list                     | List         | doctype in ACCESS_LOGGED_DOCTYPES            |
+| frappe.desk.reportview.get_list            | List         | doctype in ACCESS_LOGGED_DOCTYPES            |
+| frappe.client.validate_link_and_fetch      | Read (API)   | logged doctype and `fields_to_fetch` given   |
+| frappe.www.printview.get_html_and_style    | Print        | doctype in ACCESS_LOGGED_DOCTYPES (print preview) |
+| frappe.core...data_import.download_template | (refused)   | logged doctype with records: System Manager only, logged as Export |
+
+Data Import "Export Data" with records of a logged DocType is refused for everyone except System
+Manager / Administrator: bulk export of clinical data is not an EMR workflow (a blank template is
+still allowed). A System Manager export is logged as Export.
 
 The entry is written after the upstream call returns, so a refused call (no permission) logs nothing,
 and the row count is known. `details` holds filter and field **names** and the row count, never values.
@@ -22,7 +31,10 @@ and the row count is known. `details` holds filter and field **names** and the r
 API (`/api/resource/<doctype>/<name>`, `/api/v1/...`, `/api/v2/document/<doctype>/<name>`) as
 "Open (API)". It is an *after*-request hook on purpose: API-key and token users are authenticated by
 `validate_auth()` after the ``before_request`` hooks run, so they are still Guest there; after the
-request the user is known and the response status tells whether the read succeeded.
+request the user is known and the response status tells whether the read succeeded. List GETs
+(`/api/resource/<doctype>`, `/api/v2/document/<doctype>`) are logged as "List", once per request: when
+a list wrapper above already logged during the request (``frappe.flags.krcs_list_logged``), the hook
+does not log again.
 """
 
 from __future__ import annotations
@@ -38,11 +50,14 @@ import frappe
 import frappe.client
 import frappe.desk.query_report
 import frappe.desk.reportview
+import frappe.www.printview
+from frappe import _
 
 from onerc_healthcare.privacy.access_log import (
 	ACTION_EXPORT,
 	ACTION_LIST,
 	ACTION_OPEN_API,
+	ACTION_PRINT,
 	ACTION_READ_API,
 	is_logged_doctype,
 	is_logged_report,
@@ -51,6 +66,13 @@ from onerc_healthcare.privacy.access_log import (
 	logger,
 	resolve_patient,
 )
+from onerc_healthcare.privacy.lifecycle import has_any_role
+
+REST_LIST_PATTERNS = (
+	re.compile(r"^/api(?:/v1)?/resource/(?P<doctype>[^/]+)/?$"),
+	re.compile(r"^/api/v2/document/(?P<doctype>[^/]+)/?$"),
+)
+BULK_EXPORT_ROLES = ("System Manager",)
 
 REST_READ_PATTERNS = (
 	re.compile(r"^/api(?:/v1)?/resource/(?P<doctype>[^/]+)/(?P<name>.+?)/?$"),
@@ -279,6 +301,178 @@ def query_report_export_query():
 	return result
 
 
+def _log_list(doctype: str, method: str, filters, or_filters, rows) -> None:
+	log_access(
+		ACTION_LIST,
+		doctype,
+		None,
+		patient=patient_from_filters(doctype, filters),
+		detail=_detail(method=method, filters=filter_names(filters) + filter_names(or_filters), rows=rows),
+	)
+	frappe.flags.krcs_list_logged = True
+
+
+@frappe.whitelist()
+def get_list(
+	doctype: str,
+	fields: str | list[str | dict[str, Any]] | None = None,
+	filters: str | list | dict[str, Any] | None = None,
+	group_by: str | list[str] | None = None,
+	order_by: str | list[str] | None = None,
+	limit_start: int | str | None = None,
+	limit_page_length: int | str = 20,
+	parent: str | None = None,
+	debug: bool | int = False,
+	as_dict: bool | int = True,
+	or_filters: str | list[list] | dict[str, Any] | None = None,
+	expand: str | list[str] | None = None,
+):
+	"""Logging wrapper of frappe.client.get_list."""
+	result = frappe.client.get_list(
+		doctype,
+		fields=fields,
+		filters=filters,
+		group_by=group_by,
+		order_by=order_by,
+		limit_start=limit_start,
+		limit_page_length=limit_page_length,
+		parent=parent,
+		debug=debug,
+		as_dict=as_dict,
+		or_filters=or_filters,
+		expand=expand,
+	)
+	if is_logged_doctype(doctype):
+		_log_list(doctype, "frappe.client.get_list", filters, or_filters, _row_count(result))
+	return result
+
+
+@frappe.whitelist()
+@frappe.read_only()
+def reportview_get_list():
+	"""Logging wrapper of frappe.desk.reportview.get_list."""
+	form = frappe._dict(frappe.local.form_dict)
+	data = frappe.desk.reportview.get_list()
+	if is_logged_doctype(form.doctype):
+		_log_list(
+			form.doctype, "frappe.desk.reportview.get_list", form.filters, form.or_filters, _row_count(data)
+		)
+	return data
+
+
+@frappe.whitelist(methods=["GET", "POST"])
+def validate_link_and_fetch(
+	doctype: str,
+	docname: str | int,
+	fields_to_fetch: list[str] | str | None = None,
+	# search_widget parameters
+	query: str | None = None,
+	filters: dict | list | str | None = None,
+	**search_args,
+):
+	"""Logging wrapper of frappe.client.validate_link_and_fetch (link validation that fetches values)."""
+	result = frappe.client.validate_link_and_fetch(
+		doctype, docname, fields_to_fetch=fields_to_fetch, query=query, filters=filters, **search_args
+	)
+	fields = _parse(fields_to_fetch)
+	if fields and result and is_logged_doctype(doctype):
+		fields = fields if isinstance(fields, list | tuple) else [fields]
+		name = result.get("name") or docname
+		log_access(
+			ACTION_READ_API,
+			doctype,
+			name,
+			patient=resolve_patient(doctype, name),
+			sensitive=is_sensitive(doctype, name),
+			detail=_detail(method="frappe.client.validate_link_and_fetch", fields=[str(f) for f in fields]),
+		)
+	return result
+
+
+@frappe.whitelist()
+def get_html_and_style(
+	doc: str | dict,
+	name: str | None = None,
+	print_format: str | None = None,
+	no_letterhead: bool | None = None,
+	letterhead: str | None = None,
+	trigger_print: bool = False,
+	style: str | None = None,
+	settings: str | dict | None = None,
+) -> dict[str, str | None]:
+	"""Logging wrapper of frappe.www.printview.get_html_and_style (desk print preview)."""
+	result = frappe.www.printview.get_html_and_style(
+		doc,
+		name=name,
+		print_format=print_format,
+		no_letterhead=no_letterhead,
+		letterhead=letterhead,
+		trigger_print=trigger_print,
+		style=style,
+		settings=settings,
+	)
+	if isinstance(doc, str) and isinstance(name, str):
+		doctype, docname = doc, name
+	else:
+		parsed = frappe.parse_json(doc) or {}
+		doctype, docname = parsed.get("doctype"), parsed.get("name")
+	if is_logged_doctype(doctype):
+		log_access(
+			ACTION_PRINT,
+			doctype,
+			docname,
+			patient=resolve_patient(doctype, docname),
+			sensitive=is_sensitive(doctype, docname),
+			detail=_detail(method="frappe.www.printview.get_html_and_style", print_format=print_format),
+		)
+	return result
+
+
+@frappe.whitelist()
+def download_template(
+	doctype: str,
+	export_fields: str | dict[str, list[str]] | None = None,
+	export_records: str | None = None,
+	export_filters: str | dict[str, Any] | list[list[Any]] | None = None,
+	file_type: str = "CSV",
+):
+	"""Guard of frappe.core.doctype.data_import.data_import.download_template (Data Import export).
+
+	Records of a logged DocType are exported only by System Manager / Administrator, and logged."""
+	from frappe.core.doctype.data_import import data_import
+
+	exports_records = bool(export_records) and export_records != "blank_template"
+	if exports_records and is_logged_doctype(doctype) and not has_any_role(BULK_EXPORT_ROLES):
+		frappe.throw(
+			_("Bulk export of {0} records is not part of the EMR. Use the reports instead.").format(
+				_(doctype)
+			),
+			frappe.PermissionError,
+		)
+	result = data_import.download_template(
+		doctype,
+		export_fields=export_fields,
+		export_records=export_records,
+		export_filters=export_filters,
+		file_type=file_type,
+	)
+	if exports_records and is_logged_doctype(doctype):
+		log_access(
+			ACTION_EXPORT,
+			doctype,
+			None,
+			patient=patient_from_filters(doctype, export_filters),
+			detail=_detail(
+				method="data_import.download_template",
+				records=export_records,
+				file_type=file_type,
+				filters=filter_names(export_filters),
+				rows=export_row_count(),
+			),
+		)
+	return result
+
+
 # --- REST reads --------------------------------------------------------------------------------------
 def match_rest_read(path: str) -> tuple[str, str] | None:
 	path = unquote(path or "")
@@ -289,11 +483,42 @@ def match_rest_read(path: str) -> tuple[str, str] | None:
 	return None
 
 
+def match_rest_list(path: str) -> str | None:
+	path = unquote(path or "")
+	for pattern in REST_LIST_PATTERNS:
+		m = pattern.match(path)
+		if m:
+			return m.group("doctype")
+	return None
+
+
+def _response_rows(response) -> int | None:
+	try:
+		payload = json.loads(response.get_data(as_text=True))
+		data = payload.get("data", payload.get("message"))
+		return len(data) if isinstance(data, list) else None
+	except Exception:
+		return None
+
+
 def after_request(response=None, request=None) -> None:
-	"""hooks ``after_request``: log a successful REST GET of a logged record as "Open (API)"."""
+	"""hooks ``after_request``: log a successful REST GET of a logged record ("Open (API)") or list
+	("List", once per request)."""
 	try:
 		request = request or getattr(frappe.local, "request", None)
 		if not request or request.method != "GET" or not response or response.status_code != 200:
+			return
+		list_doctype = match_rest_list(request.path)
+		if list_doctype:
+			if is_logged_doctype(list_doctype) and not frappe.flags.krcs_list_logged:
+				form = frappe.local.form_dict or {}
+				_log_list(
+					list_doctype,
+					"REST GET",
+					form.get("filters"),
+					form.get("or_filters"),
+					_response_rows(response),
+				)
 			return
 		matched = match_rest_read(request.path)
 		if not matched:

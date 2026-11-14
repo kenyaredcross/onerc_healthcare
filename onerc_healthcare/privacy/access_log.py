@@ -317,6 +317,10 @@ def mirror_core_access_log(doc, method=None) -> None:
 		user = doc.get("user")
 		if not user or user == "Guest" or logged_by_wrapper(doc):
 			return
+		if not (doc.get("export_from") or doc.get("reference_document") or doc.get("report_name")):
+			# e.g. frappe.utils.print_format.report_to_pdf: no reference, and the report page has already
+			# logged the print with its report name through make_access_log.
+			return
 		reference_doctype = doc.get("export_from") or None
 		reference_name = doc.get("reference_document") or None
 		if doc.get("report_name") and not reference_name:
@@ -338,11 +342,20 @@ def mirror_core_access_log(doc, method=None) -> None:
 		logger.exception("mirror_core_access_log failed")
 
 
+# Background export jobs: the export was logged as Export when it was queued (privacy.read_log).
+EXPORT_JOB_METHODS = ("frappe.desk.query_report.run_export_query_job",)
+
+
+def _in_export_job() -> bool:
+	job = getattr(frappe.local, "job", None)
+	return bool(job) and job.get("method") in EXPORT_JOB_METHODS
+
+
 def log_report_run(report_name: str, patient: str | None = None, filters: dict | None = None) -> None:
 	"""Log a run of one of our patient-level reports as action Report (filter names only, no values).
 
 	Skipped while `privacy.read_log` exports the report: the export is logged once, as Export."""
-	if frappe.flags.krcs_report_export:
+	if frappe.flags.krcs_report_export or _in_export_job():
 		return
 	used = sorted(k for k, v in (filters or {}).items() if v not in (None, "", 0))
 	log_access(
@@ -355,10 +368,17 @@ def log_report_run(report_name: str, patient: str | None = None, filters: dict |
 
 
 def _check_make_access_log(doctype: str | None, document, report_name: str | None) -> None:
+	"""Every reference given must be readable: the report (if any) and the DocType / document (if any).
+	A readable report never vouches for a document. A call with no reference at all is refused."""
+	report_ok = False
 	if report_name and frappe.db.exists("Report", report_name):
 		if not frappe.get_doc("Report", report_name).is_permitted():
 			frappe.throw(_("Not permitted"), frappe.PermissionError)
-		return
+		report_ok = True
+	if not doctype and document in (None, ""):
+		if report_ok:
+			return
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
 	if not doctype or not frappe.db.exists("DocType", doctype):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 	if document not in (None, ""):

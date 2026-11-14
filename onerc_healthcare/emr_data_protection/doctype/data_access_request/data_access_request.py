@@ -17,6 +17,7 @@ from onerc_healthcare.privacy.archive import ARCHIVED_FIELD, can_archive
 from onerc_healthcare.privacy.dar import (
 	ACTION_CREATE,
 	INTAKE_FIELDS,
+	INTAKE_ROLES,
 	PROTECTED_FIELDS,
 	REQUESTER_PATIENT,
 	REQUESTER_REPRESENTATIVE,
@@ -33,6 +34,7 @@ from onerc_healthcare.privacy.lifecycle import (
 	clean_text,
 	guard_fields,
 	guard_log,
+	has_any_role,
 )
 from onerc_healthcare.visit.patients import assert_patient_active
 
@@ -63,7 +65,9 @@ class DataAccessRequest(Document):
 		if self.meta.has_field(ARCHIVED_FIELD):
 			guard_fields(self, before, (ARCHIVED_FIELD,))  # only privacy.archive (Medical In-Charge)
 		guard_log(self, before)
-		if before.status != STATUS_RECEIVED:
+		if before.status != STATUS_RECEIVED or not has_any_role(INTAKE_ROLES):
+			# Intake fields: intake roles only, while Received. The Medical In-Charge holds write only to
+			# attach documents (e.g. a scanned authorisation) to the request.
 			guard_fields(self, before, INTAKE_FIELDS)
 		if self.patient != before.patient:
 			assert_patient_active(self.patient)

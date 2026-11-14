@@ -3,8 +3,9 @@
 """Observation / Service Request / Sample Collection doc_events (wired in hooks.py). Owned by B2.
 
 Visit events come from Observations and Service Request cancellation only, never from Service Request
-status (Phase 2 brief, fact 3). Lock order is Visit -> Encounter -> Observation: ``before_submit`` /
-``before_cancel`` lock the Patient Visit row before Frappe writes the Observation, and the ``on_*``
+status (Phase 2 brief, fact 3). Lock order is Visit -> Encounter -> Observation / Diagnostic Report: the
+approve / reject endpoints (`lab.guards`) and Sample Collection cancel lock the visit before any lab row;
+``before_submit`` / ``before_cancel`` lock it (NOWAIT) before Frappe writes the Observation; the ``on_*``
 handlers re-read the encounter's Observations with ``FOR UPDATE SKIP LOCKED``
 (`lab.tasks.EncounterLab(lock=True)`), so two results approved at the same moment can neither both see
 the other as pending (write skew) nor wait on each other (deadlock). Visit events are
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
+from frappe.query_builder import DocType
 
 from onerc_healthcare.constants import ENCOUNTER_DOCTYPE, VISIT_DOCTYPE, VISIT_OPEN_STATUSES
 from onerc_healthcare.lab import notify
@@ -79,9 +81,28 @@ def observation_context(doc) -> frappe._dict | None:
 	return frappe._dict(encounter=encounter, visit=visit_for_encounter(encounter), root=root.name)
 
 
-def _lock_visit(visit: str | None) -> None:
-	if visit:
+class VisitBusyError(frappe.ValidationError):
+	"""The visit is locked by another transaction and this one already holds a lab row: retry."""
+
+
+def _lock_visit(visit: str | None, wait: bool = True) -> None:
+	"""Row-lock the Patient Visit. ``wait=False`` (NOWAIT) is for callers that already hold a lab row
+	(Frappe's ``check_if_latest`` locks the Observation before any hook): waiting there could close a cycle
+	with a transaction that holds the visit and wants that row, so it fails fast with `VisitBusyError`. A
+	lock this transaction already holds is granted at once either way."""
+	if not visit:
+		return
+	if wait:
 		frappe.db.get_value(VISIT_DOCTYPE, visit, "name", for_update=True)
+		return
+	try:
+		frappe.db.get_value(VISIT_DOCTYPE, visit, "name", for_update=True, wait=False)
+	except frappe.QueryTimeoutError:
+		frappe.throw(
+			_("Another laboratory update for visit {0} is in progress. Try again in a moment.").format(visit),
+			VisitBusyError,
+			title=_("Busy"),
+		)
 
 
 def _request_row(lab: EncounterLab, name: str) -> frappe._dict:
@@ -89,10 +110,34 @@ def _request_row(lab: EncounterLab, name: str) -> frappe._dict:
 
 
 def lock_observation_visit(doc) -> None:
-	"""Lock the Observation's visit before Frappe writes the Observation (lock order Visit -> Observation)."""
+	"""before_submit / before_cancel: lock the Observation's visit before Frappe writes the Observation.
+
+	The approval and rejection endpoints (`lab.guards`) take the visit lock before they load any
+	Observation, so here it is already held. Any other path (desk Submit) arrives holding the Observation
+	row, so it takes the visit lock with NOWAIT and gets "try again" instead of a deadlock."""
 	ctx = observation_context(doc)
 	if ctx:
-		_lock_visit(ctx.visit)
+		_lock_visit(ctx.visit, wait=False)
+
+
+def visit_for_observation(observation: str) -> str | None:
+	ctx = observation_context(frappe.get_doc("Observation", observation))
+	return ctx.visit if ctx else None
+
+
+def visit_for_report(diagnostic_report: str) -> str | None:
+	ref = frappe.db.get_value(
+		"Diagnostic Report", diagnostic_report, ["ref_doctype", "docname"], as_dict=True
+	)
+	if ref and ref.ref_doctype == ENCOUNTER_DOCTYPE and ref.docname:
+		return visit_for_encounter(ref.docname)
+	return None
+
+
+def visit_for_sample_collection(doc) -> str | None:
+	if doc.reference_doc == ENCOUNTER_DOCTYPE and doc.reference_name:
+		return visit_for_encounter(doc.reference_name)
+	return None
 
 
 def observation_before_submit(doc, method=None) -> None:
@@ -138,7 +183,9 @@ def observation_on_cancel(doc, method=None) -> None:
 		return
 	visit_closed = True
 	if ctx.visit:
-		visit = frappe.db.get_value(VISIT_DOCTYPE, ctx.visit, ["status", "lab_open"], as_dict=True)
+		visit = frappe.db.get_value(
+			VISIT_DOCTYPE, ctx.visit, ["status", "lab_open"], as_dict=True, for_update=True
+		)
 		visit_closed = visit.status not in VISIT_OPEN_STATUSES
 		if not visit_closed and not visit.lab_open:
 			raise_event(
@@ -174,7 +221,7 @@ def service_request_on_cancel(doc, method=None) -> None:
 	if not visit:
 		return
 	_lock_visit(visit)
-	if not frappe.db.get_value(VISIT_DOCTYPE, visit, "lab_open"):
+	if not frappe.db.get_value(VISIT_DOCTYPE, visit, "lab_open", for_update=True):
 		return
 	if EncounterLab(doc.order_group, lock=True).is_complete():
 		raise_event(
@@ -191,18 +238,21 @@ def sample_collection_before_cancel(doc, method=None) -> None:
 	The Observations collected on this Sample Collection reference it; once it is cancelled, saving a result
 	on them fails ("Cannot link cancelled document"). They are re-pointed to the encounter, which is the same
 	Diagnostic Report key Marley derives from the Sample Collection (`set_diagnostic_report_status`)."""
+	_lock_visit(visit_for_sample_collection(doc))  # lock order Visit -> Observation / Diagnostic Report
 	frappe.db.set_value("Diagnostic Report", {"sample_collection": doc.name}, "sample_collection", None)
 	if doc.reference_doc == ENCOUNTER_DOCTYPE and doc.reference_name:
-		for name in frappe.get_all(
-			"Observation",
-			filters={
-				"patient": doc.patient,
-				"reference_doctype": "Sample Collection",
-				"reference_docname": doc.name,
-				"docstatus": ["!=", 2],
-			},
-			pluck="name",
-		):
+		obs = DocType("Observation")
+		names = (
+			frappe.qb.from_(obs)
+			.select(obs.name)
+			.where(obs.patient == doc.patient)
+			.where(obs.reference_doctype == "Sample Collection")
+			.where(obs.reference_docname == doc.name)
+			.where(obs.docstatus != 2)
+			.for_update()
+			.run(pluck=True)
+		)
+		for name in names:
 			frappe.db.set_value(
 				"Observation",
 				name,
