@@ -41,7 +41,8 @@ ALL_ROLES = (
 	ROLE_MOH_API,
 )
 # Roles created without desk access (API only).
-NO_DESK_ROLES = (ROLE_MOH_API,)
+# Phase 4: the Outreach Team Member works only in the outreach app (/outreach), never the desk (ROL-22).
+NO_DESK_ROLES = (ROLE_MOH_API, ROLE_OUTREACH)
 
 # Roles that handle patient-level clinical content.
 CLINICAL_ROLES = (
@@ -156,6 +157,11 @@ CLINICAL_DOCTYPES = (
 	"MOH Report Run",
 	"Service Delivered",
 	"Community Activity Record",
+	# Phase 4 (W0 contract)
+	"Outreach Session",
+	"Outreach Sync Batch",
+	"Outreach Sync Record",
+	"Sync Conflict",
 )
 
 VISIT_DOCTYPE = "Patient Visit"
@@ -209,6 +215,8 @@ ACCESS_LOGGED_DOCTYPES = (
 	"Data Access Request",
 	"Screening Record",
 	"Service Delivered",  # Phase 3
+	"Outreach Sync Record",  # Phase 4: holds offline clinical payloads
+	"Sync Conflict",  # Phase 4: both versions of a patient's data
 )
 
 # Modules of this app (our own DocTypes live in these; security setup leaves their JSON perms alone)
@@ -224,6 +232,7 @@ APP_MODULES = (
 	"EMR Data Protection",
 	"EMR Reporting",
 	"EMR Community",
+	"EMR Outreach",
 )
 
 # Script/query reports the Phase 2 builders create (exact names; the sidebar links them)
@@ -318,3 +327,123 @@ USER_DESIGNATION_FIELD = "krcs_designation"
 
 # Visit closure reasons that remove the visit from every MOH count (not a real attendance)
 REPORT_EXCLUDED_CLOSURE_REASONS = ("Registered in error", "Superseded by a new visit")
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 contract (W0): medical outreach (SDD §5.6, FR-23..26, NFR-11/18, DR-3). Builders import these and
+# never edit them. The wire format is in docs/OUTREACH_PROTOCOL.md.
+# ---------------------------------------------------------------------------
+# O1 sessions, devices, package
+CATCHMENT_AREA_DOCTYPE = "Catchment Area"
+CATCHMENT_LOCATION_DOCTYPE = "Catchment Area Location"  # child: residence_location (subtree included)
+OUTREACH_SESSION_DOCTYPE = "Outreach Session"
+OUTREACH_TEAM_DOCTYPE = "Outreach Session Member"  # child: user, is_lead
+OUTREACH_DEPARTMENT_DOCTYPE = "Outreach Session Department"  # child: department offered
+OUTREACH_DEVICE_DOCTYPE = "Outreach Device"
+OUTREACH_GRANT_DOCTYPE = "Outreach Device Grant"
+OUTREACH_SETTINGS_DOCTYPE = "EMR Outreach Settings"  # Single
+# O2 sync and conflicts
+OUTREACH_BATCH_DOCTYPE = "Outreach Sync Batch"
+OUTREACH_RECORD_DOCTYPE = "Outreach Sync Record"
+SYNC_CONFLICT_DOCTYPE = "Sync Conflict"
+
+# Outreach Session lifecycle
+SESSION_PLANNED = "Planned"
+SESSION_ACTIVE = "Active"  # package downloaded at least once
+SESSION_RETURNED = "Returned"  # team back; records may still be syncing
+SESSION_CLOSED = "Closed"
+SESSION_CANCELLED = "Cancelled"
+SESSION_STATUSES = (SESSION_PLANNED, SESSION_ACTIVE, SESSION_RETURNED, SESSION_CLOSED, SESSION_CANCELLED)
+# Sessions a device may enrol in, download for and sync into
+SESSION_OPEN_STATUSES = (SESSION_PLANNED, SESSION_ACTIVE, SESSION_RETURNED)
+# Roles that plan sessions and manage devices
+OUTREACH_MANAGER_ROLES = (ROLE_MIC, ROLE_HIS)
+
+# Device
+DEVICE_ACTIVE = "Active"
+DEVICE_REVOKED = "Revoked"
+
+# Offline record types (envelope "type")
+RECORD_PATIENT_REGISTER = "patient.register"
+RECORD_PATIENT_UPDATE = "patient.update"
+RECORD_VISIT_CAPTURE = "visit.capture"
+RECORD_COMMUNITY_ACTIVITY = "community.activity"
+RECORD_TYPES = (
+	RECORD_PATIENT_REGISTER,
+	RECORD_PATIENT_UPDATE,
+	RECORD_VISIT_CAPTURE,
+	RECORD_COMMUNITY_ACTIVITY,
+)
+
+# Per-record result (wire, lower case) and Outreach Sync Record.status (stored, title case)
+RESULT_ACCEPTED = "accepted"
+RESULT_DUPLICATE = "duplicate"  # already accepted earlier; the earlier result is returned
+RESULT_FAILED = "failed"  # validation error; the device keeps it and shows the error
+RESULT_HELD = "held"  # waits on a record that is in conflict
+RESULT_CONFLICT = "conflict"  # a Sync Conflict was raised for this record
+RECORD_STATUS_ACCEPTED = "Accepted"
+RECORD_STATUS_FAILED = "Failed"
+RECORD_STATUS_HELD = "Held"
+RECORD_STATUS_CONFLICT = "Conflict"
+RECORD_STATUS_DISCARDED = "Discarded"  # a conflict decision kept the facility version (payload kept)
+RECORD_STATUSES = (
+	RECORD_STATUS_ACCEPTED,
+	RECORD_STATUS_FAILED,
+	RECORD_STATUS_HELD,
+	RECORD_STATUS_CONFLICT,
+	RECORD_STATUS_DISCARDED,
+)
+
+# Sync Conflict (FR-26)
+CONFLICT_DUPLICATE_REGISTRATION = "Duplicate registration"
+CONFLICT_DEMOGRAPHIC_CHANGE = "Demographic change"
+CONFLICT_OVERLAPPING_VISIT = "Overlapping visit"
+CONFLICT_TYPES = (CONFLICT_DUPLICATE_REGISTRATION, CONFLICT_DEMOGRAPHIC_CHANGE, CONFLICT_OVERLAPPING_VISIT)
+CONFLICT_OPEN = "Open"
+CONFLICT_RESOLVED = "Resolved"
+DECISION_KEEP_FACILITY = "Keep facility version"
+DECISION_KEEP_OUTREACH = "Keep outreach version"
+DECISION_MERGE = "Merge field by field"
+DECISION_LINK = "Link as the same patient"
+DECISION_ACKNOWLEDGE = "Reviewed - keep both"  # review-only overlap (closed facility visit, same day)
+CONFLICT_DECISIONS = (
+	DECISION_KEEP_FACILITY,
+	DECISION_KEEP_OUTREACH,
+	DECISION_MERGE,
+	DECISION_LINK,
+	DECISION_ACKNOWLEDGE,
+)
+# OI-11 (user decision D58): the HIS Officer resolves, the Medical In-Charge as backup.
+CONFLICT_RESOLVER_ROLES = (ROLE_HIS, ROLE_MIC)
+
+# Custom fields (W0 creates them in outreach/setup.py)
+PATIENT_OPEN_CONFLICTS_FIELD = "krcs_open_sync_conflicts"  # Patient, Int, read-only
+POINT_OF_CARE_FIELD = "krcs_point_of_care"  # Observation Template, Check
+# Patient Visit link to its session (existing field; Link to Outreach Session from Phase 4)
+VISIT_OUTREACH_FLAG_FIELD = "is_outreach"
+VISIT_OUTREACH_SESSION_FIELD = "outreach_session"
+
+# EMR Outreach Settings defaults (D58: user answers to OI-10)
+OUTREACH_DEFAULTS = {
+	"offline_session_days": 7,  # PIN-only use after the last online sign-in
+	"purge_after_days": 7,  # device deletes a record this long after the server acknowledged it
+	"summary_visits": 3,  # visits in each patient's package summary
+	"pin_min_length": 6,
+	"max_pin_attempts": 5,  # then the PIN key is discarded; an online sign-in restores it (escrow)
+	"max_batch": 50,  # records per sync call
+	"package_max_patients": 5000,
+	"conflict_score": 8,  # similarity score from which an offline registration is a conflict
+}
+
+# Departments never offered offline (sensitive; OI-7). Mental-health content never enters a package.
+OUTREACH_EXCLUDED_DEPARTMENTS = ("Mental Health",)
+
+# Access Log action for a patient sent to a device in a package (privacy.access_log)
+ACCESS_ACTION_OUTREACH_PACKAGE = "Outreach package"
+
+# Reason recorded when an outreach consultation completes while a sample went to the facility lab
+OUTREACH_LAB_PENDING_REASON = "Outreach: sample taken to the facility laboratory"
+OUTREACH_NO_VITALS_REASON = "Outreach visit: no vital signs taken"
+
+# Auth scheme of the device sync grant (outreach.auth, via hooks.auth_hooks)
+OUTREACH_AUTH_SCHEME = "krcs-outreach"

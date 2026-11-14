@@ -26,6 +26,12 @@ def has_any_role(roles: tuple[str, ...] | list[str], user: str | None = None) ->
 	user = user or frappe.session.user
 	if user == "Administrator":
 		return True
+	# Phase 4 (D58): an outreach team member's synced record passes the clinical role gates while
+	# outreach.sync applies it (any team member may consult and prescribe; see outreach/context.py).
+	from onerc_healthcare.outreach import context as outreach_context
+
+	if outreach_context.allows(user):
+		return True
 	return bool(set(frappe.get_roles(user)) & set(roles))
 
 

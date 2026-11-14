@@ -252,6 +252,10 @@ def _install_workstreams() -> None:
 	reporting_mapping.install()
 	reporting_workload.install()
 	community_setup.install()
+	# Phase 4 (W0 custom fields + POC seed)
+	from onerc_healthcare.outreach import setup as outreach_setup
+
+	outreach_setup.install()
 	ensure_report_indexes()
 	ensure_naming_settings()
 	desk_sidebar.install()

@@ -174,6 +174,8 @@ scheduler_events = {
 
 permission_query_conditions = {
 	"Patient Visit": "onerc_healthcare.visit.permissions.patient_visit_query",
+	# Phase 4: a team member sees the outreach sessions they belong to (O1)
+	"Outreach Session": "onerc_healthcare.outreach.permissions.session_query",
 	"Patient Encounter": "onerc_healthcare.clinical.permissions.encounter_query",
 	"Access Log Entry": "onerc_healthcare.privacy.permissions.access_log_query",
 }
@@ -186,6 +188,7 @@ has_permission = {
 	"Access Log Entry": "onerc_healthcare.privacy.permissions.access_log_has_permission",
 	# Phase 3 review M2: Submitted / Superseded / Void runs are read-only (R1)
 	"MOH Report Run": "onerc_healthcare.reporting.permissions.run_has_permission",
+	"Outreach Session": "onerc_healthcare.outreach.permissions.session_has_permission",  # Phase 4 (O1)
 }
 
 # M4: log successful REST/API reads of logged doctypes (after_request: the API user is known by then; B4)
@@ -196,3 +199,12 @@ after_request = ["onerc_healthcare.privacy.read_log.after_request"]
 krcs_report_exclusions = []
 # Phase 3: stored in each MOH Report Run snapshot so a later mapping change is visible (R2).
 krcs_report_fingerprints = ["onerc_healthcare.reporting.mapping.report_fingerprint"]
+
+# ---------------------------------------------------------------------------
+# Phase 4: medical outreach (SDD §5.6). The offline app is served at /outreach (O3); a device syncs with a
+# grant secret checked here (O1), which only ever authenticates the outreach sync/status endpoints.
+# ---------------------------------------------------------------------------
+auth_hooks = ["onerc_healthcare.outreach.auth.authenticate_device"]
+website_route_rules = [
+	{"from_route": "/outreach/<path:app_path>", "to_route": "outreach"},
+]

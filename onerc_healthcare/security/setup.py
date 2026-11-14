@@ -50,6 +50,7 @@ def install() -> None:
 	close_bulk_deletion()
 	apply_fixups()
 	apply_phase2_fixups()
+	apply_phase4_fixups()
 	lock_down_billing()
 	hide_billing_fields()
 	add_archived_fields()
@@ -173,6 +174,23 @@ def apply_phase2_fixups() -> None:
 			touched.append(doctype)
 	clear_perm_cache(touched)
 	frappe.db.set_default(PHASE2_FIXUPS_MARKER, "1")
+
+
+PHASE4_FIXUPS_MARKER = "krcs_security_fixups_v4"
+
+
+def apply_phase4_fixups() -> None:
+	"""Phase 4 (ROL-22): the Outreach Team Member works only in the outreach app. Role settings were applied
+	once in Phase 1, so a site migrated from then may still have desk access on; switch it off once. No
+	clinical DocPerm is granted to the role: synced records go through outreach.sync (D58)."""
+	if frappe.db.get_default(PHASE4_FIXUPS_MARKER):
+		return
+	from onerc_healthcare.constants import NO_DESK_ROLES
+
+	for role in NO_DESK_ROLES:
+		if frappe.db.exists("Role", role):
+			frappe.db.set_value("Role", role, "desk_access", 0)
+	frappe.db.set_default(PHASE4_FIXUPS_MARKER, "1")
 
 
 def add_archived_fields() -> None:

@@ -52,6 +52,9 @@ DEFAULT_RULES = (
 	("MOH Report Run", "{prefix}-MOH-.YYYY.-"),
 	("Service Delivered", "{prefix}-SVC-.YYYY.-"),
 	("Community Activity Record", "{prefix}-CAR-.YYYY.-"),
+	# Phase 4 record types (same rule)
+	("Outreach Session", "{prefix}-OUT-.YYYY.-"),
+	("Sync Conflict", "{prefix}-SCF-.YYYY.-"),
 )
 
 # Marley's Emergency Record names provisional patients with this series directly

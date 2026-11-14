@@ -32,6 +32,7 @@ from frappe.rate_limiter import rate_limit
 from frappe.utils import cstr, now_datetime
 
 from onerc_healthcare.constants import (
+	ACCESS_ACTION_OUTREACH_PACKAGE,
 	ACCESS_LOG_DOCTYPE,
 	ACCESS_LOGGED_DOCTYPES,
 	DATA_ACCESS_REQUEST_DOCTYPE,
@@ -56,6 +57,7 @@ ACTION_PRINT = "Print"
 ACTION_EXPORT = "Export"
 ACTION_REPORT = "Report"
 ACTION_DOWNLOAD = "Download"
+ACTION_OUTREACH_PACKAGE = ACCESS_ACTION_OUTREACH_PACKAGE  # Phase 4: patient sent to a device
 ACTIONS = (
 	ACTION_OPEN,
 	ACTION_OPEN_API,
@@ -65,6 +67,7 @@ ACTIONS = (
 	ACTION_EXPORT,
 	ACTION_REPORT,
 	ACTION_DOWNLOAD,
+	ACTION_OUTREACH_PACKAGE,
 )
 
 # Our own reports (exact names from constants); their runs and exports are logged.
