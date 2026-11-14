@@ -152,16 +152,20 @@ def internal_referral_source(doc) -> str | None:
 
 
 def earlier_visit_this_year(doc) -> str | None:
-	"""Another visit of the patient at this facility in the visit's attendance year that counts, or None.
+	"""An *earlier* visit of the patient at this facility in the visit's attendance year that counts, or
+	None. Earlier means an earlier visit date, or the same date and registered first (DEFECT-RECON-2: a
+	later-dated visit, e.g. one entered before a back-entered outreach visit, is not earlier).
 
 	A locking read (L2): the controller already holds the patient lock, so two receptionists registering
 	the same patient serialise here and cannot both get New."""
-	start, end = year_bounds(doc.visit_date)
+	start, _end = year_bounds(doc.visit_date)
 	rows = frappe.db.sql(
 		f"""select name from `tab{VISIT_DOCTYPE}`
 		where patient = %(patient)s and facility = %(facility)s and name != %(name)s
 			and ifnull(closure_reason, '') not in %(excluded)s
-			and visit_date between %(start)s and %(end)s
+			and visit_date >= %(start)s
+			and (visit_date < %(visit_date)s
+				or (visit_date = %(visit_date)s and (%(is_new)s or creation < %(creation)s)))
 		order by visit_date asc, creation asc limit 1
 		for update""",
 		{
@@ -170,10 +174,53 @@ def earlier_visit_this_year(doc) -> str | None:
 			"name": doc.name or "",
 			"excluded": list(REPORT_EXCLUDED_CLOSURE_REASONS),
 			"start": start,
-			"end": end,
+			"visit_date": str(getdate(doc.visit_date)),
+			"is_new": 1 if doc.is_new() else 0,
+			"creation": doc.get("creation") or "1900-01-01",
 		},
 	)
 	return rows[0][0] if rows else None
+
+
+def reclassify_later_visits(doc) -> list[str]:
+	"""After a back-entered visit is inserted (DEFECT-RECON-2): later visits of the patient at this
+	facility in the same year that were New by the calendar-year rule become Re-attendance, through
+	`engine.annotate`. Overrides (Reception, HIS) are left alone. Returns the visits changed."""
+	from onerc_healthcare.visit import engine
+
+	if doc.get("attendance_type") is None or doc.get("closure_reason") in REPORT_EXCLUDED_CLOSURE_REASONS:
+		return []
+	_start, end = year_bounds(doc.visit_date)
+	later = frappe.db.sql(
+		f"""select name from `tab{VISIT_DOCTYPE}`
+		where patient = %(patient)s and facility = %(facility)s and name != %(name)s
+			and attendance_type = %(new)s and attendance_basis = %(rule)s
+			and visit_date > %(visit_date)s and visit_date <= %(end)s
+		order by visit_date asc
+		for update""",
+		{
+			"patient": doc.patient,
+			"facility": doc.facility,
+			"name": doc.name,
+			"new": ATTENDANCE_NEW,
+			"rule": ATTENDANCE_BASIS_RULE,
+			"visit_date": str(getdate(doc.visit_date)),
+			"end": end,
+		},
+		pluck=True,
+	)
+	for name in later:
+		engine.annotate(
+			name,
+			"correct_attendance",
+			_("Earlier visit {0} on {1} was entered later.").format(doc.name, _note_date(doc.visit_date)),
+			{
+				"attendance_type": ATTENDANCE_REVISIT,
+				"attendance_basis": ATTENDANCE_BASIS_RULE,
+				"attendance_note": _("Earlier visit this year at this facility: {0}.").format(doc.name),
+			},
+		)
+	return later
 
 
 def compute_attendance(doc) -> tuple[str, str, str | None]:

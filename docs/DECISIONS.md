@@ -314,3 +314,15 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 - `reporting.api` has three methods, all GET only: `list_reports`, `list_runs` and `get_report_values`.
 - Allowed roles: HIS Officer, Medical In-Charge and the API-only role "MOH Data Reader". The role has no desk access and no users until the DHIS2 link exists.
 - Calls are rate-limited and access-logged. The Head of Operations is refused.
+
+**D56. MOH reconciliation (TST-13, SDD §9.3), 2026-11-14.**
+- **The dataset.** `tests/test_moh_reconciliation.py` builds a prepared dataset through the real flows: 36 patients, 43 visits and 39 encounters in March 2025, with edge records on 28 February and 1 April. It checks MOH 705A, 705B, 717 and 711 Rehab against counts worked out by hand from D47–D53.
+- **Readings of rules that were ambiguous:**
+  - Morbidity is dated by the encounter date and attendance by the visit date.
+  - An archived encounter keeps its visit's attendance.
+  - "Left before completion" is still an attendance; only "Left before being seen" is removed.
+  - The missing-DOB exception appears on both 705 runs.
+- **Defect fixed: dispensing from an archived encounter.** Dispensing counts now exclude dispensing from archived or unsubmitted encounters (DEFECT-RECON-1).
+- **Defect fixed: back-entered visits.**
+  - Attendance compares only *earlier* visits: an earlier date, or the same date registered first.
+  - When a visit is back-entered, for example by an outreach sync, later visits that year that were "New" by the rule become re-attendances through `engine.annotate`. Overrides are left alone (DEFECT-RECON-2).

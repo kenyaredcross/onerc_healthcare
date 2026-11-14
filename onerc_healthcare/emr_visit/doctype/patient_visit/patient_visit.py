@@ -131,6 +131,12 @@ class PatientVisit(Document):
 		if self.patient != before.patient:
 			self.validate_patient_change(before)
 
+	def after_insert(self):
+		# A back-entered visit (e.g. an outreach sync) makes later New visits of that year re-attendances.
+		from onerc_healthcare.visit.attendance import reclassify_later_visits
+
+		reclassify_later_visits(self)
+
 	def before_save(self):
 		if self.is_new():
 			# Always server-assigned; a client-supplied queue number is ignored.

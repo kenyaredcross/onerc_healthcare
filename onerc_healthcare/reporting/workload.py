@@ -73,7 +73,8 @@ the consultation completes).
 **Dispensing** (`evaluate_dispensing`; event date ``dispensed_at``)
 
 Submitted Dispensing Records (``docstatus`` 1; cancelled records are docstatus 2 and drop out), not
-archived, of visits passing the base filters.
+archived, of visits passing the base filters, whose encounter is submitted and not archived (D49;
+DEFECT-RECON-1).
 
 - ``outcome``: "Dispensed" (default; partial quantities included) | "Not Dispensed".
 - ``unit``: "items" (default; distinct Medication Requests) | "prescriptions" (distinct encounters) |
@@ -562,6 +563,10 @@ def evaluate_dispensing(ctx: SourceContext, elements: list[ElementSpec]) -> dict
 	from_sql = (
 		f"`tab{DISPENSING_DOCTYPE}` d JOIN `tabPatient Visit` v ON v.name = d.visit"
 		" JOIN `tabPatient` pat ON pat.name = v.patient"
+		" LEFT JOIN `tabPatient Encounter` enc ON enc.name = d.encounter"
+	)
+	encounter_ok = (
+		f"(d.encounter IS NULL OR (enc.docstatus = 1 AND {_not_archived('enc', 'Patient Encounter')}))"
 	)
 	units = {
 		"records": "COUNT(*)",
@@ -579,6 +584,7 @@ def evaluate_dispensing(ctx: SourceContext, elements: list[ElementSpec]) -> dict
 			where,
 			"d.docstatus = 1",
 			_not_archived("d", DISPENSING_DOCTYPE),
+			encounter_ok,
 			"d.outcome = %(r4_outcome)s",
 			"DATE(d.dispensed_at) BETWEEN %(krcs_from)s AND %(krcs_to)s",
 			*_visit_scope(rule, params),
