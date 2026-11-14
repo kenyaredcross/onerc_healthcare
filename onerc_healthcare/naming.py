@@ -48,6 +48,10 @@ DEFAULT_RULES = (
 	("Data Access Request", "{prefix}-DAR-.YYYY.-"),
 	("Screening Record", "{prefix}-SCR-.YYYY.-"),
 	("Visitor Record", "{prefix}-VIS-.YYYY.-"),
+	# Phase 3 record types (same rule: Select `naming_series` field, autoname "naming_series:")
+	("MOH Report Run", "{prefix}-MOH-.YYYY.-"),
+	("Service Delivered", "{prefix}-SVC-.YYYY.-"),
+	("Community Activity Record", "{prefix}-CAR-.YYYY.-"),
 )
 
 # Series that Marley code sets directly, so they must stay valid options of the field.

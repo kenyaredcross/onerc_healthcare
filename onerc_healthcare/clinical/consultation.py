@@ -223,12 +223,16 @@ def lab_work_started(service_request: str) -> bool:
 
 @frappe.whitelist(methods=["POST"])
 def complete_consultation(
-	encounter: str, reason: str | None = None, no_diagnosis_reason: str | None = None
+	encounter: str,
+	reason: str | None = None,
+	no_diagnosis_reason: str | None = None,
+	outcome: str | None = None,
 ) -> dict:
 	"""Complete the consultation: submit the encounter, release prescriptions, move the visit on.
 
 	`reason` is required while laboratory results are pending; `no_diagnosis_reason` when there is no
-	diagnosis (it is stored on the encounter).
+	diagnosis (it is stored on the encounter). `outcome`: Discharged home (default), Admitted or Died
+	(Phase 3; `engine.resolve_outcome`).
 	"""
 	require_roles(CONSULTING_ROLES, _("complete a consultation"))
 	frappe.has_permission(ENCOUNTER_DOCTYPE, "write", doc=encounter, throw=True)
@@ -239,6 +243,8 @@ def complete_consultation(
 
 	# Pre-check the engine rule so nothing is submitted when the visit cannot be completed.
 	rule = engine.TRANSITIONS[engine.ACTION_COMPLETE_CONSULTATION]
+	# Outcome checked before anything is submitted (unknown outcome, or "Died" without the role).
+	engine.resolve_outcome(visit_doc, engine.ACTION_COMPLETE_CONSULTATION, outcome)
 	if visit_doc.status not in rule.from_statuses:
 		frappe.throw(
 			_("Visit {0} is {1}; the consultation cannot be completed now.").format(
@@ -261,7 +267,7 @@ def complete_consultation(
 		engine.link_encounter(visit, doc.name)
 	if medication_requests:
 		tasks.raise_event(visit, engine.ACTION_PRESCRIBE)
-	visit_doc = engine.transition(visit, engine.ACTION_COMPLETE_CONSULTATION, comment=reason)
+	visit_doc = engine.transition(visit, engine.ACTION_COMPLETE_CONSULTATION, comment=reason, outcome=outcome)
 	return {
 		"encounter": doc.name,
 		"medication_requests": medication_requests,

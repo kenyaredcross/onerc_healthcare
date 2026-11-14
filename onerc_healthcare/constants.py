@@ -23,6 +23,8 @@ ROLE_MIC = "Medical In-Charge"
 ROLE_HEAD_OPS = "Head of Operations"
 ROLE_SYSADMIN = "EMR System Administrator"
 ROLE_OUTREACH = "Outreach Team Member"
+# Phase 3: API-only reader of MOH aggregates (no desk access, no users until the DHIS2 link, OI-5).
+ROLE_MOH_API = "MOH Data Reader"
 
 ALL_ROLES = (
 	ROLE_RECEPTIONIST,
@@ -36,7 +38,10 @@ ALL_ROLES = (
 	ROLE_HEAD_OPS,
 	ROLE_SYSADMIN,
 	ROLE_OUTREACH,
+	ROLE_MOH_API,
 )
+# Roles created without desk access (API only).
+NO_DESK_ROLES = (ROLE_MOH_API,)
 
 # Roles that handle patient-level clinical content.
 CLINICAL_ROLES = (
@@ -147,6 +152,10 @@ CLINICAL_DOCTYPES = (
 	"Screening Record",
 	"Visitor Record",
 	"Access Log Entry",
+	# Phase 3 (W0 contract)
+	"MOH Report Run",
+	"Service Delivered",
+	"Community Activity Record",
 )
 
 VISIT_DOCTYPE = "Patient Visit"
@@ -180,6 +189,7 @@ VISIT_CLOSURE_REASONS = (
 	"Left before completion",
 	"Superseded by a new visit",
 	"Registered in error",
+	"Died",
 	"Other",
 )
 
@@ -198,6 +208,7 @@ ACCESS_LOGGED_DOCTYPES = (
 	"Patient Consent",
 	"Data Access Request",
 	"Screening Record",
+	"Service Delivered",  # Phase 3
 )
 
 # Modules of this app (our own DocTypes live in these; security setup leaves their JSON perms alone)
@@ -211,6 +222,8 @@ APP_MODULES = (
 	"EMR Pharmacy",
 	"EMR Front Desk",
 	"EMR Data Protection",
+	"EMR Reporting",
+	"EMR Community",
 )
 
 # Script/query reports the Phase 2 builders create (exact names; the sidebar links them)
@@ -219,3 +232,89 @@ REPORT_PHARMACY_WORKLIST = "Pharmacy Worklist"  # B3 (FR-20)
 REPORT_DAILY_ENTRY = "Daily Facility Entry"  # B3 (BR-13)
 REPORT_CONSENT_EXCEPTIONS = "Consent Exceptions"  # B4 (FR-37)
 REPORT_ACCESS_AUDIT = "Access Audit"  # B4 (FR-40)
+
+# ---------------------------------------------------------------------------
+# Phase 3 contract (W0): MOH reporting and data-capture gaps. Builders import these and never edit them.
+# ---------------------------------------------------------------------------
+# R1 framework
+MOH_REPORT_DOCTYPE = "MOH Report"  # definition (name = report code, e.g. "MOH 705A")
+MOH_DATA_ELEMENT_DOCTYPE = "MOH Report Data Element"  # child of MOH Report
+MOH_AGE_BAND_DOCTYPE = "MOH Report Age Band"  # child of MOH Report
+MOH_RUN_DOCTYPE = "MOH Report Run"  # one generated report for a facility and period
+MOH_RUN_LOG_DOCTYPE = "MOH Report Run Log"  # child of MOH Report Run (append-only)
+# R2 diagnosis mapping
+MOH_CATEGORY_DOCTYPE = "MOH Disease Category"
+MOH_MAPPING_DOCTYPE = "MOH Diagnosis Mapping"
+ICD11_BLOCK_DOCTYPE = "ICD-11 Block"
+# R3 capture
+SERVICE_DELIVERED_DOCTYPE = "Service Delivered"
+SERVICE_TYPE_DOCTYPE = "Visit Service Type"
+COMMUNITY_ACTIVITY_DOCTYPE = "Community Activity Record"
+COMMUNITY_ACTIVITY_TYPE_DOCTYPE = "Community Activity Type"
+
+# Report definitions (MOH Report names). Provisional until the official forms arrive (OI-5).
+MOH_705A = "MOH 705A"  # outpatient morbidity, under 5
+MOH_705B = "MOH 705B"  # outpatient morbidity, 5 and over
+MOH_717 = "MOH 717"  # facility workload
+MOH_711_REHAB = "MOH 711 Rehabilitation and Social Work"
+# Blocked: definitions exist without data elements until OI-5 / OI-24.
+MOH_711_RH = "MOH 711 RH-MCH"
+MOH_747A = "MOH 747A"
+MOH_643B = "MOH 643B"
+MH_CLINIC = "Mental Health Clinic Report"
+MOH_REPORT_STATUSES = ("Active - Provisional", "Confirmed", "Blocked")
+
+# Script reports (exact names; the sidebar links them)
+REPORT_MOH_UNMAPPED = "MOH Unmapped Diagnoses"  # R2
+REPORT_MOH_COVERAGE = "MOH Mapping Coverage"  # R2
+
+# Visit outcome (Patient Visit.outcome, set by the engine on the closing action)
+OUTCOME_DISCHARGED = "Discharged home"
+OUTCOME_ADMITTED = "Admitted"
+OUTCOME_REFERRED_OUT = "Referred out"
+OUTCOME_REFERRED_INTERNAL = "Referred internally"
+OUTCOME_DIED = "Died"
+OUTCOME_LEFT = "Left without completing"
+OUTCOME_NOT_APPLICABLE = "Not applicable"
+VISIT_OUTCOMES = (
+	OUTCOME_DISCHARGED,
+	OUTCOME_ADMITTED,
+	OUTCOME_REFERRED_OUT,
+	OUTCOME_REFERRED_INTERNAL,
+	OUTCOME_DIED,
+	OUTCOME_LEFT,
+	OUTCOME_NOT_APPLICABLE,
+)
+# Roles that may record "Died" (a clinical judgement); the system may too.
+DIED_ROLES = (ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC)
+
+# Attendance (MOH 717 "new" vs "re-attendance"): first visit to this facility in the calendar year.
+ATTENDANCE_NEW = "New"
+ATTENDANCE_REVISIT = "Re-attendance"
+ATTENDANCE_TYPES = (ATTENDANCE_NEW, ATTENDANCE_REVISIT)
+ATTENDANCE_BASIS_RULE = "Calendar-year rule"
+ATTENDANCE_BASIS_RECEPTION = "Reception override"
+ATTENDANCE_BASIS_HIS = "HIS correction"
+ATTENDANCE_BASES = (ATTENDANCE_BASIS_RULE, ATTENDANCE_BASIS_RECEPTION, ATTENDANCE_BASIS_HIS)
+
+# Patient Visit fields (W0 creates them; engine-protected after insert)
+VISIT_ATTENDANCE_TYPE_FIELD = "attendance_type"
+VISIT_ATTENDANCE_BASIS_FIELD = "attendance_basis"
+VISIT_SEEN_IN_SMARTCARE_FIELD = "seen_in_smartcare"
+VISIT_ATTENDANCE_NOTE_FIELD = "attendance_note"
+VISIT_OUTCOME_FIELD = "outcome"
+VISIT_REFERRED_IN_FIELD = "referred_in"
+VISIT_REFERRED_IN_FROM_FIELD = "referred_in_from"
+
+# Patient DOB estimate (R3 creates these custom fields). Convention: when only an age is known, Patient.dob
+# = estimate date minus the age (years and months, same day of month) and the record is flagged.
+PATIENT_DOB_ESTIMATED_FIELD = "krcs_dob_estimated"  # Check
+PATIENT_ESTIMATED_AGE_YEARS_FIELD = "krcs_estimated_age_years"  # Int, as told at registration
+PATIENT_ESTIMATED_AGE_MONTHS_FIELD = "krcs_estimated_age_months"  # Int 0-11
+PATIENT_DOB_ESTIMATED_ON_FIELD = "krcs_dob_estimated_on"  # Date the age was given
+
+# User field for the "compiled by" line of MOH reports (W0 creates it)
+USER_DESIGNATION_FIELD = "krcs_designation"
+
+# Visit closure reasons that remove the visit from every MOH count (not a real attendance)
+REPORT_EXCLUDED_CLOSURE_REASONS = ("Registered in error", "Superseded by a new visit")

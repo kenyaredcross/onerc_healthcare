@@ -29,7 +29,6 @@ from onerc_healthcare.constants import (
 	ROLE_TRIAGE,
 	SCREENING_DOCTYPE,
 	VISIT_CLOSED_STATUSES,
-	VISIT_CLOSURE_REASONS,
 	VISIT_DOCTYPE,
 	VISIT_OPEN_STATUSES,
 	VISIT_STATUS_REGISTERED,
@@ -42,6 +41,7 @@ from onerc_healthcare.visit.engine import (
 	NON_ROUTABLE_DEPARTMENTS,
 	PROTECTED_FIELDS,
 	STATUS_LOG_FIELDS,
+	closure_reasons_for,
 	get_available_actions,
 	has_submitted_triage_vitals,
 )
@@ -83,7 +83,7 @@ class PatientVisit(Document):
 		self.set_onload("available_actions", get_available_actions(self))
 		self.set_onload("non_routable_departments", list(NON_ROUTABLE_DEPARTMENTS))
 		self.set_onload("has_triage_vitals", has_submitted_triage_vitals(self))
-		self.set_onload("closure_reasons", list(VISIT_CLOSURE_REASONS))
+		self.set_onload("closure_reasons", closure_reasons_for())
 		roles = set(frappe.get_roles())
 		is_admin = frappe.session.user == "Administrator"
 		self.set_onload(
@@ -122,6 +122,7 @@ class PatientVisit(Document):
 		if self.is_new():
 			self.set_registration_values()
 			self.validate_patient()
+			self.set_intake_values()
 			return
 		before = self.get_doc_before_save()
 		if not before:
@@ -202,6 +203,8 @@ class PatientVisit(Document):
 		self.triage_level = self.triage_vital_signs = None
 		self.routed_without_vitals = 0
 		self.encounter = self.referred_from = self.closure_reason = None
+		self.outcome = self.outcome_at = self.outcome_by = None
+		self.attendance_type = self.attendance_basis = self.attendance_note = None
 		self.queue_number = None
 		self.company = self._facility_company or (get_company() if get_operation() else None)
 		self.patient_identifier = get_primary_identifier(self.patient) if self.patient else None
@@ -217,6 +220,16 @@ class PatientVisit(Document):
 				"department": self.current_department,
 			},
 		)
+
+	def set_intake_values(self):
+		"""Reception's intake answers (Phase 3): kept as entered at registration, then engine-protected."""
+		self.seen_in_smartcare = cint(self.seen_in_smartcare)
+		self.referred_in = cint(self.referred_in)
+		if not self.referred_in:
+			self.referred_in_from = None
+		from onerc_healthcare.visit.attendance import set_initial_attendance
+
+		set_initial_attendance(self)
 
 	def validate_patient(self):
 		"""Active patient, and no other open visit at any date (decision 2026-11-13), checked under a
@@ -272,6 +285,9 @@ class PatientVisit(Document):
 				self._locked(_("Only a Nurse Receptionist can correct the patient of a visit."))
 		self.validate_patient()
 		self.patient_identifier = get_primary_identifier(self.patient)
+		from onerc_healthcare.visit.attendance import set_initial_attendance
+
+		set_initial_attendance(self)  # the corrected patient may have been seen before this year
 
 	def _locked(self, message):
 		frappe.throw(message, VisitStatusLockedError, title=_("Status Locked"))

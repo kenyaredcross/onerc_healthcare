@@ -181,3 +181,7 @@ has_permission = {
 
 # M4: log successful REST/API reads of logged doctypes (after_request: the API user is known by then; B4)
 after_request = ["onerc_healthcare.privacy.read_log.after_request"]
+
+# Phase 3: conditions that remove rows from every MOH count (`reporting.filters`). Reserved for migrated
+# SmartCare history (FR-43, waits for OI-4). Each entry: dotted path fn(ctx) -> SQL condition or "".
+krcs_report_exclusions = []

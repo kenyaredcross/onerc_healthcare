@@ -9,7 +9,7 @@ never commit (Frappe commits at the end of install/migrate).
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-from onerc_healthcare.constants import ALL_ROLES, DEPARTMENTS
+from onerc_healthcare.constants import ALL_ROLES, DEPARTMENTS, NO_DESK_ROLES, USER_DESIGNATION_FIELD
 from onerc_healthcare.setup.lab import seed_lab
 from onerc_healthcare.setup.operations import facility_unit_name, get_operation, get_operation_config
 from onerc_healthcare.setup.wizard import ensure_setup_complete
@@ -93,6 +93,20 @@ def after_migrate() -> None:
 	_install_workstreams()
 
 
+# Phase 3: the "compiled by" line of MOH reports needs the user's job title.
+USER_CUSTOM_FIELDS = {
+	"User": [
+		{
+			"fieldname": USER_DESIGNATION_FIELD,
+			"label": "Designation (KRCS)",
+			"fieldtype": "Data",
+			"insert_after": "last_name",
+			"description": "Job title printed on MOH reports this user compiles, e.g. HIS Officer.",
+		}
+	]
+}
+
+
 def initial_setup(op: str) -> None:
 	"""First-time setup for the site's operation: wizard, seeding and billing-free settings (C-5)."""
 	ensure_setup_complete(op)
@@ -111,9 +125,9 @@ def ensure_roles() -> None:
 	"""Create the SDD §6.1 roles (desk access on). Permissions and role settings are owned by A3."""
 	for role in ALL_ROLES:
 		if not frappe.db.exists("Role", role):
-			frappe.get_doc({"doctype": "Role", "role_name": role, "desk_access": 1}).insert(
-				ignore_permissions=True
-			)
+			frappe.get_doc(
+				{"doctype": "Role", "role_name": role, "desk_access": 0 if role in NO_DESK_ROLES else 1}
+			).insert(ignore_permissions=True)
 
 
 def seed_operation(op: str) -> None:
@@ -216,5 +230,17 @@ def _install_workstreams() -> None:
 	# Security last among the workstreams: it applies perms/archive fields over everything that exists.
 	security_setup.install()
 	coding_setup.install()
+	# Phase 3 (R1 framework, R2 705 mapping, R4 workload definitions, R3 community masters). The report
+	# definitions need R1's DocTypes, so the framework goes first.
+	create_custom_fields(USER_CUSTOM_FIELDS, ignore_validate=True)
+	from onerc_healthcare.community import setup as community_setup
+	from onerc_healthcare.reporting import mapping as reporting_mapping
+	from onerc_healthcare.reporting import setup as reporting_setup
+	from onerc_healthcare.reporting import workload as reporting_workload
+
+	reporting_setup.install()
+	reporting_mapping.install()
+	reporting_workload.install()
+	community_setup.install()
 	ensure_naming_settings()
 	desk_sidebar.install()

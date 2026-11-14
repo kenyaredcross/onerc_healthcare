@@ -33,6 +33,17 @@
   "encounter",
   "referred_from",
   "closure_reason",
+  "attendance_section",
+  "attendance_type",
+  "attendance_basis",
+  "seen_in_smartcare",
+  "attendance_note",
+  "column_break_attendance",
+  "referred_in",
+  "referred_in_from",
+  "outcome",
+  "outcome_at",
+  "outcome_by",
   "timestamps_section",
   "triage_started_at",
   "routed_at",
@@ -251,8 +262,94 @@
    "in_standard_filter": 1,
    "label": "Closure Reason",
    "no_copy": 1,
-   "options": "\nLeft before being seen\nLeft before completion\nSuperseded by a new visit\nRegistered in error\nOther",
+   "options": "\nLeft before being seen\nLeft before completion\nSuperseded by a new visit\nRegistered in error\nDied\nOther",
    "read_only": 1
+  },
+  {
+   "fieldname": "attendance_section",
+   "fieldtype": "Section Break",
+   "label": "Attendance and Outcome",
+   "permlevel": 0
+  },
+  {
+   "fieldname": "attendance_type",
+   "fieldtype": "Select",
+   "label": "Attendance",
+   "options": "\nNew\nRe-attendance",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "New: first visit to this facility this calendar year. Set by the system; corrected through the visit actions.",
+   "permlevel": 0
+  },
+  {
+   "fieldname": "attendance_basis",
+   "fieldtype": "Select",
+   "label": "Attendance Basis",
+   "options": "\nCalendar-year rule\nReception override\nHIS correction",
+   "read_only": 1,
+   "permlevel": 0
+  },
+  {
+   "fieldname": "seen_in_smartcare",
+   "fieldtype": "Check",
+   "label": "Seen Here Before (SmartCare)",
+   "permlevel": 1,
+   "read_only_depends_on": "eval:!doc.__islocal",
+   "description": "Tick when the patient was seen at this facility this year before the EMR (paper or SmartCare records). The visit then counts as a re-attendance."
+  },
+  {
+   "fieldname": "attendance_note",
+   "fieldtype": "Small Text",
+   "label": "Attendance Note",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_attendance",
+   "fieldtype": "Column Break",
+   "permlevel": 0
+  },
+  {
+   "fieldname": "referred_in",
+   "fieldtype": "Check",
+   "label": "Referred In from Another Facility",
+   "permlevel": 1,
+   "read_only_depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "referred_in_from",
+   "fieldtype": "Link",
+   "label": "Referred In From",
+   "options": "Referral Facility",
+   "permlevel": 1,
+   "depends_on": "eval:doc.referred_in",
+   "read_only_depends_on": "eval:!doc.__islocal",
+   "ignore_user_permissions": 1
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Outcome",
+   "permlevel": 1,
+   "read_only": 1,
+   "options": "\nDischarged home\nAdmitted\nReferred out\nReferred internally\nDied\nLeft without completing\nNot applicable",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "outcome_at",
+   "fieldtype": "Datetime",
+   "label": "Outcome Recorded At",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome_by",
+   "fieldtype": "Link",
+   "label": "Outcome Recorded By",
+   "options": "User",
+   "permlevel": 1,
+   "read_only": 1,
+   "ignore_user_permissions": 1
   },
   {
    "collapsible": 1,
@@ -332,7 +429,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-15 09:00:00.000000",
+ "modified": "2026-11-16 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Visit",
  "name": "Patient Visit",

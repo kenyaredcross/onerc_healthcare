@@ -45,6 +45,8 @@ from onerc_healthcare.clinical.utils import CONSULTING_ROLES, has_any_role, lock
 from onerc_healthcare.constants import (
 	ENCOUNTER_DOCTYPE,
 	ENCOUNTER_VISIT_FIELD,
+	OUTCOME_REFERRED_INTERNAL,
+	OUTCOME_REFERRED_OUT,
 	REFERRAL_DOCTYPE,
 	REFERRAL_FACILITY_DOCTYPE,
 	ROLE_HIS,
@@ -277,7 +279,8 @@ def _send(doc, system: bool = False) -> None:
 	if medication_requests:
 		# The Referred visit keeps the pharmacy task; `dispensed` clears it later (engine invariant 1).
 		tasks.raise_event(visit, engine.ACTION_PRESCRIBE)
-	engine.transition(visit, engine.ACTION_REFER, comment=doc.reason, system=system)
+	outcome = OUTCOME_REFERRED_INTERNAL if doc.referral_type == TYPE_INTERNAL else OUTCOME_REFERRED_OUT
+	engine.transition(visit, engine.ACTION_REFER, comment=doc.reason, system=system, outcome=outcome)
 	doc.sent_at = now_datetime()
 
 	if doc.referral_type == TYPE_INTERNAL:

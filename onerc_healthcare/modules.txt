@@ -7,3 +7,5 @@ EMR Laboratory
 EMR Pharmacy
 EMR Front Desk
 EMR Data Protection
+EMR Reporting
+EMR Community

@@ -67,6 +67,28 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"link_type": "Report",
 				"link_to": "Access Audit",
 			},
+			# Phase 3: services, community work and MOH reporting
+			{"key": "krcs-services-section", "type": "Section Break", "label": "Services and Community"},
+			{"key": "krcs-service-delivered", "label": "Service Delivered", "link_to": "Service Delivered"},
+			{
+				"key": "krcs-community-activity",
+				"label": "Community Activity Record",
+				"link_to": "Community Activity Record",
+			},
+			{"key": "krcs-moh-section", "type": "Section Break", "label": "MOH Reporting"},
+			{"key": "krcs-moh-report-run", "label": "MOH Report Run", "link_to": "MOH Report Run"},
+			{
+				"key": "krcs-moh-unmapped",
+				"label": "MOH Unmapped Diagnoses",
+				"link_type": "Report",
+				"link_to": "MOH Unmapped Diagnoses",
+			},
+			{
+				"key": "krcs-moh-coverage",
+				"label": "MOH Mapping Coverage",
+				"link_type": "Report",
+				"link_to": "MOH Mapping Coverage",
+			},
 		],
 	),
 	"Diagnostics": (
@@ -109,6 +131,18 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 			},
 			{"key": "krcs-consent-statement", "label": "Consent Statement", "link_to": "Consent Statement"},
 			{"key": "krcs-access-log-entry", "label": "Access Log Entry", "link_to": "Access Log Entry"},
+			# Phase 3 masters
+			{"key": "krcs-moh-setup-section", "type": "Section Break", "label": "MOH Reporting Setup"},
+			{"key": "krcs-moh-report", "label": "MOH Report", "link_to": "MOH Report"},
+			{"key": "krcs-moh-category", "label": "MOH Disease Category", "link_to": "MOH Disease Category"},
+			{"key": "krcs-moh-mapping", "label": "MOH Diagnosis Mapping", "link_to": "MOH Diagnosis Mapping"},
+			{"key": "krcs-icd11-block", "label": "ICD-11 Block", "link_to": "ICD-11 Block"},
+			{"key": "krcs-service-type", "label": "Visit Service Type", "link_to": "Visit Service Type"},
+			{
+				"key": "krcs-community-activity-type",
+				"label": "Community Activity Type",
+				"link_to": "Community Activity Type",
+			},
 		],
 	),
 }

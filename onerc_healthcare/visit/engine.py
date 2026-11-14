@@ -43,7 +43,15 @@ from frappe.utils import now_datetime
 from onerc_healthcare.constants import (
 	DEPT_RECEPTION,
 	DEPT_TRIAGE,
+	DIED_ROLES,
 	ENCOUNTER_DOCTYPE,
+	OUTCOME_ADMITTED,
+	OUTCOME_DIED,
+	OUTCOME_DISCHARGED,
+	OUTCOME_LEFT,
+	OUTCOME_NOT_APPLICABLE,
+	OUTCOME_REFERRED_INTERNAL,
+	OUTCOME_REFERRED_OUT,
 	REFERRAL_DOCTYPE,
 	ROLE_CLINICIAN,
 	ROLE_MHO,
@@ -54,6 +62,7 @@ from onerc_healthcare.constants import (
 	VISIT_CLOSURE_REASONS,
 	VISIT_DOCTYPE,
 	VISIT_OPEN_STATUSES,
+	VISIT_OUTCOMES,
 	VISIT_STATUS_AWAITING_LAB,
 	VISIT_STATUS_AWAITING_PHARMACY,
 	VISIT_STATUS_DISCHARGED,
@@ -103,6 +112,10 @@ class VisitGuardError(IllegalVisitTransitionError):
 
 class PharmacyTaskOpenError(VisitGuardError):
 	"""Discharge attempted while a pharmacy task is still open."""
+
+
+class VisitOutcomeError(IllegalVisitTransitionError):
+	"""The outcome is not allowed for the action or closure reason."""
 
 
 class GuardFailure(str):
@@ -331,10 +344,41 @@ WORKFLOW_FIELDS = (
 	"encounter",
 	"referred_from",
 	"closure_reason",
+	# Phase 3: outcome (closing actions) and attendance (registration rule; corrections via annotate)
+	"outcome",
+	"outcome_at",
+	"outcome_by",
+	"attendance_type",
+	"attendance_basis",
+	"attendance_note",
 )
 # Fields set by the server at registration and never changed by hand afterwards.
 REGISTRATION_FIELDS = ("visit_date", "arrived_at", "queue_number", "patient_identifier", "company")
-PROTECTED_FIELDS = WORKFLOW_FIELDS + REGISTRATION_FIELDS
+# Entered by reception when the visit is registered, then changed only through `annotate`.
+INTAKE_FIELDS = ("seen_in_smartcare", "referred_in", "referred_in_from")
+PROTECTED_FIELDS = WORKFLOW_FIELDS + REGISTRATION_FIELDS + INTAKE_FIELDS
+# Fields `annotate` may correct (callers check who may correct what).
+ANNOTATE_FIELDS = (
+	"attendance_type",
+	"attendance_basis",
+	"attendance_note",
+	*INTAKE_FIELDS,
+	"outcome",
+)
+
+# Visit outcome (Phase 3). Allowed outcomes per closing action; the first is the default.
+COMPLETE_OUTCOMES = (OUTCOME_DISCHARGED, OUTCOME_ADMITTED, OUTCOME_DIED)
+REFER_OUTCOMES = (OUTCOME_REFERRED_OUT, OUTCOME_REFERRED_INTERNAL)
+# Close Visit: closure reason -> the outcome it implies. "Other" lets the user choose from
+# CLOSE_OTHER_OUTCOMES (default Not applicable).
+CLOSURE_OUTCOMES = {
+	"Left before being seen": OUTCOME_LEFT,
+	"Left before completion": OUTCOME_LEFT,
+	"Superseded by a new visit": OUTCOME_NOT_APPLICABLE,
+	"Registered in error": OUTCOME_NOT_APPLICABLE,
+	"Died": OUTCOME_DIED,
+}
+CLOSE_OTHER_OUTCOMES = (OUTCOME_NOT_APPLICABLE, OUTCOME_DISCHARGED, OUTCOME_ADMITTED, OUTCOME_LEFT)
 # Status log columns that must never change once written (SDD §4.4 audit trail).
 STATUS_LOG_FIELDS = ("from_status", "to_status", "action", "user", "timestamp", "department", "comment")
 # Longest comment kept on a status-log row (NFR-10); also the limit for an emergency routing reason.
@@ -354,6 +398,8 @@ def transition(visit: str, action: str, **kwargs):
 	  submitted (FR-9); stored on the log row and flags the visit ``routed_without_vitals``.
 	- ``closure_reason``: one of ``VISIT_CLOSURE_REASONS`` (``close_visit``).
 	- ``referral``: the Referral that created this visit (``receive_referral``).
+	- ``outcome``: one of ``VISIT_OUTCOMES`` for the closing actions (``complete_consultation``,
+	  ``refer``, ``close_visit``); see `resolve_outcome` for defaults. "Died" needs a ``DIED_ROLES`` role.
 	- ``system``: True when called by system code (lab/pharmacy events in later phases).
 
 	Raises ``frappe.PermissionError`` for a wrong role and ``frappe.ValidationError`` for an illegal
@@ -395,6 +441,7 @@ def transition(visit: str, action: str, **kwargs):
 		)
 	if vital_signs:
 		link_vital_signs(doc, vital_signs, save=False)
+	outcome = resolve_outcome(doc, action, kwargs.get("outcome"), kwargs.get("closure_reason"), system)
 
 	from_status = doc.status
 	to_status = _apply(doc, action, rule, department=department)
@@ -406,6 +453,10 @@ def transition(visit: str, action: str, **kwargs):
 		_set_referral(doc, kwargs.get("referral"))
 
 	now = now_datetime()
+	if outcome and outcome != doc.get("outcome"):
+		doc.outcome = outcome
+		doc.outcome_at = now
+		doc.outcome_by = frappe.session.user
 	if rule.timestamp_field and not doc.get(rule.timestamp_field):
 		doc.set(rule.timestamp_field, now)
 	if to_status in VISIT_CLOSED_STATUSES and not doc.closed_at:
@@ -431,6 +482,137 @@ def transition(visit: str, action: str, **kwargs):
 		from onerc_healthcare.visit.tasks import on_visit_closed
 
 		on_visit_closed(doc)
+	return doc
+
+
+def resolve_outcome(
+	doc, action: str, outcome: str | None, closure_reason: str | None = None, system: bool = False
+) -> str | None:
+	"""The outcome a closing action records, or None for other actions (and to keep the current one).
+
+	- ``complete_consultation``: Discharged home (default), Admitted or Died.
+	- ``refer``: Referred out (default) or Referred internally (the referral code passes it).
+	- ``close_visit``: implied by the closure reason (`CLOSURE_OUTCOMES`); for "Other" the user may choose
+	  from `CLOSE_OTHER_OUTCOMES`. An outcome already recorded by Complete Consultation is kept, except
+	  that "Died" always replaces it.
+	- ``discharge`` (server only): Discharged home.
+	"""
+	outcome = (outcome or "").strip() or None
+	if action == ACTION_COMPLETE_CONSULTATION:
+		allowed, default = COMPLETE_OUTCOMES, OUTCOME_DISCHARGED
+	elif action == ACTION_REFER:
+		allowed, default = REFER_OUTCOMES, OUTCOME_REFERRED_OUT
+	elif action == ACTION_DISCHARGE:
+		allowed, default = (OUTCOME_DISCHARGED,), OUTCOME_DISCHARGED
+	elif action == ACTION_CLOSE_VISIT:
+		implied = CLOSURE_OUTCOMES.get(closure_reason)
+		allowed = (implied,) if implied else CLOSE_OTHER_OUTCOMES
+		default = implied or OUTCOME_NOT_APPLICABLE
+		if doc.get("outcome") and not outcome and default != OUTCOME_DIED:
+			return None  # keep the outcome recorded by Complete Consultation
+	else:
+		if outcome:
+			frappe.throw(_("An outcome is recorded only when a visit ends."), VisitOutcomeError)
+		return None
+	outcome = outcome or default
+	if outcome not in allowed:
+		frappe.throw(
+			_("Outcome {0} is not possible here. Choose one of: {1}.").format(
+				frappe.bold(_(outcome)), ", ".join(_(o) for o in allowed)
+			),
+			VisitOutcomeError,
+			title=_("Outcome Not Allowed"),
+		)
+	_check_died_role(outcome, system)
+	return outcome
+
+
+def _check_died_role(outcome: str | None, system: bool) -> None:
+	if outcome != OUTCOME_DIED or system or frappe.session.user == "Administrator":
+		return
+	if not set(frappe.get_roles()) & set(DIED_ROLES):
+		frappe.throw(
+			_("Only {0} can record that a patient died.").format(", ".join(_(r) for r in DIED_ROLES)),
+			frappe.PermissionError,
+		)
+
+
+def outcome_choices(
+	doc, action: str, closure_reason: str | None = None, user: str | None = None
+) -> list[str]:
+	"""Outcomes `user` may choose for `action` (for dialogs). Empty when the action records none."""
+	roles = set(frappe.get_roles(user or frappe.session.user))
+	may_record_death = (user or frappe.session.user) == "Administrator" or bool(roles & set(DIED_ROLES))
+	if action == ACTION_COMPLETE_CONSULTATION:
+		choices = COMPLETE_OUTCOMES
+	elif action == ACTION_REFER:
+		choices = REFER_OUTCOMES
+	elif action == ACTION_CLOSE_VISIT:
+		implied = CLOSURE_OUTCOMES.get(closure_reason)
+		choices = (implied,) if implied else CLOSE_OTHER_OUTCOMES
+	else:
+		return []
+	return [o for o in choices if o != OUTCOME_DIED or may_record_death]
+
+
+def closure_reasons_for(user: str | None = None) -> list[str]:
+	"""Close Visit reasons `user` may choose ("Died" needs a DIED_ROLES role)."""
+	user = user or frappe.session.user
+	may_record_death = user == "Administrator" or bool(set(frappe.get_roles(user)) & set(DIED_ROLES))
+	return [r for r in VISIT_CLOSURE_REASONS if CLOSURE_OUTCOMES.get(r) != OUTCOME_DIED or may_record_death]
+
+
+def annotate(visit: str, action: str, comment: str, updates: dict | None = None):
+	"""Record a correction or note on a visit without changing its status (Phase 3).
+
+	Appends a status-log row (``from_status == to_status``) named `action`, e.g. ``correct_attendance``,
+	and applies `updates` to `ANNOTATE_FIELDS` only. Works on open and closed visits. The caller checks who
+	may make the correction; `comment` (the reason) is required. Returns the saved visit.
+	"""
+	if not action or action in TRANSITIONS or action == ACTION_REGISTER:
+		frappe.throw(
+			_("{0} is a visit action, not an annotation.").format(action), IllegalVisitTransitionError
+		)
+	comment = (comment or "").strip() or None
+	if not comment:
+		frappe.throw(
+			_("Enter a reason; it is recorded in the visit history."),
+			IllegalVisitTransitionError,
+			title=_("Reason Required"),
+		)
+	_validate_comment(Transition(action, (), None), comment)
+	updates = dict(updates or {})
+	unknown = set(updates) - set(ANNOTATE_FIELDS)
+	if unknown:
+		frappe.throw(
+			_("These visit fields cannot be corrected: {0}.").format(", ".join(sorted(unknown))),
+			IllegalVisitTransitionError,
+		)
+	if updates.get("outcome") and updates["outcome"] not in VISIT_OUTCOMES:
+		frappe.throw(_("Unknown outcome {0}.").format(updates["outcome"]), VisitOutcomeError)
+	_check_died_role(updates.get("outcome"), system=False)
+
+	doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)
+	doc.flags.locked = True
+	now = now_datetime()
+	for field, value in updates.items():
+		doc.set(field, value)
+	if "outcome" in updates:
+		doc.outcome_at = now
+		doc.outcome_by = frappe.session.user
+	doc.append(
+		"status_log",
+		{
+			"from_status": doc.status,
+			"to_status": doc.status,
+			"action": action,
+			"user": frappe.session.user,
+			"timestamp": now,
+			"department": doc.current_department,
+			"comment": comment,
+		},
+	)
+	_save_from_workflow(doc)
 	return doc
 
 
@@ -703,6 +885,7 @@ def apply_action(
 	comment: str | None = None,
 	without_vitals_reason: str | None = None,
 	closure_reason: str | None = None,
+	outcome: str | None = None,
 ) -> dict:
 	"""Perform a visit action as the current user (form buttons, Vital Signs Route action)."""
 	rule = TRANSITIONS.get(action)
@@ -720,5 +903,6 @@ def apply_action(
 		comment=comment,
 		without_vitals_reason=without_vitals_reason,
 		closure_reason=closure_reason,
+		outcome=outcome,
 	)
 	return {"name": doc.name, "status": doc.status, "current_department": doc.current_department}
