@@ -202,3 +202,28 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 **D40. Practitioners and Marley endpoints.**
 - Marley's Healthcare Practitioner User Permission (applied to all doctypes) is stripped, consistent with D22.
 - Marley endpoints that skip permission checks are overridden or blocked.
+
+## Phase 2 review fix round, 2026-11-14
+
+**D41. Lock order and locking reads.**
+- Lock order is Visit → Encounter → Observation / Medication Request / Diagnostic Report, and every read after a lock is itself a locking read.
+- Frappe locks an Observation before any hook runs. Lab approval hooks therefore take the visit lock with NOWAIT: when another lab update holds the visit, the user is asked to retry immediately rather than waiting.
+- Marley's bulk and panel approve/reject endpoints are overridden to lock the visit first.
+- Under MariaDB snapshot isolation, a rare race surfaces as a "record changed, retry" error. It never corrupts data.
+
+**D42. Engine-internal visit actions.**
+- `refer`, `start_consultation` and `complete_consultation` run only from the consultation and referral code (`api_only`). `apply_action` refuses them for every role.
+- `discharge` is a server-only event. Complete Consultation and Close Visit cover the user-facing cases.
+
+**D43. Visit comments and history.**
+- Status-log comments are at permlevel 2, readable by Triage Nurse, Clinical Officer, Mental Health Officer and Medical In-Charge. Triage keeps access because "Return to Triage" reasons are written for them.
+- Patient Visit has `track_changes` off, because Version diffs leaked comments to every reader. The status log is the audit trail (D8).
+- A Data Access Request correction therefore cannot target a Patient Visit. Visit corrections are logged engine actions; Phase 3 adds `annotate`.
+
+**D44. Read-access logging scope (FR-40, NFR-7).**
+- **What is logged:** every read of an `ACCESS_LOGGED_DOCTYPES` record, one entry per call:
+  - desk opens, the history panel, `frappe.client.get` / `get_value` / `get_list`, list and report views, link fetches, print preview and exports;
+  - REST and API v2 single and list GETs, through `after_request`.
+- **Not logged:** Administrator.
+- **Refused:** bulk Data Import export of clinical records, except for System Manager.
+- **Extracts:** Data Access Request extracts are never served as files, only through the logged `download_extract` (HIS, MIC). Other request attachments, such as authorisation scans, follow normal rules; the MIC has write on the request so it can attach them.

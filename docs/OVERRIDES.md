@@ -33,6 +33,9 @@ Server-side Python that imports the original directly is not affected.
 | `service_request.make_lab_test` | `lab.guards.make_lab_test` | Administrator only. | It leaked patient name, mobile and email with no permission check (M8). Legacy Lab Test is unused (D5). |
 | `service_request.make_clinical_procedure` | `lab.guards.make_clinical_procedure` | Administrator only. | Same leak (M8). Clinical procedures are not in scope. |
 | `service_request.make_appointment` | `lab.guards.make_appointment` | Requires read on the Service Request and always calls Marley with `ignore_permissions=False`. | Marley took `ignore_permissions` from the client (M8). |
+| `observation.set_observation_status` | `lab.guards.set_observation_status` | Accepts only Approved or Rejected. Requires submit or cancel permission on the Observation, locks the visit first, then delegates. | Panel approval submits several Observations. Without the visit lock first, it deadlocked with a single approval (M6, D41). |
+| `observation.approve_all_observations` | `lab.guards.approve_all_observations` | Requires write on the Diagnostic Report plus submit on Observation, locks the visit first, then delegates. | Same deadlock (M6). |
+| `observation.reject_all_observations` | `lab.guards.reject_all_observations` | Same checks with cancel, locks the visit first, then delegates. | Same deadlock (M6). |
 
 Paths are `healthcare.healthcare.doctype.<doctype>.<doctype>.<function>`.
 
@@ -45,6 +48,11 @@ Paths are `healthcare.healthcare.doctype.<doctype>.<doctype>.<function>`.
 | `frappe.desk.reportview.get` | `reportview_get` | Logs "List" with the filter names and row count, never values. | List and Report View could show clinical columns unlogged. |
 | `frappe.desk.reportview.export_query` | `reportview_export_query` | Logs "Export". | Exports were logged only by client JavaScript. |
 | `frappe.desk.query_report.export_query` | `query_report_export_query` | Logs "Export" for our reports and for reports on logged DocTypes. | A direct call skipped the log. |
+| `frappe.client.get_list` | `get_list` | Logs "List" (filter names and row count). | List reads of logged records (D44). REST `/api/resource/<doctype>` lists call the core function directly and are logged by `after_request` instead. |
+| `frappe.desk.reportview.get_list` | `reportview_get_list` | Logs "List". | Used by `frappe.db.get_list` in desk JS. |
+| `frappe.client.validate_link_and_fetch` | `validate_link_and_fetch` | Logs "Read (API)" when fields are fetched from a logged record. | It could pull clinical fields, for example from an encounter, without a log. |
+| `frappe.www.printview.get_html_and_style` | `get_html_and_style` | Logs "Print". | Print preview rendered records without a log. |
+| `frappe.core.doctype.data_import.data_import.download_template` | `download_template` | Refuses exporting **records** of a logged DocType unless the user is System Manager, whose export is logged. Blank templates are still allowed. | Bulk export of clinical records is not an EMR workflow (D44). |
 
 The wrappers keep the **exact upstream signatures, type annotations and decorators**, and log only
 after the original succeeds, so a refused call logs nothing.
@@ -98,7 +106,7 @@ Events on our own DocTypes live in their controllers and are not listed here.
 
 | Hook | DocType | Handler | What and why |
 |---|---|---|---|
-| `has_permission` | **File** (Frappe) | `privacy.permissions.file_has_permission` | Denies every user except Administrator access to files of a Data Access Request, and to the private extract it points at. Frappe would otherwise let anyone who can read the request download the full clinical-record extract (H1). The extract is served only by `privacy.extract.download_extract` (HIS Officer, Medical In-Charge; logged). |
+| `has_permission` | **File** (Frappe) | `privacy.permissions.file_has_permission` | Denies every user except Administrator access to the private record **extract** of a Data Access Request. Other request attachments, such as an authorisation scan, follow Frappe's normal rules. Frappe would otherwise let anyone who can read the request download the full clinical-record extract (H1). The extract is served only by `privacy.extract.download_extract` (HIS Officer, Medical In-Charge; logged). |
 | `has_permission`, `permission_query_conditions` | **Patient Encounter** (Marley) | `clinical.permissions.encounter_*` | Refuses `cancel` and `amend` before Marley's `before_cancel` runs (D29). Mental Health visibility is a pass-through until OI-7. |
 | `has_permission`, `permission_query_conditions` | Patient Visit, Access Log Entry (ours) | `visit.permissions.*`, `privacy.permissions.*` | Listed for completeness. These are our own DocTypes. |
 
@@ -108,7 +116,7 @@ Events on our own DocTypes live in their controllers and are not listed here.
 
 | Hook | Handler | What and why |
 |---|---|---|
-| `after_request` | `privacy.read_log.after_request` | Logs successful `GET /api/resource/<logged doctype>/<name>` and `/api/v2/document/...` reads as "Open (API)" (M4). It runs **after** the request because API-key and token users are only identified once `validate_auth` has run, which happens after `before_request`. |
+| `after_request` | `privacy.read_log.after_request` | Logs successful REST and API v2 reads of logged records: single records as "Open (API)", lists as "List", one entry per request (M4, D44). It runs **after** the request because API-key and token users are only identified once `validate_auth` has run, which happens after `before_request`. |
 | `boot_session` | `boot.boot_session` | Narrows each Marley sidebar's `workspaces` list to the workspaces it links to. All eight Marley sidebars share one module, so the desk opened the Healthcare page under the Diagnostics sidebar (D26). Only the boot payload changes; nothing is stored. |
 | `scheduler_events` (every 10 minutes) | `visit.tasks.reconcile_open_tasks` | Catches lab or pharmacy completion events that a race or a skipped event missed (D36). |
 | `company_data_to_be_ignored` | `CLINICAL_DOCTYPES` | ERPNext's "Delete Company Transactions" skips these DocTypes (NFR-9, D17). |
@@ -209,8 +217,10 @@ After upgrading Frappe or Marley, on the test site:
    - `test_sidebar`, `test_boot` (navigation)
    - `test_http_methods` (JavaScript ↔ server HTTP verbs)
 2. **Compare the signatures** of every overridden Frappe function in section 1 (`frappe.client.get`,
-   `get_value`, `reportview.get`, `reportview.export_query`, `query_report.export_query`,
-   `make_access_log`) with our wrappers in `privacy/read_log.py` and `privacy/access_log.py`. Copy any
+   `get_value`, `get_list`, `validate_link_and_fetch`, `reportview.get`, `reportview.get_list`,
+   `reportview.export_query`, `query_report.export_query`, `printview.get_html_and_style`,
+   `data_import.download_template`, `make_access_log`) and Marley's `observation.set_observation_status`,
+   `approve_all_observations` and `reject_all_observations` with our wrappers in `privacy/read_log.py` and `privacy/access_log.py`. Copy any
    new parameter or decorator.
 3. **List Marley's new `@frappe.whitelist` functions** on Patient Encounter, Service Request, Medication
    Request, Sample Collection and Observation. Any new function that inserts or submits with
