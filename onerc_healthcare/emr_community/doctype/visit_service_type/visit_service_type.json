@@ -11,6 +11,7 @@
   "column_break_main",
   "moh_line",
   "enabled",
+  "sensitive",
   "notes_section",
   "description",
   "note"
@@ -54,6 +55,14 @@
    "in_standard_filter": 1
   },
   {
+   "fieldname": "sensitive",
+   "fieldtype": "Check",
+   "label": "Sensitive",
+   "default": "0",
+   "in_list_view": 1,
+   "description": "Mental health, alcohol and drug or similar services: every read of these records is flagged sensitive in the access log (SDD §6.2)."
+  },
+  {
    "fieldname": "notes_section",
    "fieldtype": "Section Break"
   },
@@ -73,7 +82,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-14 12:00:00.000000",
+ "modified": "2026-11-14 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Community",
  "name": "Visit Service Type",

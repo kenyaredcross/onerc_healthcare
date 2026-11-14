@@ -13,6 +13,7 @@ raised only through `visit.tasks.raise_event`, which never fails a lab record be
 
 | Event | Condition | Effect |
 |---|---|---|
+| Observation before submit | ``time_of_approval`` empty | stamped with the submit time (the approval), see `stamp_approval_time` |
 | Observation submit | its request becomes done | "Lab result ready" notification to the clinician (FR-17) |
 | Observation submit | the encounter's lab task becomes complete | ``lab_results_ready`` |
 | Observation cancel (rejection) | its request was done and no longer is; visit open, ``lab_open == 0`` | ``request_lab`` with "Result ... rejected; repeat pending" |
@@ -30,6 +31,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.query_builder import DocType
+from frappe.utils import now_datetime
 
 from onerc_healthcare.constants import ENCOUNTER_DOCTYPE, VISIT_DOCTYPE, VISIT_OPEN_STATUSES
 from onerc_healthcare.lab import notify
@@ -142,6 +144,18 @@ def visit_for_sample_collection(doc) -> str | None:
 
 def observation_before_submit(doc, method=None) -> None:
 	lock_observation_visit(doc)
+	stamp_approval_time(doc)
+
+
+def stamp_approval_time(doc) -> None:
+	"""Record when the result was approved (submitted), for MOH lab counts (R4 review L1).
+
+	Marley's ``validate`` fills ``time_of_approval`` only for status "Final" and clears it otherwise; KRCS
+	approves with "Approved", so it stayed empty and reports fell back to ``modified``, which later writes
+	(``add_note``) move. Frappe runs ``validate`` before ``before_submit`` and never after submit, so the
+	value set here is written by the submit itself and Marley never clears it."""
+	if not doc.get("time_of_approval"):
+		doc.time_of_approval = now_datetime()
 
 
 def observation_before_cancel(doc, method=None) -> None:

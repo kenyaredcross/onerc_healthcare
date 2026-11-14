@@ -11,7 +11,12 @@ from onerc_healthcare.community import activities
 
 class CommunityActivityRecord(Document):
 	def validate(self):
+		activities.validate_amendment(self)
+		activities.guard_archive(self)
 		activities.validate(self)
+
+	def before_update_after_submit(self):
+		activities.guard_archive(self)
 
 	def before_cancel(self):
 		activities.before_cancel(self)

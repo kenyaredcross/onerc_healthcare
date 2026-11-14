@@ -519,10 +519,10 @@ class TestRunLifecycle(ReportingTestCase):
 		with as_user(self.his):
 			doc = frappe.get_doc(MOH_RUN_DOCTYPE, name)
 			doc.narrative = "T- changed after submission"
-			self.assertRaises(LockedFieldError, doc.save)
+			self.assertRaises((LockedFieldError, frappe.PermissionError), doc.save)  # M2 hook
 			doc = frappe.get_doc(MOH_RUN_DOCTYPE, name)
 			doc.status = "Generated"
-			self.assertRaises(LockedFieldError, doc.save)
+			self.assertRaises((LockedFieldError, frappe.PermissionError), doc.save)  # M2 hook
 
 	def test_protected_fields_and_log_while_generated(self):
 		doc = self.generated_run()
@@ -804,3 +804,172 @@ class TestAPI(ReportingTestCase):
 			self.assertIn(fn, frappe.whitelisted)
 			self.assertEqual(frappe.allowed_http_methods_for_whitelisted_func[fn], ["GET"])
 		self.assertEqual(frappe.allowed_http_methods_for_whitelisted_func[run_module.apply_action], ["POST"])
+
+
+GUARD_HOOKS = {
+	"has_permission": "onerc_healthcare.reporting.permissions.run_has_permission",
+	"before_insert": "onerc_healthcare.reporting.permissions.file_before_insert",
+	"on_trash": "onerc_healthcare.reporting.permissions.file_on_trash",
+}
+
+
+@contextmanager
+def run_guard_hooks():
+	"""The integrator wires these in hooks.py; add them here if they are not wired (yet)."""
+	real_get_hooks, real_doc_hooks = frappe.get_hooks, frappe.get_doc_hooks
+
+	def get_hooks(hook=None, default="_KEEP_DEFAULT_LIST", app_name=None):
+		result = real_get_hooks(hook, default, app_name)
+		if hook == "has_permission":
+			result = dict(result)
+			current = list(result.get(MOH_RUN_DOCTYPE, []))
+			if GUARD_HOOKS["has_permission"] not in current:
+				current.append(GUARD_HOOKS["has_permission"])
+			result[MOH_RUN_DOCTYPE] = current
+		return result
+
+	def get_doc_hooks():
+		hooks = dict(real_doc_hooks())
+		file_hooks = {k: list(v) for k, v in hooks.get("File", {}).items()}
+		for event in ("before_insert", "on_trash"):
+			if GUARD_HOOKS[event] not in file_hooks.setdefault(event, []):
+				file_hooks[event].append(GUARD_HOOKS[event])
+		hooks["File"] = file_hooks
+		return hooks
+
+	with patch("frappe.get_hooks", get_hooks), patch("frappe.get_doc_hooks", get_doc_hooks):
+		yield
+
+
+def attach_text(run: str, name: str = "t-note.txt"):
+	return frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": name,
+			"attached_to_doctype": MOH_RUN_DOCTYPE,
+			"attached_to_name": run,
+			"is_private": 1,
+			"content": b"T- attachment",
+		}
+	).insert()
+
+
+class TestReviewFixes(ReportingTestCase):
+	def test_root_unit_is_not_a_facility(self):
+		"""M1: a run on a group above facility level would count no visits."""
+		root = frappe.db.get_value(
+			"Healthcare Service Unit",
+			{"is_group": 1, "parent_healthcare_service_unit": ["in", ["", None]]},
+			"name",
+		)
+		self.assertTrue(root)
+		with self.assertRaises(frappe.ValidationError):
+			self.new_run(facility=root)
+
+	def test_frozen_run_keeps_its_files(self):
+		"""M2: no attaching to, or removing files from, a Submitted run; a Generated run accepts files."""
+		from frappe.desk.form.utils import remove_attach
+
+		doc = self.generated_run()
+		with run_guard_hooks(), as_user(self.his):
+			self.assertTrue(frappe.has_permission(MOH_RUN_DOCTYPE, "write", doc.name))
+			note = attach_text(doc.name)  # Generated: allowed
+			self.assertEqual(note.attached_to_name, doc.name)
+		self.act(doc.name, "submit_run")
+		pdf = frappe.db.get_value("File", {"file_url": doc.pdf_file, "attached_to_name": doc.name}, "name")
+		with run_guard_hooks(), as_user(self.his):
+			self.assertTrue(frappe.has_permission(MOH_RUN_DOCTYPE, "read", doc.name))
+			self.assertFalse(frappe.has_permission(MOH_RUN_DOCTYPE, "write", doc.name))
+			with self.assertRaises(frappe.PermissionError):
+				attach_text(doc.name, "t-late.txt")
+			frappe.local.form_dict = frappe._dict(fid=pdf)
+			with self.assertRaises(frappe.PermissionError):
+				remove_attach()
+			with self.assertRaises(frappe.PermissionError):
+				frappe.client.delete("File", note.name)
+			with self.assertRaises(frappe.PermissionError):
+				frappe.delete_doc("File", pdf)
+		with run_guard_hooks():  # not even Administrator
+			with self.assertRaises(frappe.PermissionError):
+				frappe.delete_doc("File", pdf, ignore_permissions=True)
+		self.assertTrue(frappe.db.exists("File", pdf))
+		self.assertTrue(frappe.db.exists("File", note.name))
+
+	def test_exception_rows_hidden_from_head_of_operations(self):
+		"""M5: child columns of the exceptions table through get_list and report view."""
+		from frappe.desk import reportview
+
+		doc = self.generated_run()
+		column = "`tabMOH Report Run Exception`.reference_name"
+		with as_user(self.mic):
+			rows = frappe.get_list(MOH_RUN_DOCTYPE, filters={"name": doc.name}, fields=["name", column])
+			self.assertIn("T-PV-0001", [r.get("reference_name") for r in rows])
+		with as_user(self.head_ops):
+			rows = frappe.get_list(MOH_RUN_DOCTYPE, filters={"name": doc.name}, fields=["name", column])
+			self.assertNotIn("T-PV-0001", json.dumps(rows, default=str))
+			frappe.local.form_dict = frappe._dict(
+				doctype=MOH_RUN_DOCTYPE,
+				fields=json.dumps(["`tabMOH Report Run`.`name`", column]),
+				filters=json.dumps([[MOH_RUN_DOCTYPE, "name", "=", doc.name]]),
+			)
+			try:
+				out = reportview.get()
+			except frappe.PermissionError:
+				out = None
+			self.assertNotIn("T-PV-0001", json.dumps(out, default=str))
+
+	def test_blocked_report_hides_generate_and_revise(self):
+		"""DEFECT-P3-1."""
+		draft = self.new_run().name
+		submitted = self.generated_run(facility=get_facility(1)).name
+		self.act(submitted, "submit_run")
+		frappe.db.set_value(MOH_REPORT_DOCTYPE, "T-MOH TEST", {"status": "Blocked", "blocked_reason": "T-"})
+		actions = lambda n: [  # noqa: E731
+			a["action"]
+			for a in run_module.get_available_actions(frappe.get_doc(MOH_RUN_DOCTYPE, n), self.his)
+		]
+		self.assertEqual(actions(draft), ["void"])
+		self.assertEqual(actions(submitted), [])
+
+	def test_frozen_run_freezes_every_field(self):
+		"""DEFECT-P3-9 / L5."""
+		name = self.new_run().name
+		self.act(name, "void", reason="T-")
+		before = frappe.db.get_value(
+			MOH_RUN_DOCTYPE, name, ["compiled_by_name", "report_title"], as_dict=True
+		)
+		with as_user(self.his):
+			doc = frappe.get_doc(MOH_RUN_DOCTYPE, name)
+			doc.compiled_by_name = "T- forged"
+			self.assertRaises((LockedFieldError, frappe.PermissionError), doc.save)  # M2 hook
+			doc = frappe.get_doc(MOH_RUN_DOCTYPE, name)
+			doc.report_title = "T- forged"
+			try:
+				doc.save()  # Frappe re-fetches the title from the report, so nothing changes
+			except (frappe.ValidationError, frappe.PermissionError):  # PermissionError: M2 hook
+				pass
+		after = frappe.db.get_value(MOH_RUN_DOCTYPE, name, ["compiled_by_name", "report_title"], as_dict=True)
+		self.assertEqual(after, before)
+
+	def test_pdf_photos_only_from_the_run(self):
+		"""L6: a photo field pointing at another record's file is left out, with a note."""
+		from onerc_healthcare.reporting.export_pdf import photo_sources, render_html
+
+		doc = self.generated_run()
+		foreign = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": "t-foreign.png",
+				"attached_to_doctype": MOH_REPORT_DOCTYPE,
+				"attached_to_name": "T-MOH TEST",
+				"is_private": 1,
+				"content": b"\x89PNG T- not a run photo",
+			}
+		).insert()
+		own = attach_text(doc.name, "t-photo.png")
+		doc.photo_1, doc.photo_2 = foreign.file_url, own.file_url
+		sources, skipped = photo_sources(doc, embed=True)
+		self.assertEqual(skipped, 1)
+		self.assertEqual(len(sources), 1)
+		self.assertTrue(sources[0].startswith("data:image/png;base64,"))
+		self.assertIn("not attached to this run", render_html(doc))

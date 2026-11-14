@@ -80,11 +80,14 @@
 	<h2>{{ _("Narrative") }}</h2>
 	<div class="narrative">{{ ctx.narrative|e }}</div>
 	{%- endif %}
-	{%- if photos %}
+	{%- if photos or photos_skipped %}
 	<h2>{{ _("Photographs") }}</h2>
 	<div class="photos">
 		{%- for src in photos %}<img src="{{ src|e }}">{% endfor %}
 	</div>
+	{%- if photos_skipped %}
+	<div class="banner-note">{{ _("{0} photograph(s) not shown: the file is not attached to this run.").format(photos_skipped) }}</div>
+	{%- endif %}
 	{%- endif %}
 
 	<h2>{{ _("Compiled by") }}</h2>

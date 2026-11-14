@@ -425,7 +425,9 @@ class TestAttendanceCorrections(EMRTestCase):
 			("correct_attendance", "Registered", "Registered"),
 		)
 		self.assertIn("T- seen in March on paper", last.comment)
-		self.assertEqual(doc.attendance_note, "T- seen in March on paper")
+		# L9: the permlevel 1 note is neutral; the reason is only in the (permlevel 2) status log.
+		self.assertNotIn("T- seen in March on paper", doc.attendance_note)
+		self.assertIn(ATTENDANCE_BASIS_RECEPTION, doc.attendance_note)
 
 	def test_reception_refused_after_registered(self):
 		v = make_visit()
@@ -696,3 +698,151 @@ class TestOutcomeBackfill(EMRTestCase):
 		self.legacy(v)
 		backfill_visit_outcome.execute()
 		self.assertEqual(visit_row(v, "outcome").outcome, OUTCOME_LEFT)
+
+
+# --------------------------------------------------------------------------- fix round (M4, L7, L10)
+
+
+class TestAttendanceAfterMerge(EMRTestCase):
+	def test_merge_recomputes_rule_attendance(self):
+		"""M4: P1 (New) and duplicate P2 (New) at the same facility this year; after merging P2 into P1
+		only P1's first visit stays New. An HIS override on P2 is kept and listed for review."""
+		from onerc_healthcare.registration.merge import merge_patients
+
+		v1 = make_visit()
+		close(v1.name)
+		v2 = make_visit()  # duplicate record of the same person, registered later
+		close(v2.name)
+		v3 = make_visit(patient=v2.patient)
+		close(v3.name)
+		self.assertEqual((v1.attendance_type, v2.attendance_type), (ATTENDANCE_NEW, ATTENDANCE_NEW))
+		engine.annotate(
+			v3.name,
+			"correct_attendance",
+			"T- HIS",
+			{"attendance_type": ATTENDANCE_NEW, "attendance_basis": ATTENDANCE_BASIS_HIS},
+		)
+		out = merge_patients(v2.patient, v1.patient, "T- same person")
+
+		self.assertEqual(visit_row(v1.name, "attendance_type").attendance_type, ATTENDANCE_NEW)
+		row = visit_row(v2.name, "attendance_type", "attendance_basis", "attendance_note")
+		self.assertEqual(
+			(row.attendance_type, row.attendance_basis), (ATTENDANCE_REVISIT, ATTENDANCE_BASIS_RULE)
+		)
+		self.assertIn(f"merge of {v2.patient} into {v1.patient}", row.attendance_note)
+		last = frappe.get_doc(VISIT_DOCTYPE, v2.name).status_log[-1]
+		self.assertEqual(last.action, "correct_attendance")
+		self.assertEqual(visit_row(v3.name, "attendance_basis").attendance_basis, ATTENDANCE_BASIS_HIS)
+		self.assertEqual(
+			out["attendance_recomputed"],
+			[{"visit": v2.name, "from": ATTENDANCE_NEW, "to": ATTENDANCE_REVISIT}],
+		)
+		self.assertEqual([o["visit"] for o in out["attendance_overrides"]], [v3.name])
+		log = frappe.parse_json(frappe.db.get_value("Patient", v2.patient, "krcs_merge_log"))
+		self.assertEqual([o["visit"] for o in log["attendance_overrides"]], [v3.name])
+
+	def test_rule_attendance_oracle(self):
+		"""Hand-built history: excluded closures never count as the earlier visit; a new year restarts."""
+		d = frappe._dict
+		visits = [
+			d(
+				name="a",
+				patient="P",
+				facility="F",
+				visit_date="2025-12-30",
+				closure_reason=None,
+				referred_from=None,
+			),
+			d(
+				name="b",
+				patient="P",
+				facility="F",
+				visit_date="2026-01-02",
+				closure_reason="Registered in error",
+				referred_from=None,
+			),
+			d(
+				name="c",
+				patient="P",
+				facility="F",
+				visit_date="2026-01-03",
+				closure_reason=None,
+				referred_from=None,
+			),
+			d(
+				name="d",
+				patient="P",
+				facility="G",
+				visit_date="2026-01-04",
+				closure_reason=None,
+				referred_from=None,
+			),
+			d(
+				name="e",
+				patient="P",
+				facility="F",
+				visit_date="2026-02-01",
+				closure_reason=None,
+				referred_from=None,
+			),
+			d(
+				name="f",
+				patient="P",
+				facility="G",
+				visit_date="2026-02-02",
+				closure_reason=None,
+				referred_from="REF-1",
+			),
+		]
+		self.assertEqual(
+			attendance.rule_attendance(visits),
+			{
+				"a": ATTENDANCE_NEW,
+				"b": ATTENDANCE_NEW,
+				"c": ATTENDANCE_NEW,  # b was registered in error
+				"d": ATTENDANCE_NEW,
+				"e": ATTENDANCE_REVISIT,
+				"f": ATTENDANCE_REVISIT,
+			},
+		)
+
+
+class TestAttendanceBackfill(EMRTestCase):
+	def test_backfill_attendance(self):
+		from onerc_healthcare.patches import backfill_visit_attendance
+
+		v1 = make_visit()
+		close(v1.name)
+		v2 = make_visit(patient=v1.patient)
+		close(v2.name)
+		kept = make_visit()
+		for v in (v1.name, v2.name):
+			frappe.db.set_value(
+				VISIT_DOCTYPE,
+				v,
+				{"attendance_type": None, "attendance_basis": None, "attendance_note": None},
+				update_modified=False,
+			)
+		frappe.db.set_value(VISIT_DOCTYPE, kept.name, "attendance_type", ATTENDANCE_REVISIT)
+		backfill_visit_attendance.execute()
+		self.assertEqual(visit_row(v1.name, "attendance_type").attendance_type, ATTENDANCE_NEW)
+		row = visit_row(v2.name, "attendance_type", "attendance_basis")
+		self.assertEqual(
+			(row.attendance_type, row.attendance_basis), (ATTENDANCE_REVISIT, ATTENDANCE_BASIS_RULE)
+		)
+		self.assertEqual(visit_row(kept.name, "attendance_type").attendance_type, ATTENDANCE_REVISIT)
+		self.assertEqual(attendance.backfill_attendance()["updated"], 0)  # idempotent
+
+
+class TestOutcomeChoicesPermlevel(EMRTestCase):
+	def test_current_outcome_hidden_from_status_only_readers(self):
+		"""L7: the recorded outcome (permlevel 1) is not returned to the Head of Operations."""
+		u = users()
+		v = make_visit().name
+		close(v, "Other", outcome=OUTCOME_ADMITTED)
+		with as_user(u["hoo"]):
+			self.assertIsNone(outcome.get_outcome_choices(v, "close_visit", "Other")["current"])
+		with as_user(u["his"]):
+			self.assertEqual(
+				outcome.get_outcome_choices(v, "close_visit", "Other")["current"], OUTCOME_ADMITTED
+			)

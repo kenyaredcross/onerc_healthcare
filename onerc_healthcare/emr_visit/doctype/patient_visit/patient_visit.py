@@ -58,18 +58,17 @@ class OpenVisitExistsError(frappe.ValidationError):
 	"""The patient already has an open visit (any date)."""
 
 
-def find_open_visit(patient: str, exclude: str | None = None):
-	"""The patient's open visit (any date), as a dict with name, status and visit_date, or None."""
-	rows = frappe.get_all(
-		VISIT_DOCTYPE,
-		filters={
-			"patient": patient,
-			"status": ["not in", list(VISIT_CLOSED_STATUSES)],
-			"name": ["!=", exclude or ""],
-		},
-		fields=["name", "status", "visit_date"],
-		order_by="creation asc",
-		limit=1,
+def find_open_visit(patient: str, exclude: str | None = None, for_update: bool = False):
+	"""The patient's open visit (any date), as a dict with name, status and visit_date, or None.
+
+	`for_update`: a locking read (registration, after the Patient lock), so a visit committed by another
+	receptionist meanwhile is seen (review L2; D41: every read after a lock is a locking read)."""
+	rows = frappe.db.sql(
+		f"""SELECT name, status, visit_date FROM `tab{VISIT_DOCTYPE}`
+		WHERE patient = %(patient)s AND status NOT IN %(closed)s AND name != %(exclude)s
+		ORDER BY creation ASC LIMIT 1{" FOR UPDATE" if for_update else ""}""",
+		{"patient": patient, "closed": list(VISIT_CLOSED_STATUSES), "exclude": exclude or ""},
+		as_dict=True,
 	)
 	return rows[0] if rows else None
 
@@ -236,7 +235,7 @@ class PatientVisit(Document):
 		Patient row lock so two receptionists cannot both register the patient."""
 		lock_patient(self.patient)
 		assert_patient_active(self.patient)
-		existing = find_open_visit(self.patient, exclude=self.name)
+		existing = find_open_visit(self.patient, exclude=self.name, for_update=True)
 		if existing:
 			frappe.throw(
 				_(

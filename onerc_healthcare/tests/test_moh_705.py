@@ -260,6 +260,16 @@ class TestCountingRule(Counting):
 		self.observation(p, other, rdt, "Positive - P. falciparum")
 		self.assertCounts({"B-Confirmed Malaria": 2, "B-Clinical Malaria": 3})
 
+	def test_positive_test_on_referring_encounter_confirms(self):
+		"""Review L4. Adult: OPD encounter A orders an RDT, approved Positive, and refers internally with no
+		New diagnosis; encounter B (the referral visit) diagnoses 1F40.Z with no test of its own.
+		One episode, positive result in it: 705B Confirmed Malaria 1, Clinical Malaria 0."""
+		p = self.patient()
+		a = self.encounter(p, self.visit(p), [("MG26", "Follow-up")])
+		self.observation(p, a, "Malaria Rapid Diagnostic Test", "Positive - P. falciparum", via_request=True)
+		self.encounter(p, self.refer(a, p), [("1F40.Z", "New")])
+		self.assertCounts({"B-Confirmed Malaria": 1})
+
 	def test_group_priority_in_one_encounter_and_across_referral(self):
 		"""Adult A: NA02.0 (skull fracture: Other Injuries) + PA00 (pedestrian road traffic event) ->
 		Road Traffic Injuries 1, Other Injuries 0.

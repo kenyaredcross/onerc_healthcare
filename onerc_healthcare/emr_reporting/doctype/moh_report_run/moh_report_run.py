@@ -12,6 +12,7 @@ rebuilds its XLSX and PDF from the stored snapshot.
 
 import frappe
 from frappe import _
+from frappe.model import no_value_fields, table_fields
 from frappe.model.document import Document
 from frappe.utils import cint, cstr, get_datetime, getdate
 
@@ -85,11 +86,18 @@ class MOHReportRun(Document):
 		self.period_type = self.period_type or report.period_type
 		validate_period(self.from_date, self.to_date, self.period_type)
 		row = frappe.db.get_value(
-			"Healthcare Service Unit", self.facility, ["is_group", "company"], as_dict=True
+			"Healthcare Service Unit",
+			self.facility,
+			["is_group", "parent_healthcare_service_unit", "company"],
+			as_dict=True,
 		)
-		if not row or not row.is_group:
+		# Same rule as Patient Visit: a facility is a group with a parent. Visits never sit on the root
+		# ("All Healthcare Service Units"), so a run there would count no visits (review M1).
+		if not row or not row.is_group or not row.parent_healthcare_service_unit:
 			frappe.throw(
-				_("Choose a facility (a Healthcare Service Unit group), not {0}.").format(self.facility),
+				_("Choose a facility (a Healthcare Service Unit group below the root), not {0}.").format(
+					self.facility
+				),
 				frappe.ValidationError,
 			)
 		self.company = row.company
@@ -103,7 +111,16 @@ class MOHReportRun(Document):
 				changed.append("exceptions")
 		changed += [f for f in PARAMETER_FIELDS if _norm(self, f) != _norm(before, f)]
 		if before.status in FROZEN_STATUSES and not from_workflow:
-			changed += [f for f in EDITABLE_FIELDS if _norm(self, f) != _norm(before, f)]
+			# Frozen: every value field, not a list (DEFECT-P3-9: compiled_by_name, report_title,
+			# naming_series were editable).
+			changed += [
+				df.fieldname
+				for df in self.meta.fields
+				if df.fieldtype not in no_value_fields
+				and df.fieldtype not in table_fields
+				and df.fieldname not in changed
+				and _norm(self, df.fieldname) != _norm(before, df.fieldname)
+			]
 		if changed:
 			frappe.throw(
 				_("{0} cannot be changed on {1} ({2}).").format(

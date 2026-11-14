@@ -6,3 +6,5 @@
 # Patches added in this section will be executed after doctypes are migrated
 onerc_healthcare.patches.backfill_visit_outcome
 onerc_healthcare.patches.icd11_block_backfill
+onerc_healthcare.patches.backfill_observation_approval_time
+onerc_healthcare.patches.backfill_visit_attendance

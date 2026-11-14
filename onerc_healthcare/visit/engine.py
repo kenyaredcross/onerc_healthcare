@@ -493,8 +493,10 @@ def resolve_outcome(
 	- ``complete_consultation``: Discharged home (default), Admitted or Died.
 	- ``refer``: Referred out (default) or Referred internally (the referral code passes it).
 	- ``close_visit``: implied by the closure reason (`CLOSURE_OUTCOMES`); for "Other" the user may choose
-	  from `CLOSE_OTHER_OUTCOMES`. An outcome already recorded by Complete Consultation is kept, except
-	  that "Died" always replaces it.
+	  from `CLOSE_OTHER_OUTCOMES`. An outcome already recorded by Complete Consultation is kept: a different
+	  outcome passed with the close is refused, and only the "Died" reason (a clinical role) replaces it
+	  (DEFECT-P3-2 / review M3: Close Visit must not erase a recorded death or admission). Corrections of a
+	  recorded outcome go through `annotate`.
 	- ``discharge`` (server only): Discharged home.
 	"""
 	outcome = (outcome or "").strip() or None
@@ -508,7 +510,16 @@ def resolve_outcome(
 		implied = CLOSURE_OUTCOMES.get(closure_reason)
 		allowed = (implied,) if implied else CLOSE_OTHER_OUTCOMES
 		default = implied or OUTCOME_NOT_APPLICABLE
-		if doc.get("outcome") and not outcome and default != OUTCOME_DIED:
+		recorded = doc.get("outcome")
+		if recorded and default != OUTCOME_DIED:
+			if outcome and outcome != recorded:
+				frappe.throw(
+					_(
+						"The consultation already recorded the outcome {0}; closing the visit keeps it."
+					).format(frappe.bold(_(recorded))),
+					VisitOutcomeError,
+					title=_("Outcome Already Recorded"),
+				)
 			return None  # keep the outcome recorded by Complete Consultation
 	else:
 		if outcome:
@@ -549,6 +560,8 @@ def outcome_choices(
 		choices = REFER_OUTCOMES
 	elif action == ACTION_CLOSE_VISIT:
 		implied = CLOSURE_OUTCOMES.get(closure_reason)
+		if doc.get("outcome") and implied != OUTCOME_DIED:
+			return [doc.outcome]  # the consultation's outcome is kept
 		choices = (implied,) if implied else CLOSE_OTHER_OUTCOMES
 	else:
 		return []

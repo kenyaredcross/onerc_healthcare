@@ -23,8 +23,6 @@ PROTECTED_FIELDS = (
 	"voided_at",
 )
 EDITABLE_FIELDS = ("service_type", "service_date", "notes")
-# Security setup's archive flag (NFR-9) may change on any record.
-ARCHIVE_FIELDS = ("krcs_archived",)
 
 
 class ServiceDeliveredLockedError(frappe.ValidationError):
@@ -39,6 +37,11 @@ class ServiceDelivered(Document):
 		before = self.get_doc_before_save()
 		if not before or self.flags.from_workflow:
 			return
+		if _norm(self, services.ARCHIVED_FIELD, self.get(services.ARCHIVED_FIELD)) != _norm(
+			self, services.ARCHIVED_FIELD, before.get(services.ARCHIVED_FIELD)
+		):
+			# M6: archiving removes the service from MOH 711 / 717; only `set_service_archived` (with a reason).
+			self._locked(_("Archive a service record with its Archive action, giving a reason."))
 		changed = [
 			f for f in PROTECTED_FIELDS if _norm(self, f, self.get(f)) != _norm(self, f, before.get(f))
 		]

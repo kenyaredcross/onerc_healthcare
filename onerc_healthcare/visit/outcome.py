@@ -28,6 +28,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+from onerc_healthcare.community.services import services_allowed_on
 from onerc_healthcare.constants import (
 	OUTCOME_DIED,
 	OUTCOME_DISCHARGED,
@@ -72,7 +73,9 @@ def get_outcome_choices(visit: str, action: str, closure_reason: str | None = No
 		default = implied or (None if keeps else OUTCOME_NOT_APPLICABLE)
 	else:
 		default = choices[0] if choices else None
-	return {"choices": choices, "default": default, "current": doc.get("outcome"), "keeps_current": keeps}
+	# The outcome is a permlevel 1 field: not shown to status-only readers such as the Head of Operations (L7).
+	current = doc.get("outcome") if 1 in doc.meta.get_permlevel_access("read") else None
+	return {"choices": choices, "default": default, "current": current, "keeps_current": keeps}
 
 
 @frappe.whitelist(methods=["GET"])
@@ -86,7 +89,9 @@ def get_visit_capture(visit: str) -> dict:
 		"can_correct_attendance": attendance.can_correct(attendance.ACTION_CORRECT_ATTENDANCE, doc.status),
 		"can_correct_referred_in": attendance.can_correct(attendance.ACTION_CORRECT_REFERRED_IN, doc.status),
 		"can_view_services": is_admin or bool(roles & set(SERVICE_ROLES)),
-		"can_record_services": is_admin or bool(roles & set(SERVICE_CREATE_ROLES)),
+		# Not on visits closed as Registered in error / Superseded: the insert refuses them (DEFECT-P3-4).
+		"can_record_services": (is_admin or bool(roles & set(SERVICE_CREATE_ROLES)))
+		and services_allowed_on(doc.get("closure_reason")),
 	}
 
 

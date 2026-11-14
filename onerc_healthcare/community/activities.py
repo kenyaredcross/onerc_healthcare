@@ -13,6 +13,12 @@ the same matrix; `if_owner` limits the authors to their own records):
 | cancel (`cancel_activity`, POST) | Submitted | Cancelled | Medical In-Charge | reason required; sets cancel_reason, cancelled_by, cancelled_at |
 | amend | Cancelled | new Draft | the author (own) or Medical In-Charge | standard amend |
 
+The cancel fields are not allow-on-submit: `before_cancel` requires the reason and always sets
+`cancelled_by` / `cancelled_at`, so a plain desk or API cancel without a reason is refused and the
+audit fields cannot be forged on a Submitted record (DEFECT-P3-6). An amendment is made only by the
+original's author or the Medical In-Charge (DEFECT-P3-5). `krcs_archived` (NFR-9) is changed only by the
+Medical In-Charge (M6).
+
 `validate`: participants_total ≥ participants_male + participants_female (filled from them when 0, and
 at least 1), no negative counts, the date not in the future, the facility a facility group, the activity
 type enabled. The HIS Officer reads all records. Nobody deletes (NFR-9).
@@ -38,6 +44,7 @@ from onerc_healthcare.constants import (
 DRAFT, SUBMITTED, CANCELLED = 0, 1, 2
 AUTHOR_ROLES = (ROLE_CLINICIAN, ROLE_MHO, ROLE_OUTREACH)
 REASON_MAX_LENGTH = 1000
+ARCHIVED_FIELD = "krcs_archived"
 
 
 class CommunityActivityError(frappe.ValidationError):
@@ -117,14 +124,56 @@ def validate_facility(facility: str | None) -> None:
 		)
 
 
+def _is_mic(user: str | None = None) -> bool:
+	user = user or frappe.session.user
+	return user == "Administrator" or ROLE_MIC in frappe.get_roles(user)
+
+
+def validate_amendment(doc) -> None:
+	"""DEFECT-P3-5: an amendment is made by the original's author or the Medical In-Charge. Frappe checks
+	only `create` on the new record (owned by the amending user), so `if_owner` never applies there."""
+	if not doc.is_new() or not doc.get("amended_from") or _is_mic():
+		return
+	owner = frappe.db.get_value(COMMUNITY_ACTIVITY_DOCTYPE, doc.amended_from, "owner")
+	if owner != frappe.session.user:
+		frappe.throw(
+			_("Only the author of {0} or the {1} can amend it.").format(doc.amended_from, _(ROLE_MIC)),
+			frappe.PermissionError,
+		)
+
+
+def guard_archive(doc) -> None:
+	"""M6: `krcs_archived` (allow on submit) drops a record from the MOH counts: Medical In-Charge only."""
+	if not doc.meta.has_field(ARCHIVED_FIELD) or _is_mic():
+		return
+	before = None if doc.is_new() else doc.get_doc_before_save()
+	old = cint(before.get(ARCHIVED_FIELD)) if before else 0
+	if cint(doc.get(ARCHIVED_FIELD)) != old:
+		frappe.throw(
+			_("Only the {0} can archive a community activity record.").format(_(ROLE_MIC)),
+			frappe.PermissionError,
+		)
+
+
 def before_cancel(doc) -> None:
-	"""Cancel only through `cancel_activity`, which records the reason first."""
-	if not (doc.cancel_reason or "").strip():
+	"""A reason is required (DEFECT-P3-6). `cancel_activity` sets it; any other cancel (desk, API) must
+	carry one too. Who and when are always set here, so they cannot be forged."""
+	doc.cancel_reason = (doc.cancel_reason or "").strip() or None
+	if not doc.cancel_reason:
 		frappe.throw(
 			_("Give a reason to cancel {0}: use the Cancel button on the form.").format(doc.name),
 			CommunityActivityError,
 			title=_("Reason Required"),
 		)
+	if len(doc.cancel_reason) > REASON_MAX_LENGTH:
+		frappe.throw(
+			_("The reason is {0} characters long; the limit is {1}.").format(
+				len(doc.cancel_reason), REASON_MAX_LENGTH
+			),
+			CommunityActivityError,
+		)
+	doc.cancelled_by = frappe.session.user
+	doc.cancelled_at = now_datetime()
 
 
 @frappe.whitelist(methods=["POST"])
@@ -142,8 +191,6 @@ def cancel_activity(name: str, reason: str) -> dict:
 	doc.check_permission("cancel")
 	if doc.docstatus != SUBMITTED:
 		frappe.throw(_("Only a submitted activity record can be cancelled."), CommunityActivityError)
-	doc.cancel_reason = reason
-	doc.cancelled_by = frappe.session.user
-	doc.cancelled_at = now_datetime()
+	doc.cancel_reason = reason  # not allow-on-submit: written only by the cancel itself
 	doc.cancel()
 	return {"name": doc.name, "docstatus": doc.docstatus}

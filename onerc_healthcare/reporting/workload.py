@@ -46,7 +46,10 @@ Rule formats (JSON object per element; keys not listed are refused)
 A *test* is an ordered test: a root Observation (no ``parent_observation``; panels up to two levels deep
 are folded onto their root), counted once when at least one Observation of its tree is approved
 (``docstatus`` 1). A full haemogram is one test, not ten. Its date is the earliest approval
-(``time_of_approval``, else ``modified``) in the tree; a rejected (cancelled) Observation is not a test.
+(``time_of_approval``) in the tree; a rejected (cancelled) Observation is not a test. ``time_of_approval``
+is stamped at submit (`lab.events.stamp_approval_time`; older rows by the
+``backfill_observation_approval_time`` patch), so a later write such as a note does not move the test
+to another month; ``modified`` is only the fallback for a row that still has no approval time.
 The test belongs to the encounter of its Service Request (``order_group``), else of its reference (the
 encounter or the encounter's Sample Collection), and through the encounter to the visit, which carries the
 base filters. The encounter may still be a draft (results arrive during the consultation) but not cancelled

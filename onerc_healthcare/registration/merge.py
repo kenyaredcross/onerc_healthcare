@@ -9,6 +9,10 @@ follow. Every moved record (doctype, name, field) is written as JSON to the sour
 the merge can be audited and, if ever needed, reversed record by record. Both patients are row-locked in
 name order before the checks, so two concurrent merges of the same pair cannot both pass.
 
+Visit attendance (Phase 3, M4): after the relink, the calendar-year rule is applied again to the
+surviving patient's visits (`visit.attendance.recompute_after_merge`); reception and HIS overrides are
+kept and listed in the merge log for the HIS Officer.
+
 Identifiers move to the target unless the target already holds that identifier type; those stay on the
 source. The source is never deleted
 or renamed: it is set to Disabled with `krcs_merged_into` pointing at the target, and both records get
@@ -183,7 +187,9 @@ def _label(entry: dict) -> str:
 	return f"{entry['identifier_type']}: {entry['identifier_value']}"
 
 
-def _summary(relinked: list[dict], moved: list[dict], kept: list[dict], reason: str) -> str:
+def _summary(
+	relinked: list[dict], moved: list[dict], kept: list[dict], reason: str, attendance: dict | None = None
+) -> str:
 	lines = [_("Reason: {0}").format(escape_html(reason))]
 	counts = Counter(f"{e['doctype']}.{e['field']}" for e in relinked)
 	if counts:
@@ -199,6 +205,14 @@ def _summary(relinked: list[dict], moved: list[dict], kept: list[dict], reason: 
 			_(
 				"Identifiers left on the merged record (the surviving record already has that type): {0}"
 			).format(escape_html("; ".join(map(_label, kept))))
+		)
+	if attendance and attendance.get("recomputed"):
+		lines.append(_("Visit attendance recomputed: {0}").format(len(attendance["recomputed"])))
+	if attendance and attendance.get("overrides"):
+		lines.append(
+			_("Attendance overrides kept for HIS review: {0}").format(
+				escape_html(", ".join(o["visit"] for o in attendance["overrides"]))
+			)
 		)
 	lines.append(_("The full list of moved records is kept in the merged record's Merge Log."))
 	return "<br>".join(lines)
@@ -227,6 +241,18 @@ def _refuse_open_visit(source: str) -> None:
 			),
 			title=_("Invalid Merge"),
 		)
+
+
+def _recompute_attendance(source: str, target: str) -> dict:
+	"""Phase 3 M4: two records of one person each had a "New" first visit; after the relink only the
+	earliest per facility and year may stay New (`visit.attendance.recompute_after_merge`)."""
+	from onerc_healthcare.constants import VISIT_DOCTYPE
+
+	if not frappe.db.exists("DocType", VISIT_DOCTYPE):
+		return {"recomputed": [], "overrides": []}
+	from onerc_healthcare.visit.attendance import recompute_after_merge
+
+	return recompute_after_merge(source, target)
 
 
 def merge_patients(source: str, target: str, reason: str) -> dict:
@@ -268,6 +294,7 @@ def merge_patients(source: str, target: str, reason: str) -> dict:
 	# Identifiers first, so records that copy the patient's identifier get the surviving one.
 	moved, kept = _move_identifiers(source_doc, target_doc)
 	relinked = _relink(source, target)
+	attendance = _recompute_attendance(source, target)
 	merge_log = {
 		"merged_into": target,
 		"reason": reason,
@@ -276,6 +303,10 @@ def merge_patients(source: str, target: str, reason: str) -> dict:
 		"relinked": relinked,
 		"identifiers_moved": moved,
 		"identifiers_kept": kept,
+		# Phase 3 M4: New / Re-attendance recomputed on the surviving patient's visits; overrides kept for
+		# the HIS Officer to review.
+		"attendance_recomputed": attendance["recomputed"],
+		"attendance_overrides": attendance["overrides"],
 	}
 
 	source_doc = frappe.get_doc("Patient", source)
@@ -286,7 +317,7 @@ def merge_patients(source: str, target: str, reason: str) -> dict:
 	source_doc.save(ignore_permissions=True)
 	refresh_search_index(target)
 
-	summary = _summary(relinked, moved, kept, reason)
+	summary = _summary(relinked, moved, kept, reason, attendance)
 	source_doc.add_comment(
 		"Info",
 		_("Merged into {0} by {1}. The record is kept, disabled.").format(
@@ -310,4 +341,6 @@ def merge_patients(source: str, target: str, reason: str) -> dict:
 		"relinked_records": relinked,
 		"identifiers_moved": [_label(e) for e in moved],
 		"identifiers_kept": [_label(e) for e in kept],
+		"attendance_recomputed": attendance["recomputed"],
+		"attendance_overrides": attendance["overrides"],
 	}

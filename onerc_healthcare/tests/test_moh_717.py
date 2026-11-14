@@ -15,8 +15,10 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 import frappe
+from frappe.utils import get_datetime
 
 from onerc_healthcare import constants as c
 from onerc_healthcare.reporting import ages, registry, workload
@@ -298,6 +300,72 @@ class TestLaboratory(R4Case):
 				("MAL", "", ""): 1,
 				("PAT", "", ""): 1,
 				("LAB-AS", "5+", "Female"): 4,
+			},
+		)
+
+	def test_late_note_does_not_move_the_test_to_the_next_month(self):
+		"""Review L1: approved ("Approved", not "Final") on the 31st through a real submit, then a note on the
+		2nd written the way Marley's ``add_note`` does (``db.set_value``, which bumps ``modified``)."""
+		visit = self.visit(self.adult_f, "2001-03-30")
+		enc = self.encounter(visit, "2001-03-30")
+		obs = frappe.get_doc(
+			{
+				"doctype": "Observation",
+				"observation_template": "Haemoglobin",
+				"patient": self.adult_f,
+				"reference_doctype": c.ENCOUNTER_DOCTYPE,
+				"reference_docname": enc,
+				"result": "12.5",
+				"status": "Approved",
+			}
+		)
+		approved_at = get_datetime("2001-03-31 16:00:00")  # the approval clock (freezegun is not installed)
+		with patch("onerc_healthcare.lab.events.now_datetime", return_value=approved_at):
+			obs.insert(ignore_permissions=True)
+			obs.submit()
+		# The note as Marley's add_note writes it, two days later: set_value bumps `modified`.
+		frappe.db.set_value(
+			"Observation", obs.name, "note", "<p>T- repeat advised</p>", modified="2001-04-02 09:00:00"
+		)
+		row = frappe.db.get_value("Observation", obs.name, ["time_of_approval", "modified"], as_dict=True)
+		self.assertEqual(str(row.time_of_approval)[:10], "2001-03-31")  # stamped at submit
+		self.assertEqual(str(row.modified)[:10], "2001-04-02")
+		march = workload.evaluate_lab_tests(self.ctx(), [el("LAB", "Laboratory Tests")])
+		april = registry.SourceContext(
+			report="T-R4", from_date=date(2001, 4, 1), to_date=date(2001, 4, 30), facility=self.f0
+		)
+		self.assertEqual(march, {("LAB", "", ""): 1})
+		self.assertEqual(workload.evaluate_lab_tests(april, [el("LAB", "Laboratory Tests")]), {})
+
+	def test_approval_backfill_patch(self):
+		"""The patch fills empty approval times from the submit Version, else ``modified``; idempotent."""
+		from onerc_healthcare.patches import backfill_observation_approval_time as backfill
+
+		with_version = self.obs("Haemoglobin", 1, None, modified="2001-04-05 10:00:00", creation="2001-03-01")
+		_row(
+			"Version",
+			ref_doctype="Observation",
+			docname=with_version,
+			data=json.dumps({"changed": [["status", "Preliminary", "Approved"], ["docstatus", 0, 1]]}),
+			creation="2001-03-31 16:00:00",
+			modified="2001-03-31 16:00:00",
+		)
+		without = self.obs("Haemoglobin", 1, None, modified="2001-03-20 08:00:00", creation="2001-03-01")
+		stamped = self.obs("Haemoglobin", 1, "2001-03-02 08:00:00")
+		draft = self.obs("Haemoglobin", 0, None)
+		backfill.execute()
+		backfill.execute()  # idempotent
+		got = {
+			n: str(frappe.db.get_value("Observation", n, "time_of_approval"))
+			for n in (with_version, without, stamped, draft)
+		}
+		self.assertEqual(
+			got,
+			{
+				with_version: "2001-03-31 16:00:00",
+				without: "2001-03-20 08:00:00",
+				stamped: "2001-03-02 08:00:00",
+				draft: "None",
 			},
 		)
 

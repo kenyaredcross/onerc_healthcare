@@ -84,6 +84,11 @@ doc_events = {
 	"Access Log": {
 		"after_insert": "onerc_healthcare.privacy.access_log.mirror_core_access_log",
 	},
+	# Phase 3 review M2: no attaching to or deleting files from a frozen MOH Report Run (R1)
+	"File": {
+		"before_insert": "onerc_healthcare.reporting.permissions.file_before_insert",
+		"on_trash": "onerc_healthcare.reporting.permissions.file_on_trash",
+	},
 }
 
 # Access logging of desk record opens (FR-40, NFR-7): `onload` on every logged DocType (B4).
@@ -177,6 +182,8 @@ has_permission = {
 	"File": "onerc_healthcare.privacy.permissions.file_has_permission",
 	"Patient Encounter": "onerc_healthcare.clinical.permissions.encounter_has_permission",
 	"Access Log Entry": "onerc_healthcare.privacy.permissions.access_log_has_permission",
+	# Phase 3 review M2: Submitted / Superseded / Void runs are read-only (R1)
+	"MOH Report Run": "onerc_healthcare.reporting.permissions.run_has_permission",
 }
 
 # M4: log successful REST/API reads of logged doctypes (after_request: the API user is known by then; B4)

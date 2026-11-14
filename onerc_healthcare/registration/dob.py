@@ -19,6 +19,9 @@ of a shorter month (29 February minus one year is 28 February), and the record i
 | an age with the flag ticked (the form ticks it when the age is typed) | estimated, unless only `dob` changed on an existing record: that is an exact DOB entered later, which clears the flag |
 | an age and a `dob`, flag not ticked | on an existing record whichever changed wins; on a new record both is a conflict |
 
+Clearing the age of an estimated record while leaving its computed `dob` is refused: the date was never
+known (enter the exact DOB, or keep an age).
+
 Estimated: `dob` is recomputed from the **original** `krcs_dob_estimated_on` (set once, today by default),
 so correcting the age never moves the reference date. Exact: the flag, the age and the date are cleared.
 
@@ -136,7 +139,13 @@ def apply_dob_rules(doc) -> None:
 	"""Patient `validate`: set or clear the estimate, and require a DOB on insert / DOB edits."""
 	before = None if doc.is_new() else doc.get_doc_before_save()
 	validate_age(doc.get(YEARS), doc.get(MONTHS))
+	# Compared with the saved record before the fields are normalised below (DEFECT-P3-8: a flag ticked
+	# alone on a patient without a DOB is an edit of the DOB fields).
+	fields_changed = before is None or _dob_fields_changed(doc, before)
 	mode = resolve_mode(doc, before)
+	if mode == MODE_EXACT and _estimate_abandoned(doc, before):
+		# DEFECT-P3-7: the age was cleared but the DOB is still the computed estimate, not a known date.
+		_require_dob()
 
 	if mode == MODE_ESTIMATED:
 		years, months = cint(doc.get(YEARS)), cint(doc.get(MONTHS))
@@ -152,15 +161,29 @@ def apply_dob_rules(doc) -> None:
 	doc.set(ESTIMATED_ON, None)
 	if mode == MODE_EXACT:
 		return
-	if before is None or _dob_fields_changed(doc, before):
-		frappe.throw(
-			_(
-				"Enter the date of birth. If it is not known, enter the estimated age in years (and months"
-				" for a young child) instead."
-			),
-			DateOfBirthRequiredError,
-			title=_("Date of Birth Required"),
-		)
+	if fields_changed:
+		_require_dob()
+
+
+def _estimate_abandoned(doc, before) -> bool:
+	"""The saved record was estimated, the age is now empty and the DOB was not changed."""
+	return (
+		before is not None
+		and bool(cint(before.get(FLAG)))
+		and not (cint(doc.get(YEARS)) or cint(doc.get(MONTHS)))
+		and _date(doc.get("dob")) == _date(before.get("dob"))
+	)
+
+
+def _require_dob() -> None:
+	frappe.throw(
+		_(
+			"Enter the date of birth. If it is not known, enter the estimated age in years (and months"
+			" for a young child) instead."
+		),
+		DateOfBirthRequiredError,
+		title=_("Date of Birth Required"),
+	)
 
 
 def _estimated_on(doc, before) -> date:

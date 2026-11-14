@@ -96,7 +96,11 @@ def attach_file(run, fieldname: str, file_name: str, content: bytes) -> str:
 			"content": content,
 		}
 	)
-	file_doc.insert(ignore_permissions=True)
+	frappe.flags.krcs_moh_exporting = True  # reporting.permissions lets the export code attach
+	try:
+		file_doc.insert(ignore_permissions=True)
+	finally:
+		frappe.flags.krcs_moh_exporting = False
 	run.set(fieldname, file_doc.file_url)
 	return file_doc.file_url
 

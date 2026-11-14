@@ -66,6 +66,8 @@ JOB_TIMEOUT = 60 * 60
 JOB_SAVEPOINT = "krcs_moh_generation"
 MAX_EXCEPTION_ROWS = 1000
 MAX_TEXT_LENGTH = 1000
+# Not offered on runs of a Blocked report: generate refuses it, and revise creates a run for it.
+BLOCKED_REPORT_ACTIONS = (ACTION_GENERATE, ACTION_REVISE)
 
 RUN_ROLES = (ROLE_HIS,)
 READ_ROLES = (ROLE_HIS, ROLE_MIC, ROLE_HEAD_OPS)
@@ -233,18 +235,23 @@ def assert_single_active(doc) -> None:
 	"""One active run per report, facility and period (a revision may coexist with the run it
 	supersedes until that run is marked Superseded in the same transaction)."""
 	frappe.db.sql(f"select name from `tab{MOH_REPORT_DOCTYPE}` where name = %s for update", doc.report)
-	filters = {
-		"report": doc.report,
-		"facility": doc.facility,
-		"from_date": doc.from_date,
-		"to_date": doc.to_date,
-		"status": ["not in", INACTIVE_STATUSES],
-	}
-	if doc.name:
-		filters["name"] = ["!=", doc.name]
-	others = [
-		n for n in frappe.get_all(MOH_RUN_DOCTYPE, filters=filters, pluck="name") if n != doc.supersedes
-	]
+	# Locking read (review L3): the rows found stay locked until the transaction ends.
+	others = frappe.db.sql_list(
+		f"""select name from `tab{MOH_RUN_DOCTYPE}`
+		where `report` = %(report)s and `facility` = %(facility)s and `from_date` = %(from_date)s
+			and `to_date` = %(to_date)s and `status` not in %(inactive)s and `name` != %(name)s
+			and `name` != %(supersedes)s
+		for update""",
+		{
+			"report": doc.report,
+			"facility": doc.facility,
+			"from_date": doc.from_date,
+			"to_date": doc.to_date,
+			"inactive": INACTIVE_STATUSES,
+			"name": doc.name or "",
+			"supersedes": doc.supersedes or "",
+		},
+	)
 	if others:
 		frappe.throw(
 			_("{0} already exists for {1}, {2}, {3}. Void it, or revise it if it was submitted.").format(
@@ -255,6 +262,12 @@ def assert_single_active(doc) -> None:
 		)
 
 
+def report_is_blocked(report: str | None) -> bool:
+	return bool(report) and frappe.db.get_value(MOH_REPORT_DOCTYPE, report, "status") == (
+		engine.REPORT_STATUS_BLOCKED
+	)
+
+
 def is_queued(doc) -> bool:
 	return doc.get("generation_status") == GENERATION_QUEUED
 
@@ -262,10 +275,13 @@ def is_queued(doc) -> bool:
 def get_available_actions(doc, user: str | None = None) -> list[dict]:
 	"""Actions the user may take on `doc` now (for the form buttons; same checks as `transition`)."""
 	out = []
+	blocked = report_is_blocked(doc.report)
 	for action, rule in TRANSITIONS.items():
 		if action == ACTION_CREATE or doc.status not in rule.from_statuses:
 			continue
 		if action in (ACTION_GENERATE, ACTION_SUBMIT) and is_queued(doc):
+			continue
+		if action in BLOCKED_REPORT_ACTIONS and blocked:
 			continue
 		if not has_any_role(rule.roles, user):
 			continue

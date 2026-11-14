@@ -103,7 +103,7 @@
    "fieldname": "requires_lab_confirmation",
    "fieldtype": "Check",
    "label": "Requires Laboratory Confirmation",
-   "description": "Counts only when the same encounter has an approved (submitted) result listed below; otherwise the diagnosis counts under the fallback category."
+   "description": "Counts only when the encounter, or another encounter of its internal-referral chain, has an approved (submitted) result listed below; otherwise the diagnosis counts under the fallback category."
   },
   {
    "fieldname": "fallback_category",

@@ -43,6 +43,8 @@ from onerc_healthcare.constants import (
 	REPORT_DAILY_ENTRY,
 	REPORT_LAB_WORKLIST,
 	REPORT_PHARMACY_WORKLIST,
+	SERVICE_DELIVERED_DOCTYPE,
+	SERVICE_TYPE_DOCTYPE,
 	VISIT_DOCTYPE,
 )
 
@@ -162,10 +164,28 @@ def _encounter_values(doctype: str, source) -> dict:
 
 
 def is_sensitive(doctype: str | None, source) -> bool:
-	"""A Mental Health encounter (`source` is the document or its name). Provisional scope (OI-7)."""
-	if doctype != ENCOUNTER_DOCTYPE or not source:
+	"""A Mental Health encounter, or a Service Delivered whose Visit Service Type is marked Sensitive
+	(mental health, alcohol and drug; Phase 3 L13). `source` is the document or its name. Provisional
+	scope (OI-7)."""
+	if not source:
+		return False
+	if doctype == SERVICE_DELIVERED_DOCTYPE:
+		return is_sensitive_service(source)
+	if doctype != ENCOUNTER_DOCTYPE:
 		return False
 	return _department_of(_encounter_values(doctype, source)) == DEPT_MENTAL_HEALTH
+
+
+def is_sensitive_service(source) -> bool:
+	"""Service Delivered (document or name) of a service type marked Sensitive."""
+	service_type = (
+		frappe.db.get_value(SERVICE_DELIVERED_DOCTYPE, source, "service_type")
+		if isinstance(source, str)
+		else source.get("service_type")
+	)
+	if not service_type or not frappe.get_meta(SERVICE_TYPE_DOCTYPE).has_field("sensitive"):
+		return False
+	return bool(frappe.db.get_value(SERVICE_TYPE_DOCTYPE, service_type, "sensitive"))
 
 
 def build_entry(

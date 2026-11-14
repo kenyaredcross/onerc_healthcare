@@ -26,6 +26,12 @@ checks and under the patient row lock, and when reception corrects the visit's p
 | `correct_referred_in` | while the visit is Registered | any time | (intake fields) |
 
 Administrator counts as HIS Officer. Other roles are refused. `CORRECTIONS` lists these rules for audits.
+The visit is locked before the role and status checks (L8). `attendance_note` (permlevel 1) holds only a
+neutral note; the reason stays in the status log (permlevel 2, L9).
+
+**Recompute**: `recompute_after_merge` (patient merge, M4) re-applies the rule to the surviving patient's
+rule-based visits through `annotate`; `backfill_attendance` (patch, L10) fills visits from before Phase 3.
+Both use `rule_attendance`, the same rule over the visit history in time order.
 """
 
 from __future__ import annotations
@@ -34,7 +40,7 @@ from dataclasses import dataclass
 
 import frappe
 from frappe import _
-from frappe.utils import cint, getdate
+from frappe.utils import cint, getdate, today
 
 from onerc_healthcare.constants import (
 	ATTENDANCE_BASIS_HIS,
@@ -63,8 +69,6 @@ ACTION_CORRECT_REFERRED_IN = "correct_referred_in"
 # Referral values written by clinical/referral.py (kept local: they are B1's module constants).
 REFERRAL_TYPE_INTERNAL = "Internal"
 REFERRAL_STATUS_DRAFT = "Draft"
-
-NOTE_MAX_LENGTH = 1000
 
 
 class AttendanceCorrectionError(frappe.ValidationError):
@@ -148,14 +152,18 @@ def internal_referral_source(doc) -> str | None:
 
 
 def earlier_visit_this_year(doc) -> str | None:
-	"""Another visit of the patient at this facility in the visit's attendance year that counts, or None."""
+	"""Another visit of the patient at this facility in the visit's attendance year that counts, or None.
+
+	A locking read (L2): the controller already holds the patient lock, so two receptionists registering
+	the same patient serialise here and cannot both get New."""
 	start, end = year_bounds(doc.visit_date)
 	rows = frappe.db.sql(
 		f"""select name from `tab{VISIT_DOCTYPE}`
 		where patient = %(patient)s and facility = %(facility)s and name != %(name)s
 			and ifnull(closure_reason, '') not in %(excluded)s
 			and visit_date between %(start)s and %(end)s
-		order by visit_date asc, creation asc limit 1""",
+		order by visit_date asc, creation asc limit 1
+		for update""",
 		{
 			"patient": doc.patient,
 			"facility": doc.facility,
@@ -189,14 +197,18 @@ def compute_attendance(doc) -> tuple[str, str, str | None]:
 			return (
 				ATTENDANCE_REVISIT,
 				ATTENDANCE_BASIS_RECEPTION,
-				_("Seen here before (SmartCare), ticked at registration."),
+				_("Reception override at registration on {0}.").format(_note_date(doc.visit_date)),
 			)
 		return (
 			ATTENDANCE_NEW,
 			ATTENDANCE_BASIS_RULE,
-			_("Seen here before (SmartCare) was ticked, but reception overrides are turned off."),
+			_("Reception override not applied: overrides are turned off in EMR Registration Settings."),
 		)
 	return ATTENDANCE_NEW, ATTENDANCE_BASIS_RULE, None
+
+
+def _note_date(value=None) -> str:
+	return frappe.format(getdate(value or today()), {"fieldtype": "Date"})
 
 
 def set_initial_attendance(doc) -> None:
@@ -233,12 +245,14 @@ def _anytime(action: str, user: str) -> bool:
 
 
 def _check_correction(action: str, visit: str):
-	"""Role, status and read checks. Returns the visit's current values."""
+	"""Role, status and read checks on the locked visit. Returns it."""
 	rule = CORRECTIONS[action]
 	if not frappe.db.exists(VISIT_DOCTYPE, visit):
 		frappe.throw(_("Patient Visit {0} does not exist.").format(visit), frappe.DoesNotExistError)
 	frappe.has_permission(VISIT_DOCTYPE, "read", doc=visit, throw=True)
-	doc = frappe.get_doc(VISIT_DOCTYPE, visit)
+	# L8: lock the visit before checking its status, so the check holds until `annotate` saves (same
+	# transaction; annotate re-reads the locked row).
+	doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)
 	if not can_correct(action, doc.status):
 		roles = set(frappe.get_roles())
 		if roles & set(rule.registered_roles) and doc.status != VISIT_STATUS_REGISTERED:
@@ -307,7 +321,9 @@ def correct_attendance(visit: str, attendance_type: str, reason: str) -> dict:
 		{
 			"attendance_type": attendance_type,
 			"attendance_basis": basis,
-			"attendance_note": reason[:NOTE_MAX_LENGTH],
+			# L9: the note is permlevel 1 (Lab, Pharmacy, HIS read it); the reason stays in the status log
+			# (permlevel 2).
+			"attendance_note": _("{0} on {1}; reason in the visit history.").format(_(basis), _note_date()),
 		},
 	)
 	return {
@@ -351,3 +367,108 @@ def correct_referred_in(
 		{"referred_in": referred_in, "referred_in_from": referred_in_from},
 	)
 	return {"name": doc.name, "referred_in": doc.referred_in, "referred_in_from": doc.referred_in_from}
+
+
+# --------------------------------------------------------------------------- recompute (merge, backfill)
+
+
+def _visits_in_order(patient: str | None = None) -> list[frappe._dict]:
+	filters = {"patient": patient} if patient else {}
+	return frappe.get_all(
+		VISIT_DOCTYPE,
+		filters=filters,
+		fields=[
+			"name",
+			"patient",
+			"facility",
+			"visit_date",
+			"closure_reason",
+			"referred_from",
+			"attendance_type",
+			"attendance_basis",
+		],
+		order_by="visit_date asc, arrived_at asc, creation asc",
+	)
+
+
+def rule_attendance(visits: list[frappe._dict]) -> dict[str, str]:
+	"""{visit: New / Re-attendance} by the calendar-year rule for `visits` (sorted by time).
+
+	Per patient, facility and attendance year the first visit that counts is New; every later one, and
+	a visit opened by an internal referral, is a Re-attendance. Visits closed as Registered in error or
+	Superseded never count as the earlier visit (their own value is computed the same way)."""
+	seen: set[tuple] = set()
+	out: dict[str, str] = {}
+	for v in visits:
+		if not v.patient or not v.facility or not v.visit_date:
+			continue
+		key = (v.patient, v.facility, year_bounds(v.visit_date)[0])
+		first = key not in seen
+		out[v.name] = ATTENDANCE_NEW if first and not v.referred_from else ATTENDANCE_REVISIT
+		if (v.closure_reason or "") not in REPORT_EXCLUDED_CLOSURE_REASONS:
+			seen.add(key)
+	return out
+
+
+def recompute_after_merge(source: str, target: str) -> dict:
+	"""M4: after the visits of `source` were relinked to `target`, apply the calendar-year rule again to
+	every visit of `target` whose basis is the rule; each change is logged on the visit through
+	`engine.annotate` (`correct_attendance`). Reception and HIS overrides are kept and returned for the
+	HIS Officer's review. Returns ``{"recomputed": [...], "overrides": [...]}``."""
+	from onerc_healthcare.visit import engine
+
+	if not frappe.get_meta(VISIT_DOCTYPE).has_field("attendance_type"):
+		return {"recomputed": [], "overrides": []}
+	visits = _visits_in_order(target)
+	expected = rule_attendance(visits)
+	note = _("Recomputed after merge of {0} into {1}").format(source, target)
+	recomputed, overrides = [], []
+	for v in visits:
+		if v.attendance_basis in (ATTENDANCE_BASIS_RECEPTION, ATTENDANCE_BASIS_HIS):
+			overrides.append(
+				{
+					"visit": v.name,
+					"attendance_type": v.attendance_type,
+					"attendance_basis": v.attendance_basis,
+				}
+			)
+			continue
+		new = expected.get(v.name)
+		if not new or (new == v.attendance_type and v.attendance_basis == ATTENDANCE_BASIS_RULE):
+			continue
+		engine.annotate(
+			v.name,
+			ACTION_CORRECT_ATTENDANCE,
+			_("{0}: {1} → {2}").format(note, _(v.attendance_type or "-"), _(new)),
+			{
+				"attendance_type": new,
+				"attendance_basis": ATTENDANCE_BASIS_RULE,
+				"attendance_note": note + ".",
+			},
+		)
+		recomputed.append({"visit": v.name, "from": v.attendance_type, "to": new})
+	return {"recomputed": recomputed, "overrides": overrides}
+
+
+def backfill_attendance() -> dict:
+	"""L10: visits registered before Phase 3 (no attendance) get the calendar-year rule, in arrival
+	order. Written directly (data migration, no log rows); visits that have a value keep it, so this is
+	idempotent. Returns counts."""
+	visits = _visits_in_order()
+	expected = rule_attendance(visits)
+	updated = 0
+	for v in visits:
+		if v.attendance_type or v.name not in expected:
+			continue
+		frappe.db.set_value(
+			VISIT_DOCTYPE,
+			v.name,
+			{
+				"attendance_type": expected[v.name],
+				"attendance_basis": ATTENDANCE_BASIS_RULE,
+				"attendance_note": _("Set from the visit history when attendance was introduced."),
+			},
+			update_modified=False,
+		)
+		updated += 1
+	return {"updated": updated}

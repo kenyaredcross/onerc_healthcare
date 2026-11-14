@@ -145,8 +145,7 @@
    "fieldtype": "Small Text",
    "label": "Cancel Reason",
    "read_only": 1,
-   "no_copy": 1,
-   "allow_on_submit": 1
+   "no_copy": 1
   },
   {
    "fieldname": "column_break_cancel",
@@ -158,16 +157,14 @@
    "label": "Cancelled By",
    "options": "User",
    "read_only": 1,
-   "no_copy": 1,
-   "allow_on_submit": 1
+   "no_copy": 1
   },
   {
    "fieldname": "cancelled_at",
    "fieldtype": "Datetime",
    "label": "Cancelled At",
    "read_only": 1,
-   "no_copy": 1,
-   "allow_on_submit": 1
+   "no_copy": 1
   },
   {
    "fieldname": "amended_from",
@@ -182,7 +179,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-14 12:00:00.000000",
+ "modified": "2026-11-14 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Community",
  "name": "Community Activity Record",

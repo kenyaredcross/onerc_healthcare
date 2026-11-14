@@ -35,7 +35,7 @@ onerc_healthcare.moh.test_code_dialog = function () {
 						[__("Blocks"), esc((m.blocks || []).join(", "))],
 					];
 					if (m.requires_lab_confirmation) {
-						rows.push([__("Laboratory"), __("Counts here only with an approved positive test on the encounter; otherwise under {0}", [esc(m.fallback_category || "")])]);
+						rows.push([__("Laboratory"), __("Counts here only with an approved positive test on the encounter or its internal-referral chain; otherwise under {0}", [esc(m.fallback_category || "")])]);
 					}
 					if (m.excluded) rows.push([__("Note"), __("Excluded: not counted")]);
 					if (m.unmapped) rows.push([__("Note"), __("No mapping: counted under the catch-all and listed as an exception")]);

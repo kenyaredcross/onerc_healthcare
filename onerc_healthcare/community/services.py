@@ -22,6 +22,10 @@ visit, facility, recorder, status and the void fields change only through the li
 | (insert) | - | Active | Clinical Officer, Mental Health Officer | as above |
 | `void` (`void_service`, POST) | Active | Voided | the recorder (CO / MHO), or the Medical In-Charge | reason required; sets void_reason, voided_by, voided_at |
 
+**Archiving** (`krcs_archived`, NFR-9) removes a record from the MOH counts, so it changes only through
+`set_service_archived` (POST; the recorder or the Medical In-Charge, reason kept as a comment). A form or
+`set_value` change is refused, and an insert always starts unarchived (M6).
+
 A Voided record is read-only and is never counted (R4 counts Active only). The record's version history
 (track changes) keeps every edit.
 """
@@ -56,6 +60,9 @@ RECORDER_ROLES = (ROLE_CLINICIAN, ROLE_MHO)
 SUPERVISOR_ROLES = (ROLE_MIC,)
 
 REASON_MAX_LENGTH = 1000
+# Security setup's archive flag (NFR-9). An archived service drops out of MOH 711 / 717, so it changes only
+# through `set_service_archived` (recorder or Medical In-Charge, with a reason), never by a form save (M6).
+ARCHIVED_FIELD = "krcs_archived"
 
 
 class IllegalServiceTransitionError(frappe.ValidationError):
@@ -120,6 +127,12 @@ def may_edit(doc, user: str | None = None) -> bool:
 	return bool(_roles(user) & set(RECORDER_ROLES)) and is_recorder(doc, user)
 
 
+def services_allowed_on(closure_reason: str | None) -> bool:
+	"""Services are recorded on real attendances only, not on visits closed as Registered in error or
+	Superseded by a new visit."""
+	return closure_reason not in REPORT_EXCLUDED_CLOSURE_REASONS
+
+
 def visit_values(visit: str) -> frappe._dict:
 	row = frappe.db.get_value(
 		VISIT_DOCTYPE, visit, ["name", "patient", "facility", "visit_date", "closure_reason"], as_dict=True
@@ -140,7 +153,7 @@ def validate_new(doc) -> None:
 	visit = visit_values(doc.visit)
 	if user != "Administrator" and not frappe.has_permission(VISIT_DOCTYPE, "read", doc=doc.visit, user=user):
 		frappe.throw(_("You do not have access to visit {0}.").format(doc.visit), frappe.PermissionError)
-	if visit.closure_reason in REPORT_EXCLUDED_CLOSURE_REASONS:
+	if not services_allowed_on(visit.closure_reason):
 		frappe.throw(
 			_("Visit {0} was closed as {1}; record the service on the patient's actual visit.").format(
 				doc.visit, frappe.bold(_(visit.closure_reason))
@@ -156,6 +169,8 @@ def validate_new(doc) -> None:
 		doc.provided_by = user
 	doc.status = STATUS_ACTIVE
 	doc.void_reason = doc.voided_by = doc.voided_at = None
+	if doc.meta.has_field(ARCHIVED_FIELD):
+		doc.set(ARCHIVED_FIELD, 0)  # archived only through `set_service_archived` (M6)
 	validate_values(doc, visit)
 
 
@@ -236,6 +251,45 @@ def void_service(name: str, reason: str) -> dict:
 	return {"name": doc.name, "status": doc.status}
 
 
+@frappe.whitelist(methods=["POST"])
+def set_service_archived(name: str, archived: int, reason: str) -> dict:
+	"""Archive (or un-archive) a service record: its recorder or the Medical In-Charge, with a reason.
+
+	The reason is kept as a comment on the record and the change in its version history (M6)."""
+	reason = (reason or "").strip()
+	if not reason:
+		frappe.throw(
+			_("Enter a reason to archive the record."), ServiceDeliveredError, title=_("Reason Required")
+		)
+	if len(reason) > REASON_MAX_LENGTH:
+		frappe.throw(
+			_("The reason is {0} characters long; the limit is {1}.").format(len(reason), REASON_MAX_LENGTH),
+			ServiceDeliveredError,
+		)
+	doc = frappe.get_doc(SERVICE_DELIVERED_DOCTYPE, name, for_update=True)
+	user = frappe.session.user
+	if user != "Administrator" and not doc.has_permission("read"):
+		frappe.throw(_("You do not have access to {0}.").format(doc.name), frappe.PermissionError)
+	if not may_act(TRANSITIONS[ACTION_VOID], doc, user):
+		frappe.throw(
+			_("Only the person who recorded the service, or the {0}, can archive it.").format(_(ROLE_MIC)),
+			frappe.PermissionError,
+		)
+	if not doc.meta.has_field(ARCHIVED_FIELD):
+		frappe.throw(_("Service records have no archive flag on this site."), ServiceDeliveredError)
+	value = 1 if int(archived or 0) else 0
+	if int(doc.get(ARCHIVED_FIELD) or 0) == value:
+		frappe.throw(_("Nothing to change."), ServiceDeliveredError, title=_("No Change"))
+	doc.set(ARCHIVED_FIELD, value)
+	doc.flags.from_workflow = True
+	try:
+		doc.save(ignore_permissions=True)
+	finally:
+		doc.flags.from_workflow = False
+	doc.add_comment("Info", (_("Archived: {0}") if value else _("Un-archived: {0}")).format(reason))
+	return {"name": doc.name, ARCHIVED_FIELD: value}
+
+
 @frappe.whitelist(methods=["GET"])
 def get_visit_services(visit: str) -> dict:
 	"""Services recorded on `visit` that the user may read (the visit form's Services section)."""
@@ -248,18 +302,20 @@ def get_visit_services(visit: str) -> dict:
 		order_by="service_date asc, creation asc",
 	)
 	if rows:
-		from onerc_healthcare.privacy.access_log import ACTION_LIST, log_access
+		from onerc_healthcare.privacy.access_log import ACTION_LIST, is_sensitive_service, log_access
 
 		log_access(
 			ACTION_LIST,
 			SERVICE_DELIVERED_DOCTYPE,
 			None,
 			patient=frappe.db.get_value(VISIT_DOCTYPE, visit, "patient"),
+			sensitive=any(is_sensitive_service(r) for r in rows),
 			detail=f"Services of visit {visit}: {len(rows)} row(s)",
 		)
 	user = frappe.session.user
 	return {
 		"services": rows,
 		"can_record": frappe.has_permission(SERVICE_DELIVERED_DOCTYPE, "create")
-		and (user == "Administrator" or bool(_roles(user) & set(RECORDER_ROLES))),
+		and (user == "Administrator" or bool(_roles(user) & set(RECORDER_ROLES)))
+		and services_allowed_on(frappe.db.get_value(VISIT_DOCTYPE, visit, "closure_reason")),
 	}

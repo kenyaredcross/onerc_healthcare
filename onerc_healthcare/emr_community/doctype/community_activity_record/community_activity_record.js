@@ -17,6 +17,10 @@ frappe.ui.form.on("Community Activity Record", {
 	},
 
 	refresh(frm) {
+		// Archiving drops the record from the MOH counts: Medical In-Charge only (M6).
+		if (frm.fields_dict.krcs_archived && !frappe.user.has_role("Medical In-Charge")) {
+			frm.set_df_property("krcs_archived", "read_only", 1);
+		}
 		// The standard Cancel has no reason; ask for one and cancel on the server.
 		frm.savecancel = function () {
 			const d = new frappe.ui.Dialog({

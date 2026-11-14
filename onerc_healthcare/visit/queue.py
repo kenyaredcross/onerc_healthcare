@@ -141,7 +141,7 @@ def longest_wait_card(filters: str | dict | list | None = None) -> dict:
 def get_open_visit(patient: str) -> dict | None:
 	"""The patient's open visit (any date), for the new-visit form's "Close previous visit" offer."""
 	from onerc_healthcare.emr_visit.doctype.patient_visit.patient_visit import find_open_visit
-	from onerc_healthcare.visit.engine import ACTION_CLOSE_VISIT, TRANSITIONS
+	from onerc_healthcare.visit.engine import ACTION_CLOSE_VISIT, TRANSITIONS, closure_reasons_for
 
 	frappe.has_permission(VISIT_DOCTYPE, "read", throw=True)
 	row = find_open_visit(patient)
@@ -151,6 +151,6 @@ def get_open_visit(patient: str) -> dict | None:
 	row["can_close"] = frappe.session.user == "Administrator" or bool(
 		roles & set(TRANSITIONS[ACTION_CLOSE_VISIT].roles)
 	)
-	row["closure_reasons"] = list(VISIT_CLOSURE_REASONS)
+	row["closure_reasons"] = closure_reasons_for()  # "Died" only for clinical roles (DEFECT-P3-3)
 	row["default_closure_reason"] = SUPERSEDED_REASON if SUPERSEDED_REASON in VISIT_CLOSURE_REASONS else None
 	return row

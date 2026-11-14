@@ -24,6 +24,7 @@ from onerc_healthcare.constants import (
 from onerc_healthcare.emr_community.doctype.service_delivered.service_delivered import (
 	ServiceDeliveredLockedError,
 )
+from onerc_healthcare.privacy import access_log
 from onerc_healthcare.tests.base import EMRTestCase
 from onerc_healthcare.tests.clinical_factories import as_user, users
 from onerc_healthcare.tests.factories import get_facility, make_user
@@ -248,6 +249,94 @@ class TestServiceDelivered(CommunityTestCase):
 # --------------------------------------------------------------------------- Community Activity Record
 
 
+class TestServiceFixRound(CommunityTestCase):
+	"""M6 (archive), DEFECT-P3-4 (offered on excluded visits), L13 (sensitive reads)."""
+
+	def record(self, user_key="clinician", visit=None, **kw):
+		values = {
+			"doctype": SERVICE_DELIVERED_DOCTYPE,
+			"visit": visit or make_visit().name,
+			"service_type": SERVICE,
+		}
+		values.update(kw)
+		with as_user(self.users[user_key]):
+			return frappe.get_doc(values).insert()
+
+	def test_archive_only_through_the_action(self):
+		doc = self.record(krcs_archived=1)
+		self.assertEqual(doc.krcs_archived, 0)  # an insert always starts unarchived
+		for key in ("clinician", "mic"):
+			with as_user(self.users[key]), self.assertRaises(ServiceDeliveredLockedError):
+				d = frappe.get_doc(SERVICE_DELIVERED_DOCTYPE, doc.name)
+				d.krcs_archived = 1
+				d.save()
+		with as_user(self.users["clinician"]), self.assertRaises(services.ServiceDeliveredError):
+			services.set_service_archived(doc.name, 1, " ")
+		for key in ("clinician2", "mho", "his"):
+			with as_user(self.users[key]), self.assertRaises(frappe.PermissionError, msg=key):
+				services.set_service_archived(doc.name, 1, "T- old")
+		with as_user(self.users["clinician"]):
+			services.set_service_archived(doc.name, 1, "T- recorded twice")
+		self.assertEqual(frappe.db.get_value(SERVICE_DELIVERED_DOCTYPE, doc.name, "krcs_archived"), 1)
+		self.assertTrue(
+			frappe.db.exists(
+				"Comment",
+				{
+					"reference_doctype": SERVICE_DELIVERED_DOCTYPE,
+					"reference_name": doc.name,
+					"content": ["like", "%T- recorded twice%"],
+				},
+			)
+		)
+		with as_user(self.users["mic"]):
+			services.set_service_archived(doc.name, 0, "T- not a duplicate")
+		self.assertEqual(frappe.db.get_value(SERVICE_DELIVERED_DOCTYPE, doc.name, "krcs_archived"), 0)
+
+	def test_record_not_offered_on_excluded_visits(self):
+		for reason in ("Registered in error", "Superseded by a new visit"):
+			visit = make_visit().name
+			engine.transition(visit, "close_visit", closure_reason=reason, comment="T- x", system=True)
+			with as_user(self.users["clinician"]):
+				from onerc_healthcare.visit.outcome import get_visit_capture
+
+				self.assertFalse(get_visit_capture(visit)["can_record_services"], reason)
+				self.assertFalse(services.get_visit_services(visit)["can_record"], reason)
+
+	def test_sensitive_service_reads(self):
+		self.assertEqual(frappe.db.get_value(SERVICE_TYPE_DOCTYPE, "Mental illness", "sensitive"), 1)
+		self.assertEqual(frappe.db.get_value(SERVICE_TYPE_DOCTYPE, "Social investigation", "sensitive"), 0)
+		visit = make_visit().name
+		sensitive = self.record(visit=visit, service_type="Mental illness")
+		plain = self.record(service_type="Social investigation")
+		self.assertTrue(access_log.is_sensitive(SERVICE_DELIVERED_DOCTYPE, sensitive.name))
+		self.assertTrue(access_log.is_sensitive(SERVICE_DELIVERED_DOCTYPE, sensitive))
+		self.assertFalse(access_log.is_sensitive(SERVICE_DELIVERED_DOCTYPE, plain.name))
+		with as_user(self.users["mic"]):
+			services.get_visit_services(visit)
+		entry = frappe.get_all(
+			"Access Log Entry",
+			filters={"reference_doctype": SERVICE_DELIVERED_DOCTYPE, "user": self.users["mic"]},
+			fields=["sensitive", "patient"],
+			order_by="creation desc",
+			limit=1,
+		)
+		self.assertEqual(entry[0].sensitive, 1)
+		with as_user(self.users["mic"]):
+			access_log.log_open(frappe.get_doc(SERVICE_DELIVERED_DOCTYPE, sensitive.name))
+		entry = frappe.get_all(
+			"Access Log Entry",
+			filters={"reference_name": sensitive.name, "user": self.users["mic"]},
+			fields=["sensitive"],
+			limit=1,
+		)
+		self.assertEqual(entry[0].sensitive, 1)
+
+	def test_seed_marks_sensitive_once(self):
+		frappe.db.set_value(SERVICE_TYPE_DOCTYPE, "Mental illness", "sensitive", 0)
+		community_setup.install()  # the one-off update already ran: the HIS Officer's edit is kept
+		self.assertEqual(frappe.db.get_value(SERVICE_TYPE_DOCTYPE, "Mental illness", "sensitive"), 0)
+
+
 class TestCommunityActivity(CommunityTestCase):
 	def make(self, user_key="clinician", submit=False, **kw):
 		values = {
@@ -379,3 +468,46 @@ class TestCommunityActivity(CommunityTestCase):
 			with as_user(self.users[key]), self.assertRaises(frappe.PermissionError, msg=key):
 				frappe.delete_doc(COMMUNITY_ACTIVITY_DOCTYPE, doc.name)
 		self.assertTrue(frappe.db.exists(COMMUNITY_ACTIVITY_DOCTYPE, doc.name))
+
+	def test_archive_mic_only(self):
+		"""M6: the author cannot archive their own submitted record (allow on submit); the MIC can."""
+		doc = self.make("clinician", submit=True)
+		with as_user(self.users["clinician"]), self.assertRaises(frappe.PermissionError):
+			d = frappe.get_doc(COMMUNITY_ACTIVITY_DOCTYPE, doc.name)
+			d.krcs_archived = 1
+			d.save()
+		with self.assertRaises(frappe.PermissionError):
+			self.make("clinician", krcs_archived=1)
+		with as_user(self.users["mic"]):
+			d = frappe.get_doc(COMMUNITY_ACTIVITY_DOCTYPE, doc.name)
+			d.krcs_archived = 1
+			d.save()
+		self.assertEqual(frappe.db.get_value(COMMUNITY_ACTIVITY_DOCTYPE, doc.name, "krcs_archived"), 1)
+
+	def test_amend_by_author_or_mic_only(self):
+		doc = self.make("clinician", submit=True)
+		with as_user(self.users["mic"]):
+			activities.cancel_activity(doc.name, "T- wrong count")
+
+		def amend():
+			new = frappe.copy_doc(frappe.get_doc(COMMUNITY_ACTIVITY_DOCTYPE, doc.name))
+			new.amended_from = doc.name
+			new.docstatus = 0
+			return new.insert()
+
+		with as_user(self.users["clinician2"]), self.assertRaises(frappe.PermissionError):
+			amend()
+		with as_user(self.users["mic"]):
+			self.assertEqual(amend().amended_from, doc.name)
+
+	def test_desk_cancel_with_reason_records_who_and_when(self):
+		doc = self.make("clinician", submit=True)
+		with as_user(self.users["mic"]):
+			d = frappe.get_doc(COMMUNITY_ACTIVITY_DOCTYPE, doc.name)
+			d.cancel_reason = "T- desk"
+			d.cancel()
+		row = frappe.db.get_value(
+			COMMUNITY_ACTIVITY_DOCTYPE, doc.name, ["docstatus", "cancelled_by", "cancelled_at"], as_dict=True
+		)
+		self.assertEqual((row.docstatus, row.cancelled_by), (2, self.users["mic"]))
+		self.assertTrue(row.cancelled_at)

@@ -142,7 +142,7 @@
     "Other Plasmodium species seen",
     "Mixed infection"
    ],
-   "note": "Every ICD-11 malaria code (1F40-1F4Z, including 1F45 without parasitological confirmation) maps here. It counts as confirmed only with an approved (submitted) positive RDT or slide on the same encounter; otherwise it counts as Clinical Malaria.",
+   "note": "Every ICD-11 malaria code (1F40-1F4Z, including 1F45 without parasitological confirmation) maps here. It counts as confirmed only with an approved (submitted) positive RDT or slide on the same encounter or another encounter of its internal-referral chain; otherwise it counts as Clinical Malaria.",
    "mappings": [{"match_type": "Block", "value": "BlockL2-1F4"}]
   },
   {

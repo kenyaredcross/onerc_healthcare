@@ -19,7 +19,8 @@
    "label": "Kind",
    "columns": 2,
    "in_list_view": 1,
-   "read_only": 1
+   "read_only": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "element",
@@ -27,7 +28,8 @@
    "label": "Element",
    "columns": 1,
    "in_list_view": 1,
-   "read_only": 1
+   "read_only": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "detail",
@@ -35,7 +37,8 @@
    "label": "Detail",
    "columns": 4,
    "in_list_view": 1,
-   "read_only": 1
+   "read_only": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "reference_doctype",
@@ -43,7 +46,8 @@
    "label": "Record Type",
    "options": "DocType",
    "columns": 1,
-   "read_only": 1
+   "read_only": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "reference_name",
@@ -52,11 +56,12 @@
    "columns": 2,
    "in_list_view": 1,
    "read_only": 1,
-   "description": "Record ID (the record may since be archived or merged)."
+   "description": "Record ID (the record may since be archived or merged).",
+   "permlevel": 1
   }
  ],
  "links": [],
- "modified": "2026-11-14 16:00:00.000000",
+ "modified": "2026-11-15 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Reporting",
  "name": "MOH Report Run Exception",

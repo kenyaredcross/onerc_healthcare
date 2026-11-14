@@ -17,10 +17,11 @@ exactly 5 years (60 months) counts on 705B. Age is in completed months on the **
 3. Each code is resolved to a category (`mapping.Resolver`: Exact > longest Prefix > deepest Block >
    catch-all). Excluded categories are dropped. An unmapped code counts under the catch-all ("All other
    diseases") **and** is recorded as an exception.
-4. **Laboratory confirmation**: a category that requires it (Confirmed Malaria) stays only when the same
-   encounter has an approved (submitted) Observation of one of its confirmation tests whose result is one
+4. **Laboratory confirmation**: a category that requires it (Confirmed Malaria) stays only when an
+   encounter of the same episode (the encounter itself or another one of its internal-referral chain,
+   rule 5) has an approved (submitted) Observation of one of its confirmation tests whose result is one
    of its positive results; otherwise the diagnosis counts under its fallback (Clinical Malaria). The
-   Observation belongs to the encounter through its Service Request (``order_group``) or its reference.
+   Observation belongs to an encounter through its Service Request (``order_group``) or its reference.
    The malaria tests are Select results with fixed options in the seeded catalogue
    (``setup/data/lab_catalogue.json``), so a positive is detected exactly; the test names and positive
    values are configurable on the category, so a catalogue change needs no code change.
@@ -267,7 +268,10 @@ def _load_referral_sources(
 
 
 def _apply_confirmation(resolver: mapping.Resolver, encounters: dict[str, _Encounter]) -> None:
-	"""Replace an unconfirmed lab-confirmed category by its fallback (module docstring, rule 4)."""
+	"""Replace an unconfirmed lab-confirmed category by its fallback (module docstring, rule 4).
+
+	The approved positive result may be on any encounter of the episode (internal-referral chain): an RDT
+	approved at the OPD encounter confirms the malaria diagnosed at the encounter it was referred to."""
 	needs = {
 		name: e
 		for name, e in encounters.items()
@@ -275,6 +279,9 @@ def _apply_confirmation(resolver: mapping.Resolver, encounters: dict[str, _Encou
 	}
 	if not needs:
 		return
+	roots = {name: _episode_root(name, encounters) for name in encounters}
+	episodes = {roots[name] for name in needs}
+	members = {name for name, root in roots.items() if root in episodes}
 	templates = sorted(
 		{
 			t
@@ -284,9 +291,9 @@ def _apply_confirmation(resolver: mapping.Resolver, encounters: dict[str, _Encou
 			for t in resolver.categories[c].tests
 		}
 	)
-	found: dict[str, set[tuple[str, str]]] = defaultdict(set)
+	found: dict[str, set[tuple[str, str]]] = defaultdict(set)  # episode root -> (test, result)
 	if templates:
-		patients = sorted({e.patient for e in needs.values()})
+		patients = sorted({encounters[name].patient for name in members})
 		rows = frappe.db.sql(
 			"""SELECT obs.observation_template, obs.result, obs.reference_doctype, obs.reference_docname,
 				sr.order_group
@@ -299,16 +306,17 @@ def _apply_confirmation(resolver: mapping.Resolver, encounters: dict[str, _Encou
 		)
 		for r in rows:
 			result = (r.observation_template, cstr(r.result).strip().lower())
-			if r.order_group in needs:
-				found[r.order_group].add(result)
-			if r.reference_doctype == ENCOUNTER_DOCTYPE and r.reference_docname in needs:
-				found[r.reference_docname].add(result)
+			if r.order_group in members:
+				found[roots[r.order_group]].add(result)
+			if r.reference_doctype == ENCOUNTER_DOCTYPE and r.reference_docname in members:
+				found[roots[r.reference_docname]].add(result)
 	for enc in needs.values():
+		results = found.get(roots[enc.name], ())
 		for name in list(enc.categories):
 			category = resolver.categories[name]
 			if not category.requires_lab_confirmation:
 				continue
-			if any(t in category.tests and v in category.positives for t, v in found.get(enc.name, ())):
+			if any(t in category.tests and v in category.positives for t, v in results):
 				continue
 			enc.categories.discard(name)
 			fallback = category.fallback if category.fallback in resolver.categories else resolver.catch_all
