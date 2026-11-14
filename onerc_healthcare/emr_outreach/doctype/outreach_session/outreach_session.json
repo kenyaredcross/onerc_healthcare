@@ -6,7 +6,7 @@
  "module": "EMR Outreach",
  "name": "Outreach Session",
  "owner": "Administrator",
- "modified": "2026-11-14 12:00:00.000000",
+ "modified": "2026-11-14 14:00:00.000000",
  "modified_by": "Administrator",
  "istable": 0,
  "editable_grid": 0,
@@ -23,7 +23,10 @@
   "team_section",
   "team",
   "departments",
-  "notes"
+  "notes",
+  "history_section",
+  "cancellation_reason",
+  "status_log"
  ],
  "fields": [
   {
@@ -120,6 +123,28 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "history_section",
+   "fieldtype": "Section Break",
+   "label": "Status History",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "cancellation_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancellation Reason",
+   "read_only": 1,
+   "no_copy": 1,
+   "depends_on": "eval:doc.status=='Cancelled'"
+  },
+  {
+   "fieldname": "status_log",
+   "fieldtype": "Table",
+   "label": "Status Log",
+   "options": "Outreach Session Status Log",
+   "read_only": 1,
+   "no_copy": 1
   }
  ],
  "permissions": [

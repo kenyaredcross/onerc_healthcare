@@ -1,0 +1,144 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "EMR Outreach",
+ "name": "EMR Outreach Settings",
+ "owner": "Administrator",
+ "modified": "2026-11-14 14:00:00.000000",
+ "modified_by": "Administrator",
+ "istable": 0,
+ "editable_grid": 0,
+ "custom": 0,
+ "field_order": [
+  "offline_section",
+  "offline_session_days",
+  "purge_after_days",
+  "pin_min_length",
+  "max_pin_attempts",
+  "column_break_offline",
+  "summary_visits",
+  "package_max_patients",
+  "max_batch",
+  "conflict_score"
+ ],
+ "fields": [
+  {
+   "fieldname": "offline_section",
+   "fieldtype": "Section Break",
+   "label": "Offline Use (D58, OI-10)"
+  },
+  {
+   "fieldname": "offline_session_days",
+   "fieldtype": "Int",
+   "label": "Offline Session (Days)",
+   "default": "7",
+   "non_negative": 1,
+   "description": "Days a device may sync and unlock with its PIN after an online sign-in (1-30)."
+  },
+  {
+   "fieldname": "purge_after_days",
+   "fieldtype": "Int",
+   "label": "Purge After (Days)",
+   "default": "7",
+   "non_negative": 1,
+   "description": "The device deletes a record this many days after the server acknowledged it (0-90)."
+  },
+  {
+   "fieldname": "pin_min_length",
+   "fieldtype": "Int",
+   "label": "Minimum PIN Length",
+   "default": "6",
+   "non_negative": 1,
+   "description": "4-12 digits."
+  },
+  {
+   "fieldname": "max_pin_attempts",
+   "fieldtype": "Int",
+   "label": "Wrong PIN Attempts Before Lockout",
+   "default": "5",
+   "non_negative": 1,
+   "description": "After this many wrong PINs the device discards its PIN key; an online sign-in restores it (3-10)."
+  },
+  {
+   "fieldname": "column_break_offline",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "summary_visits",
+   "fieldtype": "Int",
+   "label": "Visits in Each Patient Summary",
+   "default": "3",
+   "non_negative": 1,
+   "description": "Most recent visits (diagnoses) sent per patient in the package (0-10). Mental Health is never sent."
+  },
+  {
+   "fieldname": "package_max_patients",
+   "fieldtype": "Int",
+   "label": "Maximum Patients per Package",
+   "default": "5000",
+   "non_negative": 1,
+   "description": "Upper limit on the patients a session package contains (1-50000)."
+  },
+  {
+   "fieldname": "max_batch",
+   "fieldtype": "Int",
+   "label": "Records per Sync Call",
+   "default": "50",
+   "non_negative": 1,
+   "description": "1-200."
+  },
+  {
+   "fieldname": "conflict_score",
+   "fieldtype": "Int",
+   "label": "Duplicate Conflict Score",
+   "default": "8",
+   "non_negative": 1,
+   "description": "Similarity score from which an offline registration is raised as a Sync Conflict (1-20)."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "HIS Officer",
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "report": 0,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Medical In-Charge",
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "report": 0,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "EMR System Administrator",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "report": 0,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "issingle": 1,
+ "track_changes": 1
+}

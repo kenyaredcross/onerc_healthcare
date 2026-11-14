@@ -1,0 +1,205 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "EMR Outreach",
+ "name": "Outreach Device Grant",
+ "owner": "Administrator",
+ "modified": "2026-11-14 14:00:00.000000",
+ "modified_by": "Administrator",
+ "istable": 0,
+ "editable_grid": 0,
+ "custom": 0,
+ "field_order": [
+  "user",
+  "device",
+  "session",
+  "column_break_grant",
+  "issued_at",
+  "expires_at",
+  "last_used_at",
+  "revoked",
+  "revocation_section",
+  "revoked_by",
+  "revoked_at",
+  "revoke_reason",
+  "secrets_section",
+  "secret_hash",
+  "secret_salt",
+  "data_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "device",
+   "fieldtype": "Link",
+   "label": "Device",
+   "options": "Outreach Device",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "session",
+   "fieldtype": "Link",
+   "label": "Outreach Session",
+   "options": "Outreach Session",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_grant",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "issued_at",
+   "fieldtype": "Datetime",
+   "label": "Issued At",
+   "read_only": 1,
+   "description": "Last enrolment (each enrolment rotates the secret)."
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires At",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "last_used_at",
+   "fieldtype": "Datetime",
+   "label": "Last Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked",
+   "fieldtype": "Check",
+   "label": "Revoked",
+   "read_only": 1,
+   "default": "0",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "revocation_section",
+   "fieldtype": "Section Break",
+   "label": "Revocation",
+   "depends_on": "eval:doc.revoked"
+  },
+  {
+   "fieldname": "revoked_by",
+   "fieldtype": "Link",
+   "label": "Revoked By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_at",
+   "fieldtype": "Datetime",
+   "label": "Revoked At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoke_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "secrets_section",
+   "fieldtype": "Section Break",
+   "label": "Secrets",
+   "permlevel": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "secret_hash",
+   "fieldtype": "Data",
+   "label": "Secret Hash",
+   "read_only": 1,
+   "hidden": 1,
+   "permlevel": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "secret_salt",
+   "fieldtype": "Data",
+   "label": "Secret Salt",
+   "read_only": 1,
+   "hidden": 1,
+   "permlevel": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "data_key",
+   "fieldtype": "Password",
+   "label": "Escrowed Data Key",
+   "read_only": 1,
+   "hidden": 1,
+   "permlevel": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "length": 255
+  }
+ ],
+ "permissions": [
+  {
+   "role": "HIS Officer",
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Medical In-Charge",
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "EMR System Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "hash",
+ "track_changes": 0
+}
