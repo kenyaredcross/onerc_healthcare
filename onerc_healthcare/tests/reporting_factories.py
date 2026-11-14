@@ -122,7 +122,11 @@ class ReconBuilder:
 		"""Register a visit on `day` (server insert keeps the date; the attendance rule runs on it)."""
 		kw = {"visit_date": getdate(day), "arrived_at": at(day, 8)}
 		if outreach:
-			kw.update({"is_outreach": 1, "outreach_session": "T-Recon outreach, Village 3"})
+			from onerc_healthcare.tests.outreach_factories import make_session
+
+			if not getattr(self, "outreach_session", None):
+				self.outreach_session = make_session(facility=self.facilities[facility]).name
+			kw.update({"is_outreach": 1, "outreach_session": self.outreach_session})
 		if smartcare:
 			kw["seen_in_smartcare"] = 1
 		if referred_in:

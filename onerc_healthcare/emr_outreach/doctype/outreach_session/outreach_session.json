@@ -1,0 +1,171 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "EMR Outreach",
+ "name": "Outreach Session",
+ "owner": "Administrator",
+ "modified": "2026-11-14 12:00:00.000000",
+ "modified_by": "Administrator",
+ "istable": 0,
+ "editable_grid": 0,
+ "field_order": [
+  "naming_series",
+  "title",
+  "status",
+  "facility",
+  "company",
+  "column_break_dates",
+  "catchment_area",
+  "start_date",
+  "end_date",
+  "team_section",
+  "team",
+  "departments",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "OUT-.YYYY.-",
+   "default": "OUT-.YYYY.-",
+   "reqd": 1,
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Planned\nActive\nReturned\nClosed\nCancelled",
+   "default": "Planned",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "catchment_area",
+   "fieldtype": "Link",
+   "label": "Catchment Area",
+   "options": "Catchment Area",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "team_section",
+   "fieldtype": "Section Break",
+   "label": "Team"
+  },
+  {
+   "fieldname": "team",
+   "fieldtype": "Table",
+   "label": "Team Members",
+   "options": "Outreach Session Member",
+   "reqd": 1
+  },
+  {
+   "fieldname": "departments",
+   "fieldtype": "Table",
+   "label": "Departments Offered",
+   "options": "Outreach Session Department",
+   "description": "Services the team offers. Mental Health is never offered offline (OI-7)."
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "HIS Officer",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Medical In-Charge",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Outreach Team Member",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "title_field": "title",
+ "show_title_field_in_link": 1,
+ "track_changes": 1
+}

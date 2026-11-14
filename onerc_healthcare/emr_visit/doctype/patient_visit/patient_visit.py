@@ -48,7 +48,6 @@ from onerc_healthcare.visit.engine import (
 from onerc_healthcare.visit.patients import assert_patient_active, lock_patient
 from onerc_healthcare.visit.queue import get_primary_identifier, next_queue_number
 
-OUTREACH_SESSION_MAX_LENGTH = 140
 # Roles that record screening at the entrance (decision 2026-11-13).
 SCREENING_ROLES = frozenset((ROLE_RECEPTIONIST, ROLE_TRIAGE))
 STAGE_TIMESTAMPS = ("triage_started_at", "routed_at", "consultation_started_at", "closed_at")
@@ -153,7 +152,8 @@ class PatientVisit(Document):
 			)
 
 	def validate_outreach(self):
-		"""An outreach visit names its session (NFR-10); a facility visit has none."""
+		"""An outreach visit names its Outreach Session (Phase 4: a Link, set by the outreach sync); a facility
+		visit has none."""
 		self.outreach_session = (self.outreach_session or "").strip() or None
 		if not self.is_outreach:
 			self.outreach_session = None
@@ -163,11 +163,6 @@ class PatientVisit(Document):
 				_("Enter the Outreach Session for an outreach visit."),
 				frappe.MandatoryError,
 				title=_("Missing Value"),
-			)
-		if len(self.outreach_session) > OUTREACH_SESSION_MAX_LENGTH:
-			frappe.throw(
-				_("Outreach Session must be at most {0} characters.").format(OUTREACH_SESSION_MAX_LENGTH),
-				title=_("Value Too Long"),
 			)
 
 	def validate_facility(self):

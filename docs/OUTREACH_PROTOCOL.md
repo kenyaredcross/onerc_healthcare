@@ -38,7 +38,7 @@ Lists the sessions the signed-in user belongs to, with status Planned, Active or
 ```json
 [{"name": "KLB-OUT-2026-00001", "title": "Kalobeyei Village 3 outreach", "facility": "...", "facility_name": "...",
   "start_date": "2026-11-20", "end_date": "2026-11-21", "catchment_area": "...", "status": "Planned",
-  "departments": ["General Outpatient", "Maternal and Child Health"]}]
+  "departments": ["Outpatient", "Maternal and Child Health"]}]
 ```
 
 ### `POST devices.enrol(session, device_id, device_label, data_key)`
@@ -74,7 +74,7 @@ Returns `{"version": "<sha1>", "unchanged": true}` when the client's `version` m
   "dosages": ["OD", "BD", "TID"], "periods": ["3 Day", "5 Day"], "dosage_forms": ["Tablet"],
   "lab_templates": [{"name": "Malaria Rapid Diagnostic Test", "abbr": "MRDT", "point_of_care": 1,
                       "data_type": "Select", "options": ["Negative", "..."], "unit": null}],
-  "departments": ["General Outpatient"],
+  "departments": ["Outpatient"],
   "identifier_types": [{"name": "UNHCR ID", "is_primary": 1, "pattern": "^...$", "facility_generated": 0}],
   "residences": [{"name": "...", "location_name": "...", "parent": "...", "is_group": 1, "level": "Village"}],
   "triage_levels": ["Emergency", "Priority", "Non-urgent"],
@@ -96,7 +96,7 @@ Covers active, unmerged patients whose `krcs_residence` is inside the catchment 
   "first_name": "...", "middle_name": null, "last_name": "...", "sex": "Female",
   "dob": "1990-05-01", "dob_estimated": 0, "mobile": null, "residence": "...", "allergies": null,
   "identifiers": [{"identifier_type": "UNHCR ID", "identifier_value": "..."}],
-  "recent_visits": [{"date": "2026-10-02", "facility": "...", "department": "General Outpatient",
+  "recent_visits": [{"date": "2026-10-02", "facility": "...", "department": "Outpatient",
                       "diagnoses": [{"code": "1F40", "title": "...", "case_type": "New"}]}],
   "active_prescriptions": [{"medication": "...", "dosage": "TID", "period": "5 Day", "date": "2026-10-02"}]}]}
 ```
@@ -157,7 +157,7 @@ The registration facility is the session's facility. The usual registration rule
 
 ```json
 {"patient": "KLB-PAT-2026-00012", "patient_ref": null,
- "department": "General Outpatient",
+ "department": "Outpatient",
  "vitals": {"triage_level": "Non-urgent", "chief_complaint": "...", "temperature": 37.2, "pulse": 88,
             "respiratory_rate": 18, "bp_systolic": 120, "bp_diastolic": 80, "weight": 60.5, "height": 1.62,
             "spo2": 98},

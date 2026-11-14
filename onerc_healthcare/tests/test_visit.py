@@ -734,8 +734,10 @@ class TestVisitStatusLock(VisitTestCase):
 				doc.save()
 
 	def test_other_fields_still_editable(self):
-		visit = make_visit(is_outreach=1, outreach_session="T-SESSION-1")
-		visit.outreach_session = "T-SESSION-2"
+		from onerc_healthcare.tests.outreach_factories import make_session
+
+		visit = make_visit(is_outreach=1, outreach_session=make_session().name)
+		visit.outreach_session = make_session().name
 		visit.save(ignore_permissions=True)
 		self.assertEqual(visit.status, VISIT_STATUS_REGISTERED)
 
@@ -1194,11 +1196,14 @@ class TestVisitValidation(VisitTestCase):
 	def test_outreach_visit_needs_session(self):
 		with self.assertRaises(frappe.MandatoryError):
 			make_visit(is_outreach=1)
-		with self.assertRaises(frappe.ValidationError):
-			make_visit(is_outreach=1, outreach_session="S" * 141)
-		visit = make_visit(is_outreach=1, outreach_session="  T-SESSION-9  ")
-		self.assertEqual(visit.outreach_session, "T-SESSION-9")
-		facility_visit = make_visit(outreach_session="T-IGNORED")
+		from onerc_healthcare.tests.outreach_factories import make_session
+
+		with self.assertRaises(frappe.LinkValidationError):
+			make_visit(is_outreach=1, outreach_session="T-NO-SUCH-SESSION")
+		session = make_session().name
+		visit = make_visit(is_outreach=1, outreach_session=session)
+		self.assertEqual(visit.outreach_session, session)
+		facility_visit = make_visit(outreach_session=session)
 		self.assertIsNone(facility_visit.outreach_session)
 
 	def test_mandatory_fields(self):
