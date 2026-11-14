@@ -69,6 +69,9 @@ doc_events = {
 		"on_update": "onerc_healthcare.clinical.events.practitioner_on_update",
 	},
 	"Observation": {
+		# M6: lock the visit before Frappe writes the Observation (lock order Visit -> Encounter -> Observation)
+		"before_submit": "onerc_healthcare.lab.events.observation_before_submit",
+		"before_cancel": "onerc_healthcare.lab.events.observation_before_cancel",
 		"on_submit": "onerc_healthcare.lab.events.observation_on_submit",
 		"on_cancel": "onerc_healthcare.lab.events.observation_on_cancel",
 	},
@@ -113,6 +116,7 @@ doctype_js = {
 
 # Marley endpoints that insert/submit with ignore_permissions and no permission check (Phase 2 audit A3).
 _PE = "healthcare.healthcare.doctype.patient_encounter.patient_encounter"
+_SR = "healthcare.healthcare.doctype.service_request.service_request"
 override_whitelisted_methods = {
 	f"{_PE}.create_service_request": "onerc_healthcare.clinical.guards.create_service_request",
 	f"{_PE}.create_service_request_from_widget": (
@@ -124,6 +128,20 @@ override_whitelisted_methods = {
 	f"{_PE}.create_medication_request": "onerc_healthcare.clinical.guards.create_medication_request",
 	"healthcare.healthcare.doctype.service_request.service_request.make_observation": (
 		"onerc_healthcare.lab.guards.make_observation"
+	),
+	# M8: Marley endpoints that leaked order/patient details or took a client ignore_permissions
+	f"{_SR}.make_lab_test": "onerc_healthcare.lab.guards.make_lab_test",
+	f"{_SR}.make_clinical_procedure": "onerc_healthcare.lab.guards.make_clinical_procedure",
+	f"{_SR}.make_appointment": "onerc_healthcare.lab.guards.make_appointment",
+	# M4: read access logging for logged doctypes/reports (wrappers keep upstream signatures; B4)
+	"frappe.client.get": "onerc_healthcare.privacy.read_log.get",
+	"frappe.client.get_value": "onerc_healthcare.privacy.read_log.get_value",
+	"frappe.desk.reportview.get": "onerc_healthcare.privacy.read_log.reportview_get",
+	"frappe.desk.reportview.export_query": "onerc_healthcare.privacy.read_log.reportview_export_query",
+	"frappe.desk.query_report.export_query": "onerc_healthcare.privacy.read_log.query_report_export_query",
+	# L6: no forged access-log entries over HTTP (B4)
+	"frappe.core.doctype.access_log.access_log.make_access_log": (
+		"onerc_healthcare.privacy.access_log.make_access_log"
 	),
 }
 
@@ -142,6 +160,11 @@ permission_query_conditions = {
 
 has_permission = {
 	"Patient Visit": "onerc_healthcare.visit.permissions.patient_visit_has_permission",
+	# H1: Data Access Request extracts are never downloadable as files (only via download_extract; B4)
+	"File": "onerc_healthcare.privacy.permissions.file_has_permission",
 	"Patient Encounter": "onerc_healthcare.clinical.permissions.encounter_has_permission",
 	"Access Log Entry": "onerc_healthcare.privacy.permissions.access_log_has_permission",
 }
+
+# M4: log successful REST/API reads of logged doctypes (after_request: the API user is known by then; B4)
+after_request = ["onerc_healthcare.privacy.read_log.after_request"]

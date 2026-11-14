@@ -129,3 +129,76 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
   - The flag is sticky: it stays set even if the visit is later returned, triaged and routed normally.
 - **Correction on kalobeyei:** the mistaken visit KLB-PV-2026-00009 (Mary Akuru, routed to Triage) was returned to In Triage by Administrator with a logged reason.
 - Decided by the user on 2026-11-13.
+
+## Phase 2 (Clinical), 2026-11-13
+
+**D28. Consultation flow.**
+- A consultation is a Patient Encounter linked to its visit (`krcs_visit`), with one active encounter per visit.
+- It is started, sent and completed only through `clinical.consultation`:
+  - Start creates or reopens the encounter.
+  - Send Lab Orders releases the lab orders.
+  - Complete applies the diagnosis rule, releases prescriptions and completes the visit.
+- Desk Submit is refused unless the flow submits. Marley's order-creating endpoints are blocked.
+- Clinical Officers and Mental Health Officers may consult in any department.
+
+**D29. No encounter cancel or amend.**
+- Amending would duplicate every order, and cancelling would orphan prescriptions.
+- Corrections go in an append-only, allow-on-submit addendum.
+- Cancel and amend are refused in the permission hook, before Marley's `before_cancel` runs.
+
+**D30. ICD-11 diagnoses.**
+- Diagnoses live in the custom child table EMR Encounter Diagnosis: ICD-11 code, New/Follow-up flag, exactly one primary.
+- Chapter X (extension codes) is excluded. Leaf codes rank first in the picker; parent codes are allowed with a warning.
+- The table rebuilds Marley's `codification_table`.
+- A consultation cannot be completed without a coded diagnosis unless a reason is given (FR-11).
+
+**D31. Completing with pending results.**
+- A consultation may be completed while lab results are pending, but a reason is required.
+- The visit stays Awaiting Laboratory until the results arrive or the visit is closed.
+
+**D32. Close Visit.**
+- Any open visit can be closed as Discharged with a reason category and a comment, for example "patient left before being seen".
+- A patient may have only one open visit at any date. Registering a new visit offers to close the previous one.
+
+**D33. Referral.**
+- Referral is its own record (Draft → Sent → Received/Completed/Lost to Follow-up, or Cancelled while still Draft).
+- An internal referral opens a new visit routed straight to the destination department, skipping triage.
+- Referral is possible while lab or pharmacy tasks are open; the referred visit keeps those tasks.
+- Referral Facility is provisional until the MFR list (OI-3).
+
+**D34. Laboratory.**
+- Marley's `make_observation` stops after an encounter's first order. Our `lab.orders.ensure_observations` provisions every order.
+- Lab completeness is computed from approved Observations, never from Service Request status, which Marley sets to "completed" at sample collection.
+- Approval is single-step by the Lab Technician (provisional, OI-9).
+- A rejected result reopens the lab task.
+
+**D35. Pharmacy.**
+- Medicines are non-stock items from a provisional catalogue (OI-9). No prices, no ledger.
+- Dispensing Record covers each prescription line: partial dispensing, not dispensed with a reason, substitution with a reason.
+- The line state is mapped onto Marley's status. The visit's `dispensed` event is raised when every line is resolved.
+- Clinicians read prescriptions but cannot write them, so they cannot forge a status.
+
+**D36. Visit events.**
+- Lab, pharmacy and referral code raise visit events only through `visit.tasks.raise_event`. It does nothing (and adds a comment) when the visit's state does not allow the event, so a clinical record is never rolled back.
+- A scheduled reconciler runs every 10 minutes, and the Medical In-Charge has a "Recheck Tasks" button.
+
+**D37. Consent and data access.**
+- Consent statements are versioned, and the provisional EN-1.0 wording is pending OI-14.
+- Missing consent produces a warning at visit registration, never a block.
+- Data Access Requests follow Received → Identity Verified → Approved/Rejected → Response Ready → Closed.
+
+**D38. Access Log Entry.**
+- Append-only. The patient is stored as Data so that merges never rewrite it.
+- Desk record opens are written after the response, because GETs roll back.
+- Prints, exports and reports are mirrored from core Access Log.
+- Only the Medical In-Charge and the EMR System Administrator can read it (metadata only).
+
+**D39. Screening and visitors.**
+- Screening parameters are configured by the Medical In-Charge. Temperature defaults to flagged above 37.5 °C (provisional).
+- The Nurse Receptionist and the Triage Nurse both screen.
+- Visitor Record goes Inside → Exited.
+- None of these records is ever deleted. The Head of Operations sees daily counts only.
+
+**D40. Practitioners and Marley endpoints.**
+- Marley's Healthcare Practitioner User Permission (applied to all doctypes) is stripped, consistent with D22.
+- Marley endpoints that skip permission checks are overridden or blocked.
