@@ -19,8 +19,8 @@ visit, facility, recorder, status and the void fields change only through the li
 
 | Action | From | To | Who | Rules |
 |---|---|---|---|---|
-| (insert) | - | Active | Clinical Officer, Mental Health Officer | as above |
-| `void` (`void_service`, POST) | Active | Voided | the recorder (CO / MHO), or the Medical In-Charge | reason required; sets void_reason, voided_by, voided_at |
+| (insert) | - | Active | Clinical Officer, Mental Health Officer, Medical In-Charge (D57) | as above |
+| `void` (`void_service`, POST) | Active | Voided | the recorder, or the Medical In-Charge | reason required; sets void_reason, voided_by, voided_at |
 
 **Archiving** (`krcs_archived`, NFR-9) removes a record from the MOH counts, so it changes only through
 `set_service_archived` (POST; the recorder or the Medical In-Charge, reason kept as a comment). A form or
@@ -86,7 +86,10 @@ class ServiceTransition:
 
 
 TRANSITIONS: dict[str, ServiceTransition] = {
-	ACTION_RECORD: ServiceTransition(_("Record Service"), ("",), STATUS_ACTIVE, RECORDER_ROLES, ()),
+	# User decision 2026-11-14: the Medical In-Charge may record services too (D57).
+	ACTION_RECORD: ServiceTransition(
+		_("Record Service"), ("",), STATUS_ACTIVE, RECORDER_ROLES, SUPERVISOR_ROLES
+	),
 	ACTION_VOID: ServiceTransition(
 		_("Void Service"),
 		(STATUS_ACTIVE,),
@@ -147,7 +150,9 @@ def validate_new(doc) -> None:
 	user = frappe.session.user
 	if not may_act(TRANSITIONS[ACTION_RECORD], doc, user):
 		frappe.throw(
-			_("Only a {0} or {1} can record a service.").format(_(ROLE_CLINICIAN), _(ROLE_MHO)),
+			_("Only a {0}, {1} or {2} can record a service.").format(
+				_(ROLE_CLINICIAN), _(ROLE_MHO), _(ROLE_MIC)
+			),
 			frappe.PermissionError,
 		)
 	visit = visit_values(doc.visit)

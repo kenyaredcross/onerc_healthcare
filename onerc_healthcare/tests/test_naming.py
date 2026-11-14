@@ -6,10 +6,10 @@ import frappe
 
 from onerc_healthcare.naming import (
 	DEFAULT_RULES,
-	PROTECTED_OPTIONS,
 	SETTINGS_DOCTYPE,
 	current_series,
 	preview,
+	protected_options,
 	resolve,
 	supports_series,
 )
@@ -42,7 +42,9 @@ class TestNamingSettings(EMRTestCase):
 			self.assertEqual(current_series(row.document_type), resolved, row.document_type)
 			options = frappe.get_meta(row.document_type).get_field("naming_series").options.split("\n")
 			self.assertEqual(options[0], resolved)
-			self.assertEqual(set(options[1:]), set(PROTECTED_OPTIONS.get(row.document_type, ())))
+			self.assertEqual(
+				set(options[1:]), set(protected_options(row.document_type, self.settings.id_prefix))
+			)
 			self.assertTrue(row.example.startswith(f"{self.abbr}-"), row.example)
 
 	def test_new_patient_id_carries_prefix(self):
@@ -95,3 +97,32 @@ class TestNamingSettings(EMRTestCase):
 
 	def test_preview(self):
 		self.assertRegex(preview("{prefix}-ENC-.YYYY.-", "KLB"), r"^KLB-ENC-\d{4}-00001$")
+
+
+class TestEmergencyPatientPrefix(EMRTestCase):
+	"""D57: Marley's provisional emergency patients get the site prefix (KLB-ER-2026-00001)."""
+
+	def test_emergency_series_gets_site_prefix(self):
+		from frappe.model.naming import make_autoname
+
+		from onerc_healthcare.naming import EMERGENCY_SERIES, prefix_emergency_patient
+
+		prefix = frappe.db.get_single_value("EMR Naming Settings", "id_prefix")
+		doc = frappe.new_doc("Patient")
+		doc.first_name = "T-Unidentified"
+		doc.naming_series = EMERGENCY_SERIES  # as Marley's EmergencyRecord.create_provisional_patient
+		doc.name = make_autoname(EMERGENCY_SERIES, "Patient", doc)
+		doc.flags.name_set = True
+		prefix_emergency_patient(doc)
+		self.assertTrue(doc.name.startswith(f"{prefix}-ER-"), doc.name)
+		self.assertEqual(doc.naming_series, f"{prefix}-{EMERGENCY_SERIES}")
+		options = frappe.get_meta("Patient").get_field("naming_series").options.split("\n")
+		self.assertIn(doc.naming_series, options)
+
+	def test_other_series_untouched(self):
+		from onerc_healthcare.naming import prefix_emergency_patient
+
+		doc = frappe.new_doc("Patient")
+		doc.naming_series = "KLB-PAT-.YYYY.-"
+		prefix_emergency_patient(doc)
+		self.assertFalse(doc.get("name"))

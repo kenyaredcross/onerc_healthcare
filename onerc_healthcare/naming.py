@@ -54,10 +54,38 @@ DEFAULT_RULES = (
 	("Community Activity Record", "{prefix}-CAR-.YYYY.-"),
 )
 
-# Series that Marley code sets directly, so they must stay valid options of the field.
+# Marley's Emergency Record names provisional patients with this series directly
+# (healthcare/doctype/emergency_record/emergency_record.py). User decision 2026-11-14 (D57): such patients
+# get the site prefix instead (`prefix_emergency_patient`, Patient before_insert).
+EMERGENCY_SERIES = "ER-.YYYY.-"
+
+# Series that must stay valid options of the field besides the rule's own ({prefix} is resolved).
 PROTECTED_OPTIONS = {
-	"Patient": ("ER-.YYYY.-",),  # healthcare/doctype/emergency_record/emergency_record.py
+	"Patient": (EMERGENCY_SERIES, f"{PREFIX_PLACEHOLDER}-{EMERGENCY_SERIES}"),
 }
+
+
+def protected_options(doctype: str, prefix: str | None) -> list[str]:
+	return [resolve(o, prefix) for o in PROTECTED_OPTIONS.get(doctype, ())]
+
+
+def prefix_emergency_patient(doc, method=None) -> None:
+	"""Patient before_insert: rename a Marley emergency patient (ER-2026-00001) to the site's series
+	(KLB-ER-2026-00001). Marley set the name already (`flags.name_set`), so it is re-made here."""
+	if doc.get("naming_series") != EMERGENCY_SERIES:
+		return
+	prefix = (
+		frappe.db.get_single_value(SETTINGS_DOCTYPE, "id_prefix")
+		if frappe.db.exists("DocType", SETTINGS_DOCTYPE)
+		else None
+	)
+	if not prefix:
+		return
+	from frappe.model.naming import make_autoname
+
+	doc.naming_series = resolve(f"{PREFIX_PLACEHOLDER}-{EMERGENCY_SERIES}", prefix)
+	doc.name = make_autoname(doc.naming_series, doc.doctype, doc)
+	doc.flags.name_set = True
 
 
 def resolve(series: str, prefix: str) -> str:
@@ -94,9 +122,9 @@ def supports_series(doctype: str) -> bool:
 	return bool(field and field.fieldtype == "Select")
 
 
-def apply_rule(doctype: str, resolved: str) -> None:
+def apply_rule(doctype: str, resolved: str, prefix: str | None = None) -> None:
 	"""Make `resolved` the only selectable series (plus protected ones) and the default."""
-	options = [resolved, *[o for o in PROTECTED_OPTIONS.get(doctype, ()) if o != resolved]]
+	options = [resolved, *[o for o in protected_options(doctype, prefix) if o != resolved]]
 	for prop, value in (("options", "\n".join(options)), ("default", resolved)):
 		frappe.make_property_setter(
 			{
@@ -151,3 +179,19 @@ def ensure_naming_settings() -> None:
 		settings.seeded_doctypes = new_seeded
 		settings.flags.ignore_permissions = True
 		settings.save()
+	ensure_protected_options(settings)
+
+
+def ensure_protected_options(settings) -> None:
+	"""Re-apply a rule whose field lacks a protected option (one added in a later release, e.g. D57)."""
+	for row in settings.rules:
+		if (
+			not row.enabled
+			or row.document_type not in PROTECTED_OPTIONS
+			or not supports_series(row.document_type)
+		):
+			continue
+		field = frappe.get_meta(row.document_type).get_field("naming_series")
+		have = set((field.options or "").split("\n"))
+		if not set(protected_options(row.document_type, settings.id_prefix)) <= have:
+			apply_rule(row.document_type, resolve(row.series, settings.id_prefix), settings.id_prefix)

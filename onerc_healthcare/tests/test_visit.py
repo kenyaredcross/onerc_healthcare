@@ -1709,3 +1709,19 @@ class TestFixRound(VisitTestCase):
 			doc = frappe.get_doc(VISIT_DOCTYPE, visit.name)
 			doc.onload()
 			self.assertIsNone(doc.get_onload().get("latest_screening"))
+
+
+class TestSpO2(EMRTestCase):
+	"""User decision 2026-11-14: SpO2 recorded in triage, 50-100 %."""
+
+	def test_spo2_field_and_range(self):
+		from onerc_healthcare.tests.visit_factories import make_vital_signs
+		from onerc_healthcare.visit.events import ImplausibleVitalSignsError
+
+		self.assertTrue(frappe.get_meta("Vital Signs").has_field("krcs_spo2"))
+		patient = make_patient().name
+		self.assertEqual(make_vital_signs(patient, krcs_spo2="97").krcs_spo2, "97")
+		make_vital_signs(patient)  # optional
+		for bad in ("45", "101", "abc"):
+			with self.assertRaises(ImplausibleVitalSignsError, msg=bad):
+				make_vital_signs(patient, krcs_spo2=bad)

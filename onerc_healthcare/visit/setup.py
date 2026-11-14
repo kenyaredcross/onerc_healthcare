@@ -26,6 +26,15 @@ VITAL_SIGNS_CUSTOM_FIELDS = {
 			"description": "Submitting starts triage on a Registered visit",
 		},
 		{
+			# User decision 2026-11-14: oxygen saturation in triage. Data like Marley's other vitals (an Int
+			# would store 0 when left empty); 50-100 checked by visit.events.check_vital_signs.
+			"fieldname": "krcs_spo2",
+			"label": "SpO2 (%)",
+			"fieldtype": "Data",
+			"insert_after": "respiratory_rate",
+			"description": "Oxygen saturation, 50-100",
+		},
+		{
 			"fieldname": "krcs_triage_section",
 			"label": "Triage Assessment",
 			"fieldtype": "Section Break",

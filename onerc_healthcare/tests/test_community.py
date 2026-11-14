@@ -121,7 +121,8 @@ class TestServiceDelivered(CommunityTestCase):
 
 	def test_who_may_record(self):
 		visit = make_visit().name
-		for key in ("reception", "triage", "lab", "pharmacist", "his", "mic", "hoo", "sysadmin", "outreach"):
+		self.assertEqual(self.record("mic", visit=visit).status, services.STATUS_ACTIVE)  # D57
+		for key in ("reception", "triage", "lab", "pharmacist", "his", "hoo", "sysadmin", "outreach"):
 			with self.assertRaises(frappe.PermissionError, msg=key):
 				self.record(key, visit=visit)
 
@@ -169,7 +170,7 @@ class TestServiceDelivered(CommunityTestCase):
 		self.assertFalse(any(p.get("delete") for p in perms.values()))
 		self.assertTrue(perms[("Clinical Officer", 0)].create and perms[("Clinical Officer", 0)].write)
 		self.assertTrue(perms[("Mental Health Officer", 0)].create)
-		self.assertFalse(perms[("Medical In-Charge", 0)].create)
+		self.assertTrue(perms[("Medical In-Charge", 0)].create)  # D57
 		self.assertTrue(perms[("Medical In-Charge", 0)].write)
 		self.assertFalse(perms[("HIS Officer", 0)].write)
 		self.assertEqual(

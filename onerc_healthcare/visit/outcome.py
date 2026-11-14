@@ -47,7 +47,7 @@ from onerc_healthcare.visit import attendance, engine
 
 # Roles shown the Services section of a visit (Service Delivered is never part of the visit record).
 SERVICE_ROLES = (ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC)
-SERVICE_CREATE_ROLES = (ROLE_CLINICIAN, ROLE_MHO)
+SERVICE_CREATE_ROLES = (ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC)  # MIC: D57
 
 
 def _readable_visit(visit: str):

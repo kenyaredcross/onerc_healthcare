@@ -602,7 +602,7 @@ class TestOutcomeEndpoints(EMRTestCase):
 			"his": (True, True, False, False),
 			"clinician": (False, False, True, True),
 			"mho": (False, False, True, True),
-			"mic": (False, False, True, False),
+			"mic": (False, False, True, True),  # D57: the Medical In-Charge records services
 			"triage": (False, False, False, False),
 			"hoo": (False, False, False, False),
 		}

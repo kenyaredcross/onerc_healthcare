@@ -481,7 +481,8 @@ class TestRunMachine(RunCase):
 
 	def test_one_active_run_per_period(self):
 		"""Draft, Generated and Submitted block a second run; Void frees the period; a revision's new Draft
-		is the active run; voiding it frees the period again; a hand-made `supersedes` is not an escape."""
+		is the active run; voiding it restores the original (D57); a hand-made `supersedes` is not an
+		escape."""
 		period = self.next_period()
 		other = self.next_period()
 		a = self.new_run(period=period).name
@@ -506,10 +507,10 @@ class TestRunMachine(RunCase):
 		self.assertEqual(frappe.db.get_value(MOH_RUN_DOCTYPE, a, "status"), SUPERSEDED)
 		blocked("revision Draft")
 		self.act(b, "void", "T- s2 not needed")
-		c = self.new_run(period=period).name  # Superseded + Void: free
-		blocked("after void, new Draft")
-		self.act(c, "void", "T- s2")
-		d = self.new_run(period=period).name
+		# D57: voiding the revision restores the original submission, which keeps the period
+		self.assertEqual(frappe.db.get_value(MOH_RUN_DOCTYPE, a, "status"), SUBMITTED)
+		blocked("restored original")
+		d = self.act(a, "revise", "T- s2 again")["new_run"]
 		self.act(d, "generate")
 		self.act(d, "submit_run")
 		e = self.act(d, "revise", "T- s2 again")["new_run"]
@@ -1245,6 +1246,7 @@ class TestAttendanceCorrections(P3Case):
 
 SERVICE_RECORD_ROLES = (ROLE_CLINICIAN, ROLE_MHO)
 SERVICE_ANY_VOID_ROLES = (ROLE_MIC,)
+SERVICE_ANY_RECORD_ROLES = (ROLE_MIC,)  # D57: the Medical In-Charge records services too
 EXCLUDED_CLOSURES = ("Registered in error", "Superseded by a new visit")
 SERVICE_ACTORS = ("reception", "triage", "clinician", "mho", "mic", "his", "outreach", "lab", ADMIN)
 
@@ -1260,7 +1262,7 @@ class TestServiceDelivered(P3Case):
 		rec, void = services.TRANSITIONS["record"], services.TRANSITIONS["void"]
 		self.assertEqual(
 			(set(rec.own_roles), set(rec.any_roles), rec.to_status),
-			(set(SERVICE_RECORD_ROLES), set(), "Active"),
+			(set(SERVICE_RECORD_ROLES), set(SERVICE_ANY_RECORD_ROLES), "Active"),
 		)
 		self.assertEqual(
 			(void.from_statuses, void.to_status, set(void.own_roles), set(void.any_roles), void.needs_reason),
@@ -1283,7 +1285,7 @@ class TestServiceDelivered(P3Case):
 				with self.subTest(visit=label, actor=actor), savepoint("s2_svc"):
 					n += 1
 					doc, err = _try(self.record, actor, visit)
-					if role not in (*SERVICE_RECORD_ROLES, ADMIN):
+					if role not in (*SERVICE_RECORD_ROLES, *SERVICE_ANY_RECORD_ROLES, ADMIN):
 						self.assertTrue(_err_ok(err, frappe.PermissionError), repr(err))
 						continue
 					if closure in EXCLUDED_CLOSURES:

@@ -101,7 +101,7 @@ FEB = (getdate("2025-02-01"), getdate("2025-02-28"))
 MAR = (getdate("2025-03-01"), getdate("2025-03-31"))
 REGISTRATION_SETTINGS = "EMR Registration Settings"
 NEW, FU = "New", "Follow-up"
-U5, O5 = "<5", "5+"  # MOH 717 age bands
+U5, O5, O60 = "<5", "5-59", "60+"  # MOH 717 age bands (D57: <5, 5-59, 60+)
 M, F = "Male", "Female"
 OTHER = "Other"
 
@@ -147,7 +147,8 @@ EXPECTED_717_DETAIL = {
 	("717-A01", U5, M): 1,  # V02
 	("717-A01", U5, F): 1,  # V13 (36 m)
 	("717-A01", UNKNOWN_BAND, M): 1,  # V04, DOB missing
-	("717-A01", O5, F): 5,  # V01 (60 m), V10, V12 (New at F0: its earlier visit was at F1), V18, V26
+	("717-A01", O5, F): 4,  # V01 (60 m), V12 (New at F0: its earlier visit was at F1), V18, V26
+	("717-A01", O60, F): 1,  # V10 (P10 born 2 Feb 1960: 65)
 	("717-A01", O5, M): 6,  # V11, V14, V17, V21 (last visit in 2024), V23 (archived encounter only), V24
 	# 717-A02 Outpatient re-attendance:
 	("717-A02", O5, M): 3,  # V08 (SmartCare override), V19 (Feb visit), V25 (re-attendance after the merge)
@@ -163,7 +164,8 @@ EXPECTED_717_DETAIL = {
 	("717-C03", U5, M): 2,  # V02, V09
 	("717-C03", U5, F): 3,  # V03, V13, V20
 	("717-C03", UNKNOWN_BAND, M): 1,  # V04
-	("717-C03", O5, F): 5,  # V01, V10, V12, V18, V26
+	("717-C03", O5, F): 4,  # V01, V12, V18, V26
+	("717-C03", O60, F): 1,  # V10
 	("717-C03", O5, M): 7,  # V11, V14, V17, V21, V23, V24, V36
 	# 717-C04 facility re-attendances (V11b, V13b internal; V16 outreach: excluded):
 	("717-C04", O5, F): 1,  # V05b
@@ -171,7 +173,7 @@ EXPECTED_717_DETAIL = {
 	("717-D01", "", ""): 1,  # Referred in: V14 (V28 is at F1)
 	("717-D02", "", ""): 1,  # External referral out sent in March: V18 (V06's was sent 1 Apr)
 	("717-D03", "", ""): 2,  # Internal referrals sent in March: V11 -> MH, V13 -> MCH
-	("717-E01", O5, F): 1,  # Outpatient deaths: V10 (outcome Died at Complete Consultation)
+	("717-E01", O60, F): 1,  # Outpatient deaths: V10, 65 (outcome Died at Complete Consultation)
 	("717-E02", "", ""): 1,  # Admitted: V17
 	(
 		"717-E03",

@@ -13,8 +13,13 @@
    "max_months": 60
   },
   {
-   "label": "5+",
+   "label": "5-59",
    "min_months": 60,
+   "max_months": 720
+  },
+  {
+   "label": "60+",
+   "min_months": 720,
    "max_months": null
   }
  ],

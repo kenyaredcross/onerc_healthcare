@@ -326,3 +326,18 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 - **Defect fixed: back-entered visits.**
   - Attendance compares only *earlier* visits: an earlier date, or the same date registered first.
   - When a visit is back-entered, for example by an outreach sync, later visits that year that were "New" by the rule become re-attendances through `engine.annotate`. Overrides are left alone (DEFECT-RECON-2).
+
+**D57. User answers, 2026-11-14.**
+- **Voiding a revision restores the original.** When a revised MOH run is voided, the run it superseded becomes Submitted again. The log action is `restore`, so a period never loses its submission.
+- **MOH 705, missing DOB:** counted on neither form and listed as an exception (D47 confirmed).
+- **National ID** stays a non-primary identifier, so Kenyans with only a National ID register as walk-ins (C-6).
+- **Patient portal:** left as is for now.
+- **SpO2:** triage records SpO2 (%) on Vital Signs (`krcs_spo2`, Data like Marley's other vitals), checked to be 50–100.
+- **Service Delivered:** the Medical In-Charge may record services as well as edit and void them.
+- **MOH 717 age bands:** <5, 5–59 and 60+. Still provisional until the HIS Officer confirms (OI-5).
+- **Emergency patient IDs:** Marley's provisional patients (`ER-2026-…`) get the site prefix (`KLB-ER-2026-…`) through a Patient `before_insert` hook. The old `ER-` series stays a valid option.
+- **Visit Overview cards** stay visible to every role that sees the Healthcare page; they show counts only.
+- **"Left before being seen"** stays excluded from MOH 717 attendance.
+- **`routed_without_vitals`** stays sticky (D27).
+- **Housekeeping deletions** (old Version rows, `smoke.localhost`, the old bench): none for now.
+- **The user's visit KLB-PV-2026-00001:** the attendance set by the back-fill was cleared at the user's request (direct write, `modified` unchanged).

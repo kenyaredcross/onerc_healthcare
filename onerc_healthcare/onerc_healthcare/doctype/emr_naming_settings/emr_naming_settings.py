@@ -56,7 +56,7 @@ class EMRNamingSettings(Document):
 			resolved = resolve(row.series, self.id_prefix)
 			if current_series(row.document_type) == resolved:
 				continue
-			apply_rule(row.document_type, resolved)
+			apply_rule(row.document_type, resolved, self.id_prefix)
 			existing = frappe.db.count(row.document_type)
 			changed.append(
 				_("{0}: new IDs like {1}").format(row.document_type, row.example)

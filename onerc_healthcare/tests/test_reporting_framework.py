@@ -572,6 +572,22 @@ class TestRunLifecycle(ReportingTestCase):
 		self.act(new.name, "submit_run")
 		self.assertEqual(self.status(new.name), "Submitted")
 
+	def test_voiding_a_revision_restores_the_original(self):
+		"""D57 (user decision 2026-11-14): the period never loses its submission."""
+		name = self.new_run().name
+		self.act(name, "generate")
+		self.act(name, "submit_run")
+		new = self.act(name, "revise", reason="T- recount")["new_run"]
+		result = self.act(new, "void", reason="T- revision not needed")
+		self.assertEqual(result["restored"], name)
+		old = frappe.get_doc(MOH_RUN_DOCTYPE, name)
+		self.assertEqual((old.status, old.superseded_by), ("Submitted", None))
+		self.assertEqual((old.log[-1].action, old.log[-1].to_status), ("restore", "Submitted"))
+		self.assertEqual(self.status(new), "Void")
+		with self.assertRaises(DuplicateRunError):
+			self.new_run()  # the restored original is the active run again
+		self.act(name, "revise", reason="T- second try")  # and it can be revised again
+
 	def test_void(self):
 		draft = self.new_run().name
 		with self.assertRaises(IllegalTransitionError):

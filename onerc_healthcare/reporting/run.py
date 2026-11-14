@@ -10,6 +10,10 @@
 | `revise`     | Submitted         | Superseded | HIS Officer | reason   | new Draft run that `supersedes` this one  |
 | `void`       | Draft, Generated  | Void       | HIS Officer | reason   | frees the period for a new run            |
 
+- **Voiding a revision restores the original** (user decision 2026-11-14, D57): when the voided run
+  `supersedes` a Superseded run, that run becomes Submitted again (log action ``restore``), so the period
+  is never left without its submission.
+
 - Administrator passes every role check. The Medical In-Charge and the Head of Operations only read
   (the Head of Operations does not see the exceptions, which sit at permlevel 1).
 - **One active run** (not Void, not Superseded) per report, facility and period: checked on insert
@@ -58,6 +62,7 @@ ACTION_GENERATE = "generate"
 ACTION_SUBMIT = "submit_run"
 ACTION_REVISE = "revise"
 ACTION_VOID = "void"
+ACTION_RESTORE = "restore"  # log-only: the original of a voided revision becomes Submitted again
 
 GENERATION_QUEUED = "Queued"
 GENERATION_FAILED = "Failed"
@@ -471,7 +476,28 @@ def _void(doc, rule: Transition, reason: str | None) -> dict:
 	doc.queued_at = None
 	append_log(doc, from_status, STATUS_VOID, ACTION_VOID, reason)
 	save_from_workflow(doc)
-	return {"run": doc.name, "status": doc.status}
+	restored = _restore_original(doc, reason)
+	return {"run": doc.name, "status": doc.status, "restored": restored}
+
+
+def _restore_original(revision, reason: str | None) -> str | None:
+	"""D57: voiding a revision makes the run it superseded the period's submission again."""
+	if not revision.get("supersedes"):
+		return None
+	original = frappe.get_doc(MOH_RUN_DOCTYPE, revision.supersedes, for_update=True)
+	if original.status != STATUS_SUPERSEDED or original.get("superseded_by") != revision.name:
+		return None
+	original.status = STATUS_SUBMITTED
+	original.superseded_by = None
+	append_log(
+		original,
+		STATUS_SUPERSEDED,
+		STATUS_SUBMITTED,
+		ACTION_RESTORE,
+		_("Revision {0} was voided: {1}").format(revision.name, reason),
+	)
+	save_from_workflow(original)
+	return original.name
 
 
 _HANDLERS = {

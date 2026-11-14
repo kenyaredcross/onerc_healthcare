@@ -38,6 +38,8 @@ extend_doctype_class = {
 
 doc_events = {
 	"Patient": {
+		# D57: Marley's emergency patients (ER-2026-...) get the site prefix (KLB-ER-2026-...)
+		"before_insert": "onerc_healthcare.naming.prefix_emergency_patient",
 		"validate": "onerc_healthcare.registration.events.patient_validate",
 		"after_insert": "onerc_healthcare.registration.events.patient_after_insert",
 	},
