@@ -1,0 +1,631 @@
+{
+ "seed_version": "Seed v1",
+ "note": "PROVISIONAL — HIS Officer to confirm (OI-5)",
+ "source": "Best knowledge of the KHIS MOH 705A (under 5) and MOH 705B (5 years and over) outpatient morbidity lists. The official current layouts are not available (OI-5). ICD-11 stems are from the WHO ICD-11 MMS 2025-01 release bundled in coding/data and are verified by tests/test_moh_705.py.",
+ "categories": [
+  {
+   "name": "Diarrhoea",
+   "title": "Diarrhoea",
+   "form": "Both",
+   "group": "Diarrhoeal diseases",
+   "priority": 10,
+   "sort_order": 10,
+   "section": "Communicable diseases",
+   "note": "705A splits diarrhoea by dehydration grade (none / some / severe). ICD-11 has no dehydration grade, so every diarrhoea case is counted here and the graded lines are Gap elements.",
+   "mappings": [
+    {"match_type": "Block", "value": "BlockL2-1A0"},
+    {"match_type": "Block", "value": "BlockL2-1A1"},
+    {"match_type": "Block", "value": "BlockL2-1A2"},
+    {"match_type": "Block", "value": "BlockL2-1A3"},
+    {"match_type": "Prefix", "value": "1A40"},
+    {"match_type": "Exact code", "value": "ME05.1"},
+    {"match_type": "Exact code", "value": "KB8C"}
+   ]
+  },
+  {
+   "name": "Cholera",
+   "title": "Cholera",
+   "form": "Both",
+   "group": "Diarrhoeal diseases",
+   "priority": 30,
+   "sort_order": 20,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1A00"}]
+  },
+  {
+   "name": "Dysentery",
+   "title": "Dysentery (bloody diarrhoea)",
+   "form": "Both",
+   "group": "Diarrhoeal diseases",
+   "priority": 20,
+   "sort_order": 30,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "1A02"},
+    {"match_type": "Prefix", "value": "1A36.0"}
+   ]
+  },
+  {
+   "name": "Typhoid Fever",
+   "title": "Typhoid fever",
+   "form": "Both",
+   "sort_order": 40,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "1A07"},
+    {"match_type": "Prefix", "value": "1A08"}
+   ]
+  },
+  {
+   "name": "Pneumonia",
+   "title": "Pneumonia",
+   "form": "Both",
+   "sort_order": 50,
+   "section": "Communicable diseases",
+   "note": "705A separates severe pneumonia. ICD-11 has no severity axis for pneumonia, so every pneumonia is counted here and Severe pneumonia is a Gap element.",
+   "mappings": [{"match_type": "Prefix", "value": "CA40"}]
+  },
+  {
+   "name": "Upper Respiratory Tract Infections",
+   "title": "Upper respiratory tract infections",
+   "form": "Both",
+   "sort_order": 60,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "CA00"},
+    {"match_type": "Prefix", "value": "CA01"},
+    {"match_type": "Prefix", "value": "CA02"},
+    {"match_type": "Prefix", "value": "CA04"},
+    {"match_type": "Prefix", "value": "CA05"},
+    {"match_type": "Prefix", "value": "CA06"},
+    {"match_type": "Prefix", "value": "CA07"},
+    {"match_type": "Prefix", "value": "1B51"},
+    {"match_type": "Block", "value": "BlockL1-1E3"}
+   ]
+  },
+  {
+   "name": "Lower Respiratory Tract Infections",
+   "title": "Lower respiratory tract infections (other than pneumonia)",
+   "form": "Both",
+   "sort_order": 70,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "CA41"},
+    {"match_type": "Prefix", "value": "CA42"},
+    {"match_type": "Prefix", "value": "CA20"},
+    {"match_type": "Prefix", "value": "CA45"},
+    {"match_type": "Prefix", "value": "CA4Z"}
+   ]
+  },
+  {
+   "name": "Asthma",
+   "title": "Asthma",
+   "form": "Both",
+   "sort_order": 80,
+   "section": "Non-communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "CA23"}]
+  },
+  {
+   "name": "Tuberculosis",
+   "title": "Tuberculosis",
+   "form": "Both",
+   "sort_order": 90,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Block", "value": "BlockL2-1B1"}]
+  },
+  {
+   "name": "Clinical Malaria",
+   "title": "Clinical malaria (not laboratory confirmed)",
+   "form": "Both",
+   "group": "Malaria",
+   "priority": 10,
+   "sort_order": 100,
+   "section": "Communicable diseases",
+   "note": "Has no mappings of its own: a malaria diagnosis lands here when the encounter has no approved positive malaria RDT or slide (see Confirmed Malaria).",
+   "mappings": []
+  },
+  {
+   "name": "Confirmed Malaria",
+   "title": "Confirmed malaria (positive RDT or slide)",
+   "form": "Both",
+   "group": "Malaria",
+   "priority": 20,
+   "sort_order": 110,
+   "section": "Communicable diseases",
+   "requires_lab_confirmation": 1,
+   "fallback_category": "Clinical Malaria",
+   "confirmation_tests": ["Malaria Rapid Diagnostic Test", "Malaria Blood Slide"],
+   "positive_results": [
+    "Positive - P. falciparum",
+    "Positive - non-falciparum or mixed",
+    "P. falciparum seen",
+    "Other Plasmodium species seen",
+    "Mixed infection"
+   ],
+   "note": "Every ICD-11 malaria code (1F40-1F4Z, including 1F45 without parasitological confirmation) maps here. It counts as confirmed only with an approved (submitted) positive RDT or slide on the same encounter; otherwise it counts as Clinical Malaria.",
+   "mappings": [{"match_type": "Block", "value": "BlockL2-1F4"}]
+  },
+  {
+   "name": "Malaria in Pregnancy",
+   "title": "Malaria in pregnancy",
+   "form": "705B",
+   "sort_order": 120,
+   "section": "Maternal conditions",
+   "mappings": [{"match_type": "Prefix", "value": "JB63.60"}]
+  },
+  {
+   "name": "Ear Infections",
+   "title": "Ear infections",
+   "form": "Both",
+   "sort_order": 130,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Block", "value": "BlockL2-AA8"},
+    {"match_type": "Block", "value": "BlockL2-AA0"},
+    {"match_type": "Block", "value": "BlockL2-AA1"},
+    {"match_type": "Prefix", "value": "AB11"}
+   ]
+  },
+  {
+   "name": "Malnutrition",
+   "title": "Malnutrition",
+   "form": "Both",
+   "sort_order": 140,
+   "section": "Non-communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "5B50"},
+    {"match_type": "Prefix", "value": "5B51"},
+    {"match_type": "Prefix", "value": "5B52"},
+    {"match_type": "Prefix", "value": "5B53"},
+    {"match_type": "Prefix", "value": "5B54"},
+    {"match_type": "Prefix", "value": "5B71"},
+    {"match_type": "Prefix", "value": "5B7Y"},
+    {"match_type": "Prefix", "value": "5B7Z"}
+   ]
+  },
+  {
+   "name": "Anaemia",
+   "title": "Anaemia",
+   "form": "Both",
+   "sort_order": 150,
+   "section": "Non-communicable diseases",
+   "mappings": [
+    {"match_type": "Block", "value": "BlockL1-3A0"},
+    {"match_type": "Block", "value": "BlockL2-3A8", "category": "All Other Diseases", "note": "Polycythaemia is not anaemia: mapped to All other diseases on purpose."},
+    {"match_type": "Prefix", "value": "3A91", "category": "All Other Diseases", "note": "Methaemoglobinaemia is not anaemia."},
+    {"match_type": "Prefix", "value": "3A92", "category": "All Other Diseases", "note": "Methaemoglobinaemia is not anaemia."},
+    {"match_type": "Prefix", "value": "3A93", "category": "All Other Diseases", "note": "Methaemoglobinaemia is not anaemia."}
+   ]
+  },
+  {
+   "name": "Eye Infections",
+   "title": "Eye infections (including conjunctivitis)",
+   "form": "Both",
+   "sort_order": 160,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "9A60"},
+    {"match_type": "Prefix", "value": "1D84"},
+    {"match_type": "Prefix", "value": "1C20"},
+    {"match_type": "Prefix", "value": "1C23"},
+    {"match_type": "Prefix", "value": "9A71"}
+   ]
+  },
+  {
+   "name": "Poliomyelitis",
+   "title": "Poliomyelitis (AFP)",
+   "form": "Both",
+   "sort_order": 170,
+   "section": "Communicable diseases",
+   "note": "Acute flaccid paralysis surveillance cases without a polio diagnosis have no single ICD-11 code (see gaps).",
+   "mappings": [{"match_type": "Prefix", "value": "1C81"}]
+  },
+  {
+   "name": "Chicken Pox",
+   "title": "Chicken pox",
+   "form": "Both",
+   "sort_order": 180,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1E90"}]
+  },
+  {
+   "name": "Measles",
+   "title": "Measles",
+   "form": "Both",
+   "sort_order": 190,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1F03"}]
+  },
+  {
+   "name": "Viral Hepatitis",
+   "title": "Hepatitis",
+   "form": "Both",
+   "sort_order": 200,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Block", "value": "BlockL1-1E5"}]
+  },
+  {
+   "name": "Mumps",
+   "title": "Mumps",
+   "form": "Both",
+   "sort_order": 210,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1D80"}]
+  },
+  {
+   "name": "Meningococcal Meningitis",
+   "title": "Meningococcal meningitis",
+   "form": "Both",
+   "group": "Meningitis",
+   "priority": 20,
+   "sort_order": 220,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1C1C"}]
+  },
+  {
+   "name": "Other Meningitis",
+   "title": "Other meningitis",
+   "form": "Both",
+   "group": "Meningitis",
+   "priority": 10,
+   "sort_order": 230,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "1D01"},
+    {"match_type": "Prefix", "value": "1B53"},
+    {"match_type": "Prefix", "value": "1B54"},
+    {"match_type": "Prefix", "value": "1C8E"},
+    {"match_type": "Prefix", "value": "1C1A.1"}
+   ]
+  },
+  {
+   "name": "Neonatal Sepsis",
+   "title": "Neonatal sepsis",
+   "form": "705A",
+   "sort_order": 240,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "KA60"}]
+  },
+  {
+   "name": "Neonatal Tetanus",
+   "title": "Neonatal tetanus",
+   "form": "705A",
+   "sort_order": 250,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1C15"}]
+  },
+  {
+   "name": "Plague",
+   "title": "Plague",
+   "form": "Both",
+   "sort_order": 260,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1B93"}]
+  },
+  {
+   "name": "Yellow Fever",
+   "title": "Yellow fever",
+   "form": "Both",
+   "sort_order": 270,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1D47"}]
+  },
+  {
+   "name": "Viral Haemorrhagic Fever",
+   "title": "Viral haemorrhagic fever",
+   "form": "Both",
+   "sort_order": 280,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "1D60"},
+    {"match_type": "Prefix", "value": "1D61"},
+    {"match_type": "Prefix", "value": "1D62.0"},
+    {"match_type": "Prefix", "value": "1D49"},
+    {"match_type": "Prefix", "value": "1D86"}
+   ]
+  },
+  {
+   "name": "Brucellosis",
+   "title": "Brucellosis",
+   "form": "Both",
+   "sort_order": 290,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1B95"}]
+  },
+  {
+   "name": "Tonsillitis",
+   "title": "Tonsillitis",
+   "form": "Both",
+   "sort_order": 300,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "CA03"},
+    {"match_type": "Prefix", "value": "CA0K.1"}
+   ]
+  },
+  {
+   "name": "Urinary Tract Infection",
+   "title": "Urinary tract infection",
+   "form": "Both",
+   "sort_order": 310,
+   "section": "Communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "GC08"},
+    {"match_type": "Prefix", "value": "GC00"},
+    {"match_type": "Prefix", "value": "GB51"}
+   ]
+  },
+  {
+   "name": "Sexually Transmitted Infections",
+   "title": "Sexually transmitted infections",
+   "form": "705B",
+   "sort_order": 320,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Block", "value": "BlockL1-1A6"}]
+  },
+  {
+   "name": "Jiggers Infestation",
+   "title": "Jiggers infestation",
+   "form": "Both",
+   "sort_order": 330,
+   "section": "Communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "1G05"}]
+  },
+  {
+   "name": "Diseases of the Skin",
+   "title": "Diseases of the skin",
+   "form": "Both",
+   "sort_order": 340,
+   "section": "Communicable diseases",
+   "note": "Prefix E is the whole of ICD-11 chapter 14 (skin); a longer prefix or an exact code elsewhere wins over it.",
+   "mappings": [
+    {"match_type": "Prefix", "value": "E"},
+    {"match_type": "Block", "value": "BlockL1-1B7"},
+    {"match_type": "Block", "value": "BlockL2-1G0"}
+   ]
+  },
+  {
+   "name": "Hypertension",
+   "title": "Hypertension",
+   "form": "705B",
+   "sort_order": 350,
+   "section": "Non-communicable diseases",
+   "mappings": [{"match_type": "Block", "value": "BlockL1-BA0"}]
+  },
+  {
+   "name": "Diabetes",
+   "title": "Diabetes",
+   "form": "705B",
+   "sort_order": 360,
+   "section": "Non-communicable diseases",
+   "mappings": [{"match_type": "Block", "value": "BlockL2-5A1"}]
+  },
+  {
+   "name": "Epilepsy",
+   "title": "Epilepsy",
+   "form": "705B",
+   "sort_order": 370,
+   "section": "Non-communicable diseases",
+   "mappings": [{"match_type": "Block", "value": "BlockL1-8A6"}]
+  },
+  {
+   "name": "Mental Disorders",
+   "title": "Mental disorders",
+   "form": "705B",
+   "sort_order": 380,
+   "section": "Non-communicable diseases",
+   "note": "Prefixes 6A-6E are ICD-11 chapter 06 (mental, behavioural or neurodevelopmental disorders).",
+   "mappings": [
+    {"match_type": "Prefix", "value": "6A"},
+    {"match_type": "Prefix", "value": "6B"},
+    {"match_type": "Prefix", "value": "6C"},
+    {"match_type": "Prefix", "value": "6D"},
+    {"match_type": "Prefix", "value": "6E"}
+   ]
+  },
+  {
+   "name": "Alcohol and Drug Abuse",
+   "title": "Alcohol and drug abuse",
+   "form": "705B",
+   "sort_order": 390,
+   "section": "Non-communicable diseases",
+   "mappings": [{"match_type": "Prefix", "value": "6C4"}]
+  },
+  {
+   "name": "Dental Disorders",
+   "title": "Dental disorders",
+   "form": "705B",
+   "sort_order": 400,
+   "section": "Non-communicable diseases",
+   "mappings": [
+    {"match_type": "Prefix", "value": "DA07"},
+    {"match_type": "Prefix", "value": "DA08"},
+    {"match_type": "Prefix", "value": "DA09"},
+    {"match_type": "Prefix", "value": "DA0A"},
+    {"match_type": "Prefix", "value": "DA0B"},
+    {"match_type": "Prefix", "value": "DA0C"},
+    {"match_type": "Prefix", "value": "DA0D"}
+   ]
+  },
+  {
+   "name": "Arthritis and Joint Pains",
+   "title": "Arthritis, joint pains",
+   "form": "705B",
+   "sort_order": 410,
+   "section": "Non-communicable diseases",
+   "mappings": [
+    {"match_type": "Block", "value": "BlockL1-FA0"},
+    {"match_type": "Exact code", "value": "ME82"}
+   ]
+  },
+  {
+   "name": "Abortion",
+   "title": "Abortion",
+   "form": "705B",
+   "sort_order": 420,
+   "section": "Maternal conditions",
+   "mappings": [{"match_type": "Block", "value": "BlockL1-JA0"}]
+  },
+  {
+   "name": "Diseases of Puerperium and Childbirth",
+   "title": "Diseases of puerperium and childbirth",
+   "form": "705B",
+   "sort_order": 430,
+   "section": "Maternal conditions",
+   "mappings": [
+    {"match_type": "Block", "value": "BlockL1-JB0"},
+    {"match_type": "Block", "value": "BlockL1-JB4"}
+   ]
+  },
+  {
+   "name": "Poisoning",
+   "title": "Poisoning",
+   "form": "Both",
+   "group": "Injuries",
+   "priority": 30,
+   "sort_order": 440,
+   "section": "Injuries",
+   "mappings": [
+    {"match_type": "Block", "value": "BlockL1-NE6"},
+    {"match_type": "Block", "value": "BlockL2-PB2"}
+   ]
+  },
+  {
+   "name": "Burns",
+   "title": "Burns",
+   "form": "Both",
+   "group": "Injuries",
+   "priority": 30,
+   "sort_order": 450,
+   "section": "Injuries",
+   "mappings": [
+    {"match_type": "Block", "value": "BlockL1-ND9"},
+    {"match_type": "Prefix", "value": "PB10"},
+    {"match_type": "Prefix", "value": "PB11"},
+    {"match_type": "Prefix", "value": "PB12"},
+    {"match_type": "Prefix", "value": "PB13"},
+    {"match_type": "Prefix", "value": "PB14"}
+   ]
+  },
+  {
+   "name": "Road Traffic Injuries",
+   "title": "Road traffic injuries",
+   "form": "Both",
+   "group": "Injuries",
+   "priority": 30,
+   "sort_order": 460,
+   "section": "Injuries",
+   "note": "ICD-11 chapter 23 external-cause codes: counted only when the clinician records the cause as its own diagnosis line.",
+   "mappings": [{"match_type": "Block", "value": "BlockL3-PA0"}]
+  },
+  {
+   "name": "Animal Bites",
+   "title": "Animal bites (dog and other)",
+   "form": "Both",
+   "group": "Injuries",
+   "priority": 30,
+   "sort_order": 470,
+   "section": "Injuries",
+   "note": "ICD-11 has no dog-bite stem code (the animal is an extension code), so dog bites and other bites are counted together here; the separate lines are Gap elements.",
+   "mappings": [
+    {"match_type": "Prefix", "value": "PA75"},
+    {"match_type": "Prefix", "value": "PE15"}
+   ]
+  },
+  {
+   "name": "Envenomation",
+   "title": "Snake bites and other envenomation",
+   "form": "Both",
+   "group": "Injuries",
+   "priority": 30,
+   "sort_order": 480,
+   "section": "Injuries",
+   "note": "ICD-11 codes the snake as an extension code, so snake bites are counted with scorpion and insect envenomation.",
+   "mappings": [
+    {"match_type": "Prefix", "value": "PA78"},
+    {"match_type": "Prefix", "value": "PE18"}
+   ]
+  },
+  {
+   "name": "Sexual Violence",
+   "title": "Sexual violence",
+   "form": "Both",
+   "group": "Injuries",
+   "priority": 30,
+   "sort_order": 490,
+   "section": "Injuries",
+   "mappings": [{"match_type": "Prefix", "value": "PJ21"}]
+  },
+  {
+   "name": "Other Injuries",
+   "title": "Other injuries",
+   "form": "Both",
+   "group": "Injuries",
+   "priority": 10,
+   "sort_order": 500,
+   "section": "Injuries",
+   "note": "Every other injury block of ICD-11 chapters 22 and 23. A specific injury category in the same encounter wins over this one.",
+   "mappings": [
+    {"match_type": "Block", "value": "BlockL1-NA0"},
+    {"match_type": "Block", "value": "BlockL1-NA2"},
+    {"match_type": "Block", "value": "BlockL1-NA8"},
+    {"match_type": "Block", "value": "BlockL1-NB5"},
+    {"match_type": "Block", "value": "BlockL1-NC1"},
+    {"match_type": "Block", "value": "BlockL1-NC3"},
+    {"match_type": "Block", "value": "BlockL1-NC5"},
+    {"match_type": "Block", "value": "BlockL1-NC7"},
+    {"match_type": "Block", "value": "BlockL1-NC9"},
+    {"match_type": "Block", "value": "BlockL1-ND1"},
+    {"match_type": "Block", "value": "BlockL1-ND3"},
+    {"match_type": "Block", "value": "BlockL1-ND5"},
+    {"match_type": "Block", "value": "BlockL1-ND7"},
+    {"match_type": "Block", "value": "BlockL1-NE4"},
+    {"match_type": "Block", "value": "BlockL1-NE8"},
+    {"match_type": "Block", "value": "BlockL1-NF0"},
+    {"match_type": "Prefix", "value": "NF2"},
+    {"match_type": "Block", "value": "BlockL1-PA0"},
+    {"match_type": "Block", "value": "BlockL1-PB8"},
+    {"match_type": "Block", "value": "BlockL1-PD5"},
+    {"match_type": "Block", "value": "BlockL1-PF4"},
+    {"match_type": "Block", "value": "BlockL1-PJ0"},
+    {"match_type": "Block", "value": "BlockL1-PJ2"},
+    {"match_type": "Block", "value": "BlockL1-PJ4"},
+    {"match_type": "Block", "value": "BlockL1-PJ6"}
+   ]
+  },
+  {
+   "name": "Not a Morbidity",
+   "title": "Not a morbidity (not counted)",
+   "form": "Both",
+   "excluded": 1,
+   "sort_order": 900,
+   "section": "Other",
+   "note": "Contacts with the health services, factors influencing health status (chapter 24, Q), functioning (chapter V), extension codes (chapter X) and traditional medicine patterns (chapter 26, S) are not diseases and are not counted on 705A/705B.",
+   "mappings": [
+    {"match_type": "Prefix", "value": "Q"},
+    {"match_type": "Prefix", "value": "V"},
+    {"match_type": "Prefix", "value": "X"},
+    {"match_type": "Prefix", "value": "S"}
+   ]
+  },
+  {
+   "name": "All Other Diseases",
+   "title": "All other diseases",
+   "form": "Both",
+   "is_catch_all": 1,
+   "sort_order": 999,
+   "section": "Other",
+   "note": "Catch-all: every counted diagnosis with no mapping lands here and is also listed as an exception (MOH Unmapped Diagnoses). A category that is not on the patient's form (for example Hypertension for a child under 5) is also counted here.",
+   "mappings": []
+  }
+ ],
+ "no_icd11_equivalent": [
+  {"form": "705A", "line": "Diarrhoea with no dehydration / some dehydration / severe dehydration", "reason": "ICD-11 has no dehydration grade. 5C70.0 Dehydration exists but carries no WHO/IMCI grade. All diarrhoea is counted as one line; the graded lines are Gap elements."},
+  {"form": "705A", "line": "Severe pneumonia (vs pneumonia)", "reason": "ICD-11 pneumonia (CA40) has no severity axis. All pneumonia is counted as one line; Severe pneumonia is a Gap element."},
+  {"form": "Both", "line": "Dog bites vs other bites", "reason": "ICD-11 codes the biting animal as an extension code (chapter X), not a stem code. Animal bites are counted together (PA75, PE15); Dog bites and Other bites are Gap elements."},
+  {"form": "Both", "line": "Snake bites", "reason": "The snake is an extension code; envenomation by any animal (PA78, PE18) is counted together. Snake bites is a Gap element."},
+  {"form": "Both", "line": "Acute flaccid paralysis (AFP) without a polio diagnosis", "reason": "AFP is a surveillance case definition with no single ICD-11 code; only acute poliomyelitis (1C81) is mapped."},
+  {"form": "Both", "line": "Road traffic injuries recorded only as the injury", "reason": "The cause of an injury is a separate ICD-11 chapter 23 code. Unless the clinician records the cause (PA00-PA0Z) as its own diagnosis line, the case counts as Other injuries."},
+  {"form": "705B", "line": "Malaria in pregnancy recorded only as a malaria code", "reason": "Pregnancy status is not part of the malaria code; only JB63.60 is mapped. A pregnant woman coded 1F40 counts as malaria only."}
+ ]
+}

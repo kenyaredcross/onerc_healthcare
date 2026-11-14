@@ -5,7 +5,9 @@
 Called by setup/install.py on after_install and after_migrate. Idempotent, never commits.
 Seeds the ICD-11 Code System, the ICD-11 hierarchy fields on Code Value, and the Healthcare Settings
 default code system (only while it is empty), then imports the bundled WHO release once per site and
-release (coding.icd11.import_bundled).
+release (coding.icd11.import_bundled). Phase 3 (R2): the WHO block structure (ICD-11 Block records and
+Code Value ``krcs_blocks``) is backfilled once per release on sites imported before it existed
+(coding.icd11.ensure_structure; also run by the patch ``patches.icd11_block_backfill``).
 
 Code search (FR-11): Code Value's link search already matches ``name`` (``<code>-ICD-11``),
 ``code_value`` and the title field ``display``, so keyword and code-number search need no extra hook.
@@ -49,6 +51,23 @@ CODE_VALUE_FIELDS = {
 			"insert_after": "krcs_chapter",
 			"read_only": 1,
 		},
+		{
+			"fieldname": "krcs_blocks",
+			"label": "ICD-11 Blocks",
+			"fieldtype": "Data",
+			"insert_after": "krcs_is_leaf",
+			"read_only": 1,
+			"description": "WHO block ids of this code's ancestors (Grouping1-5), outermost first, comma-separated. "
+			"MOH Diagnosis Mappings of type Block match these.",
+		},
+		{
+			"fieldname": "krcs_primary_tabulation",
+			"label": "Primary Tabulation (information only)",
+			"fieldtype": "Check",
+			"insert_after": "krcs_blocks",
+			"read_only": 1,
+			"description": "WHO 'Primary tabulation' flag, kept for information. Not used for counting.",
+		},
 	]
 }
 
@@ -58,9 +77,10 @@ def install() -> None:
 	ensure_code_system()
 	set_default_code_system()
 
-	from onerc_healthcare.coding.icd11 import import_bundled
+	from onerc_healthcare.coding.icd11 import ensure_structure, import_bundled
 
 	import_bundled()
+	ensure_structure()
 
 
 def ensure_code_system() -> None:

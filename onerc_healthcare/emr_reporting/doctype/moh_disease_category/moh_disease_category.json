@@ -1,0 +1,202 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 16:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "category_name",
+  "title",
+  "form",
+  "sort_order",
+  "column_break_cat",
+  "category_group",
+  "priority",
+  "is_catch_all",
+  "excluded",
+  "lab_section",
+  "requires_lab_confirmation",
+  "fallback_category",
+  "column_break_lab",
+  "confirmation_tests",
+  "positive_results",
+  "seed_section",
+  "seed_marker",
+  "seed_hash",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "category_name",
+   "fieldtype": "Data",
+   "label": "Category Code",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "Used in MOH report element rules ({\"category\": ...}). Cannot be changed after saving.",
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "form",
+   "fieldtype": "Select",
+   "label": "Form",
+   "options": "Both\n705A\n705B",
+   "default": "Both",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "705A: under 5 years; 705B: 5 years and over. A category not on the patient's form is counted under the catch-all."
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  },
+  {
+   "fieldname": "column_break_cat",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "category_group",
+   "fieldtype": "Data",
+   "label": "Group",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Alternatives of one condition (for example Malaria, Injuries). Within one encounter (or internal-referral chain) only the group's highest-priority categories count."
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Int",
+   "label": "Priority",
+   "description": "Higher wins within the group. Equal priorities all count."
+  },
+  {
+   "fieldname": "is_catch_all",
+   "fieldtype": "Check",
+   "label": "Catch-all (All other diseases)",
+   "in_standard_filter": 1,
+   "description": "Exactly one category. Unmapped diagnoses are counted here and listed as exceptions."
+  },
+  {
+   "fieldname": "excluded",
+   "fieldtype": "Check",
+   "label": "Excluded (not counted)",
+   "in_standard_filter": 1,
+   "description": "Diagnoses mapped here are not counted on 705A/705B (for example contacts with health services)."
+  },
+  {
+   "fieldname": "lab_section",
+   "fieldtype": "Section Break",
+   "label": "Laboratory Confirmation",
+   "collapsible": 1,
+   "collapsible_depends_on": "requires_lab_confirmation"
+  },
+  {
+   "fieldname": "requires_lab_confirmation",
+   "fieldtype": "Check",
+   "label": "Requires Laboratory Confirmation",
+   "description": "Counts only when the same encounter has an approved (submitted) result listed below; otherwise the diagnosis counts under the fallback category."
+  },
+  {
+   "fieldname": "fallback_category",
+   "fieldtype": "Link",
+   "options": "MOH Disease Category",
+   "label": "Fallback Category",
+   "depends_on": "requires_lab_confirmation",
+   "mandatory_depends_on": "requires_lab_confirmation"
+  },
+  {
+   "fieldname": "column_break_lab",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "confirmation_tests",
+   "fieldtype": "Small Text",
+   "label": "Confirmation Tests",
+   "depends_on": "requires_lab_confirmation",
+   "mandatory_depends_on": "requires_lab_confirmation",
+   "description": "One Observation Template per line."
+  },
+  {
+   "fieldname": "positive_results",
+   "fieldtype": "Small Text",
+   "label": "Positive Results",
+   "depends_on": "requires_lab_confirmation",
+   "mandatory_depends_on": "requires_lab_confirmation",
+   "description": "One result value per line, exactly as the test's options (case is ignored)."
+  },
+  {
+   "fieldname": "seed_section",
+   "fieldtype": "Section Break",
+   "label": "Seed",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "seed_marker",
+   "fieldtype": "Data",
+   "label": "Seed Marker",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "\"Seed v1\": still as shipped, so a later seed may update it. \"Edited\": changed in the desk; seeds never touch it again. Blank: created in the desk.",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "seed_hash",
+   "fieldtype": "Data",
+   "label": "Seed Hash",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-14 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Reporting",
+ "name": "MOH Disease Category",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "print": 1,
+   "report": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": [],
+ "autoname": "field:category_name",
+ "naming_rule": "By fieldname",
+ "document_type": "Setup",
+ "title_field": "title",
+ "show_title_field_in_link": 1,
+ "search_fields": "title,form,category_group",
+ "track_changes": 1,
+ "description": "MOH 705A/705B disease line. PROVISIONAL — HIS Officer to confirm (OI-5)."
+}

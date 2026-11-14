@@ -1,0 +1,703 @@
+{
+ "name": "MOH 705A",
+ "title": "Outpatient Morbidity Summary, Under 5 Years",
+ "status": "Active - Provisional",
+ "version": "provisional-2026-11",
+ "period_type": "Monthly",
+ "note": "PROVISIONAL — HIS Officer to confirm (OI-5)",
+ "blocked_reason": null,
+ "age_bands": [
+  {
+   "label": "Under 5 years",
+   "min_months": 0,
+   "max_months": 60
+  }
+ ],
+ "dimensions": [],
+ "elements": [
+  {
+   "code": "705A-001",
+   "label": "Diarrhoea",
+   "section": "Communicable diseases",
+   "sort_order": 10,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Diarrhoea",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-002",
+   "label": "Diarrhoea with no dehydration",
+   "section": "Communicable diseases",
+   "sort_order": 20,
+   "source_type": "Diagnosis Category",
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "ICD-11 has no dehydration grade (OI-5). All diarrhoea is counted under the line above.",
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-003",
+   "label": "Diarrhoea with some dehydration",
+   "section": "Communicable diseases",
+   "sort_order": 30,
+   "source_type": "Diagnosis Category",
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "ICD-11 has no dehydration grade (OI-5). All diarrhoea is counted under the line above.",
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-004",
+   "label": "Diarrhoea with severe dehydration",
+   "section": "Communicable diseases",
+   "sort_order": 40,
+   "source_type": "Diagnosis Category",
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "ICD-11 has no dehydration grade (OI-5). All diarrhoea is counted under the line above.",
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-005",
+   "label": "Cholera",
+   "section": "Communicable diseases",
+   "sort_order": 50,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Cholera",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-006",
+   "label": "Dysentery (bloody diarrhoea)",
+   "section": "Communicable diseases",
+   "sort_order": 60,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Dysentery",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-007",
+   "label": "Typhoid fever",
+   "section": "Communicable diseases",
+   "sort_order": 70,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Typhoid Fever",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-008",
+   "label": "Pneumonia",
+   "section": "Communicable diseases",
+   "sort_order": 80,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Pneumonia",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-009",
+   "label": "Severe pneumonia",
+   "section": "Communicable diseases",
+   "sort_order": 90,
+   "source_type": "Diagnosis Category",
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "ICD-11 pneumonia has no severity axis (OI-5). All pneumonia is counted under Pneumonia.",
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-010",
+   "label": "Upper respiratory tract infections",
+   "section": "Communicable diseases",
+   "sort_order": 100,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Upper Respiratory Tract Infections",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-011",
+   "label": "Lower respiratory tract infections (other than pneumonia)",
+   "section": "Communicable diseases",
+   "sort_order": 110,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Lower Respiratory Tract Infections",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-012",
+   "label": "Asthma",
+   "section": "Non-communicable diseases",
+   "sort_order": 120,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Asthma",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-013",
+   "label": "Tuberculosis",
+   "section": "Communicable diseases",
+   "sort_order": 130,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Tuberculosis",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-014",
+   "label": "Clinical malaria (not laboratory confirmed)",
+   "section": "Communicable diseases",
+   "sort_order": 140,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Clinical Malaria",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-015",
+   "label": "Confirmed malaria (positive RDT or slide)",
+   "section": "Communicable diseases",
+   "sort_order": 150,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Confirmed Malaria",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-016",
+   "label": "Ear infections",
+   "section": "Communicable diseases",
+   "sort_order": 160,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Ear Infections",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-017",
+   "label": "Malnutrition",
+   "section": "Non-communicable diseases",
+   "sort_order": 170,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Malnutrition",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-018",
+   "label": "Anaemia",
+   "section": "Non-communicable diseases",
+   "sort_order": 180,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Anaemia",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-019",
+   "label": "Eye infections (including conjunctivitis)",
+   "section": "Communicable diseases",
+   "sort_order": 190,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Eye Infections",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-020",
+   "label": "Poliomyelitis (AFP)",
+   "section": "Communicable diseases",
+   "sort_order": 200,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Poliomyelitis",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-021",
+   "label": "Chicken pox",
+   "section": "Communicable diseases",
+   "sort_order": 210,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Chicken Pox",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-022",
+   "label": "Measles",
+   "section": "Communicable diseases",
+   "sort_order": 220,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Measles",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-023",
+   "label": "Hepatitis",
+   "section": "Communicable diseases",
+   "sort_order": 230,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Viral Hepatitis",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-024",
+   "label": "Mumps",
+   "section": "Communicable diseases",
+   "sort_order": 240,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Mumps",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-025",
+   "label": "Meningococcal meningitis",
+   "section": "Communicable diseases",
+   "sort_order": 250,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Meningococcal Meningitis",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-026",
+   "label": "Other meningitis",
+   "section": "Communicable diseases",
+   "sort_order": 260,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Other Meningitis",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-027",
+   "label": "Neonatal sepsis",
+   "section": "Communicable diseases",
+   "sort_order": 270,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Neonatal Sepsis",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-028",
+   "label": "Neonatal tetanus",
+   "section": "Communicable diseases",
+   "sort_order": 280,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Neonatal Tetanus",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-029",
+   "label": "Plague",
+   "section": "Communicable diseases",
+   "sort_order": 290,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Plague",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-030",
+   "label": "Yellow fever",
+   "section": "Communicable diseases",
+   "sort_order": 300,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Yellow Fever",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-031",
+   "label": "Viral haemorrhagic fever",
+   "section": "Communicable diseases",
+   "sort_order": 310,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Viral Haemorrhagic Fever",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-032",
+   "label": "Brucellosis",
+   "section": "Communicable diseases",
+   "sort_order": 320,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Brucellosis",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-033",
+   "label": "Tonsillitis",
+   "section": "Communicable diseases",
+   "sort_order": 330,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Tonsillitis",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-034",
+   "label": "Urinary tract infection",
+   "section": "Communicable diseases",
+   "sort_order": 340,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Urinary Tract Infection",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-035",
+   "label": "Jiggers infestation",
+   "section": "Communicable diseases",
+   "sort_order": 350,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Jiggers Infestation",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-036",
+   "label": "Diseases of the skin",
+   "section": "Communicable diseases",
+   "sort_order": 360,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Diseases of the Skin",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-037",
+   "label": "Poisoning",
+   "section": "Injuries",
+   "sort_order": 370,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Poisoning",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-038",
+   "label": "Burns",
+   "section": "Injuries",
+   "sort_order": 380,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Burns",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-039",
+   "label": "Road traffic injuries",
+   "section": "Injuries",
+   "sort_order": 390,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Road Traffic Injuries",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-040",
+   "label": "Animal bites (dog and other)",
+   "section": "Injuries",
+   "sort_order": 400,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Animal Bites",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-041",
+   "label": "Dog bites",
+   "section": "Injuries",
+   "sort_order": 410,
+   "source_type": "Diagnosis Category",
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "ICD-11 codes the animal as an extension code (OI-5). Counted under Animal bites.",
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-042",
+   "label": "Other bites",
+   "section": "Injuries",
+   "sort_order": 420,
+   "source_type": "Diagnosis Category",
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "ICD-11 codes the animal as an extension code (OI-5). Counted under Animal bites.",
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-043",
+   "label": "Snake bites and other envenomation",
+   "section": "Injuries",
+   "sort_order": 430,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Envenomation",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-044",
+   "label": "Snake bites",
+   "section": "Injuries",
+   "sort_order": 440,
+   "source_type": "Diagnosis Category",
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "ICD-11 codes the snake as an extension code (OI-5). Counted under Snake bites and other envenomation.",
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-045",
+   "label": "Sexual violence",
+   "section": "Injuries",
+   "sort_order": 450,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Sexual Violence",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-046",
+   "label": "Other injuries",
+   "section": "Injuries",
+   "sort_order": 460,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "Other Injuries",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "705A-047",
+   "label": "All other diseases",
+   "section": "Other",
+   "sort_order": 470,
+   "source_type": "Diagnosis Category",
+   "rule": {
+    "category": "All Other Diseases",
+    "age_max_months": 60
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  }
+ ]
+}
