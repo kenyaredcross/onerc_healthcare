@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 15:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "label",
+  "min_months",
+  "max_months"
+ ],
+ "fields": [
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 4
+  },
+  {
+   "fieldname": "min_months",
+   "fieldtype": "Int",
+   "label": "From (months)",
+   "in_list_view": 1,
+   "columns": 3,
+   "description": "Inclusive."
+  },
+  {
+   "fieldname": "max_months",
+   "fieldtype": "Int",
+   "label": "Below (months)",
+   "in_list_view": 1,
+   "columns": 3,
+   "description": "Exclusive. 0 or blank: no upper limit."
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-14 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Reporting",
+ "name": "MOH Report Age Band",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": [],
+ "istable": 1
+}

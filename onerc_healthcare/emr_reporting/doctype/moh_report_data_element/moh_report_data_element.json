@@ -1,0 +1,119 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 15:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "code",
+  "label",
+  "section",
+  "sort_order",
+  "column_break_source",
+  "availability",
+  "source_type",
+  "disaggregation",
+  "dhis2_uid",
+  "section_break_rule",
+  "rule",
+  "gap_note"
+ ],
+ "fields": [
+  {
+   "fieldname": "code",
+   "fieldtype": "Data",
+   "label": "Element Code",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "section",
+   "fieldtype": "Data",
+   "label": "Section",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order",
+   "columns": 1
+  },
+  {
+   "fieldname": "column_break_source",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "availability",
+   "fieldtype": "Select",
+   "label": "Availability",
+   "options": "Available\nGap",
+   "default": "Available",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "description": "Gap: the EMR does not capture this yet. Shown blank with the note; never computed."
+  },
+  {
+   "fieldname": "source_type",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "\nDiagnosis Category\nVisit Attendance\nLaboratory Tests\nPrescriptions\nDispensing\nReferrals\nVisit Outcome\nService Delivered\nCommunity Activity",
+   "in_list_view": 1,
+   "columns": 2,
+   "mandatory_depends_on": "eval:doc.availability=='Available'"
+  },
+  {
+   "fieldname": "disaggregation",
+   "fieldtype": "Select",
+   "label": "Disaggregation",
+   "options": "None\nAge Band\nSex\nAge Band and Sex",
+   "default": "None",
+   "reqd": 1
+  },
+  {
+   "fieldname": "dhis2_uid",
+   "fieldtype": "Data",
+   "label": "DHIS2 UID",
+   "description": "Data element identifier for a future DHIS2 link."
+  },
+  {
+   "fieldname": "section_break_rule",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "rule",
+   "fieldtype": "JSON",
+   "label": "Rule",
+   "description": "Source-specific counting rule (JSON object)."
+  },
+  {
+   "fieldname": "gap_note",
+   "fieldtype": "Small Text",
+   "label": "Gap Note",
+   "depends_on": "eval:doc.availability=='Gap'"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-14 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Reporting",
+ "name": "MOH Report Data Element",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": [],
+ "istable": 1
+}

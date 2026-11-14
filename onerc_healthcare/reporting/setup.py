@@ -2,10 +2,13 @@
 # For license information, please see license.txt
 """R1: MOH reporting framework install (the DocTypes are synced from JSON).
 
-W0 stub: the owning builder replaces the body; keep `install()` (called on install and migrate,
-idempotent, never commits).
+`install()` runs on install and migrate (first of the reporting installs). It is idempotent and never
+commits: it syncs the MOH Report definitions seeded in ``reporting/data`` (`definitions.sync_definitions`),
+which inserts missing ones and never overwrites a definition the HIS Officer has edited.
 """
+
+from onerc_healthcare.reporting.definitions import sync_definitions
 
 
 def install() -> None:
-	pass
+	sync_definitions()

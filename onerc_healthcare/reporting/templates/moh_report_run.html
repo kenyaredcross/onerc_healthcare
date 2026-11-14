@@ -1,0 +1,101 @@
+{#- MOH report run: PDF page (preview=False) and the form preview (preview=True). Context: reporting.export_pdf -#}
+{%- if not preview %}<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{ ctx.title|e }}</title>
+{%- endif %}
+<style>
+	.krcs-moh { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10px; color: #222; }
+	.krcs-moh h1 { font-size: 15px; margin: 6px 0; }
+	.krcs-moh h2 { font-size: 12px; margin: 14px 0 4px; border-bottom: 1px solid #999; }
+	.krcs-moh .banner { background: #c0392b; color: #fff; font-weight: bold; padding: 6px 8px; font-size: 12px; }
+	.krcs-moh .banner-note { color: #c0392b; font-style: italic; margin: 2px 0 6px; }
+	.krcs-moh table { border-collapse: collapse; width: 100%; margin-bottom: 8px; page-break-inside: auto; }
+	.krcs-moh tr { page-break-inside: avoid; }
+	.krcs-moh th, .krcs-moh td { border: 1px solid #999; padding: 2px 4px; vertical-align: top; }
+	.krcs-moh th { background: #e8e8e8; text-align: center; }
+	.krcs-moh td.num { text-align: right; }
+	.krcs-moh td.note { font-style: italic; color: #555; }
+	.krcs-moh tr.blank td.num { background: #f4f4f4; }
+	.krcs-moh table.header td { border: none; padding: 1px 6px 1px 0; }
+	.krcs-moh table.header td.label { font-weight: bold; width: 120px; }
+	.krcs-moh .narrative { white-space: pre-wrap; border: 1px solid #ccc; padding: 6px; }
+	.krcs-moh .photos img { max-width: 30%; max-height: 220px; margin: 4px 1% 4px 0; }
+	.krcs-moh table.signature td { border: none; padding: 4px 8px 4px 0; }
+	.krcs-moh table.signature td.label { font-weight: bold; width: 120px; }
+</style>
+{%- if not preview %}
+</head>
+<body>
+{%- endif %}
+<div class="krcs-moh">
+	{%- if ctx.banner %}
+	<div class="banner">{{ ctx.banner|e }}</div>
+	{%- if ctx.banner_note %}<div class="banner-note">{{ ctx.banner_note|e }}</div>{% endif %}
+	{%- endif %}
+	<h1>{{ ctx.title|e }}</h1>
+	<table class="header">
+		{%- for label, value in ctx.header %}
+		<tr><td class="label">{{ label|e }}</td><td>{{ (value or "")|e }}</td></tr>
+		{%- endfor %}
+	</table>
+
+	{%- for section in ctx.sections %}
+	{%- if section.title %}<h2>{{ section.title|e }}</h2>{% endif %}
+	{%- for block in section.blocks %}
+	<table>
+		<thead>
+			<tr>
+				<th rowspan="{{ 2 if block.has_sub else 1 }}">{{ _("Code") }}</th>
+				<th rowspan="{{ 2 if block.has_sub else 1 }}">{{ _("Element") }}</th>
+				{%- for header, span in header_groups(block.columns) %}
+				<th colspan="{{ span }}">{{ header|e }}</th>
+				{%- endfor %}
+				<th rowspan="{{ 2 if block.has_sub else 1 }}">{{ _("Note") }}</th>
+			</tr>
+			{%- if block.has_sub %}
+			<tr>
+				{%- for column in block.columns %}<th>{{ column[1]|e }}</th>{% endfor %}
+			</tr>
+			{%- endif %}
+		</thead>
+		<tbody>
+			{%- for line in block.rows %}
+			<tr{% if line.blank %} class="blank"{% endif %}>
+				<td>{{ line.code|e }}</td>
+				<td>{{ line.label|e }}</td>
+				{%- for value in line["values"] %}
+				<td class="num">{{ "" if value is none else value }}</td>
+				{%- endfor %}
+				<td class="note">{{ line.note|e }}</td>
+			</tr>
+			{%- endfor %}
+		</tbody>
+	</table>
+	{%- endfor %}
+	{%- endfor %}
+
+	{%- if ctx.narrative %}
+	<h2>{{ _("Narrative") }}</h2>
+	<div class="narrative">{{ ctx.narrative|e }}</div>
+	{%- endif %}
+	{%- if photos %}
+	<h2>{{ _("Photographs") }}</h2>
+	<div class="photos">
+		{%- for src in photos %}<img src="{{ src|e }}">{% endfor %}
+	</div>
+	{%- endif %}
+
+	<h2>{{ _("Compiled by") }}</h2>
+	<table class="signature">
+		<tr><td class="label">{{ _("Name") }}</td><td>{{ (ctx.compiled_by or "")|e }}</td></tr>
+		<tr><td class="label">{{ _("Designation") }}</td><td>{{ (ctx.designation or "")|e }}</td></tr>
+		<tr><td class="label">{{ _("Date") }}</td><td>{{ ctx.date|e }}</td></tr>
+		<tr><td class="label">{{ _("Signature") }}</td><td>{{ ctx.signature }}</td></tr>
+	</table>
+</div>
+{%- if not preview %}
+</body>
+</html>
+{%- endif %}
