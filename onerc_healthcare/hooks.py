@@ -114,7 +114,11 @@ company_data_to_be_ignored = list(_CLINICAL_DOCTYPES)
 boot_session = "onerc_healthcare.boot.boot_session"
 
 doctype_js = {
-	"Patient": ["registration/patient.js", "privacy/patient.js"],  # A1 registration + B4 consent
+	"Patient": [  # A1 registration + B4 consent + Phase 4 open sync conflicts
+		"registration/patient.js",
+		"privacy/patient.js",
+		"outreach/patient.js",
+	],
 	"Vital Signs": "visit/vital_signs.js",
 	"Patient Encounter": "clinical/patient_encounter.js",
 	"Service Request": "lab/service_request.js",

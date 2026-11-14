@@ -53,6 +53,7 @@ from onerc_healthcare.constants import (
 	REPORT_MOH_UNMAPPED,
 	REPORT_PHARMACY_WORKLIST,
 	SCREENING_DOCTYPE,
+	SYNC_CONFLICT_DOCTYPE,
 	VISIT_CLOSED_STATUSES,
 	VISIT_DOCTYPE,
 	VISIT_OPEN_STATUSES,
@@ -278,6 +279,14 @@ def department_block(dept: str) -> dict:
 				"{} to submit",
 			),
 			_report_shortcut(f"{dept}: Unmapped Diagnoses", REPORT_MOH_UNMAPPED, "MOH Diagnosis Mapping"),
+			# Phase 4 (FR-26, OI-11): outreach records waiting on the HIS Officer.
+			_doc_shortcut(
+				f"{dept}: Open Sync Conflicts",
+				SYNC_CONFLICT_DOCTYPE,
+				[[SYNC_CONFLICT_DOCTYPE, "status", "=", "Open"]],
+				"Red",
+				"{} open",
+			),
 		]
 		quick_lists = [
 			_quick_list(f"{dept} Queue", department_filters(dept)),

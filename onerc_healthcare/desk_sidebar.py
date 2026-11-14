@@ -89,6 +89,27 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"link_type": "Report",
 				"link_to": "MOH Mapping Coverage",
 			},
+			# Phase 4: medical outreach (sessions, devices, sync and conflicts)
+			{"key": "krcs-outreach-section", "type": "Section Break", "label": "Outreach"},
+			{"key": "krcs-outreach-session", "label": "Outreach Session", "link_to": "Outreach Session"},
+			{"key": "krcs-sync-conflict", "label": "Sync Conflict", "link_to": "Sync Conflict"},
+			{
+				"key": "krcs-outreach-sync-record",
+				"label": "Outreach Sync Record",
+				"link_to": "Outreach Sync Record",
+			},
+			{
+				"key": "krcs-outreach-sync-batch",
+				"label": "Outreach Sync Batch",
+				"link_to": "Outreach Sync Batch",
+			},
+			{"key": "krcs-catchment-area", "label": "Catchment Area", "link_to": "Catchment Area"},
+			{"key": "krcs-outreach-device", "label": "Outreach Device", "link_to": "Outreach Device"},
+			{
+				"key": "krcs-outreach-device-grant",
+				"label": "Outreach Device Grant",
+				"link_to": "Outreach Device Grant",
+			},
 		],
 	),
 	"Diagnostics": (
@@ -142,6 +163,12 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"key": "krcs-community-activity-type",
 				"label": "Community Activity Type",
 				"link_to": "Community Activity Type",
+			},
+			# Phase 4
+			{
+				"key": "krcs-outreach-settings",
+				"label": "EMR Outreach Settings",
+				"link_to": "EMR Outreach Settings",
 			},
 		],
 	),

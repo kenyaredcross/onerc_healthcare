@@ -94,7 +94,11 @@ def after_migrate() -> None:
 
 
 # Phase 3: MOH counts filter encounters by date (R2 EXPLAIN: full scan without it).
-REPORT_INDEXES = (("Patient Encounter", ("encounter_date",)),)
+# Phase 4: the outreach package selects patients by residence (O1 EXPLAIN: full scan without it).
+REPORT_INDEXES = (
+	("Patient Encounter", ("encounter_date",)),
+	("Patient", ("krcs_residence",)),
+)
 
 
 def ensure_report_indexes() -> None:

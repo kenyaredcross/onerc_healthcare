@@ -341,3 +341,37 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 - **`routed_without_vitals`** stays sticky (D27).
 - **Housekeeping deletions** (old Version rows, `smoke.localhost`, the old bench): none for now.
 - **The user's visit KLB-PV-2026-00001:** the attendance set by the back-fill was cleared at the user's request (direct write, `modified` unchanged).
+
+**D58. Phase 4 Outreach: user answers (OI-10, OI-11) and the contract, 2026-11-14.**
+- **National systems** (Phase 5: FHIR and registries, SHA, the outbox) are skipped for now, at the user's request.
+- **Offline session (OI-10):** 7 days of PIN-only use after the last online sign-in. After that the app needs an online sign-in. The setting is `offline_session_days` in EMR Outreach Settings.
+- **In the field (OI-10):**
+  - The team may record a prescription as dispensed on the spot. It syncs as a Dispensing Record, so the facility pharmacy does not dispense it again.
+  - The team may enter point-of-care results for templates flagged `krcs_point_of_care`. The provisional list is MRDT, haemoglobin, random blood sugar, urine pregnancy test and HIV 1/2 rapid test.
+  - An approved positive MRDT counts as confirmed malaria.
+  - Other lab requests go to the facility lab worklist.
+- **Package (OI-10):**
+  - Demographics, identifiers, allergies, the last 3 visits' diagnoses and active prescriptions, for patients living in the session's catchment area.
+  - Mental Health encounters and sensitive services are never included. Mental Health is never offered offline (OI-7).
+  - Each patient sent is written to the Access Log ("Outreach package").
+- **Purge:** the device deletes a record 7 days after the server acknowledges it. Failed, held and conflicted records are never purged.
+- **Conflicts (OI-11):** resolved by the HIS Officer, with the Medical In-Charge as backup.
+- **Who consults:** any Outreach Team Member may consult and prescribe (the user's choice). The member becomes the encounter's practitioner.
+- **MOH reports:** outreach visits count for the session's facility, flagged `is_outreach`.
+  - MOH 705 counts them.
+  - MOH 717 has its outreach lines; facility attendance excludes outreach by default.
+- **No DocPerms for the Outreach role.** `desk_access=0` does not block `/api/resource`, so a DocPerm would expose patients to a tablet account. Instead:
+  - Records arrive only through `outreach.sync`.
+  - The sync checks the device grant and session membership.
+  - It then applies each record through the desk pipelines inside `outreach.context.outreach_actor`. While that context is active, the clinical role gates accept that one user.
+  - The Outreach Team Member was added to `NO_DESK_ROLES` (security fixups v4).
+- **Sync design:**
+  - **Records:** each record is one offline unit. A finished visit is a single `visit.capture` bundle (vitals, consultation, labs, POC results, prescriptions, dispensing, outcome), applied in one savepoint.
+  - **Idempotency:** on the client UUID.
+  - **One result per record:** accepted, duplicate, failed, held or conflict.
+  - The wire contract is `docs/OUTREACH_PROTOCOL.md`.
+- **Devices:**
+  - **Grant:** enrolment issues a per-user, per-device, per-session grant whose secret is stored hashed. Sync uses `Authorization: krcs-outreach <grant>:<secret>` through `auth_hooks`, which accepts it only on the sync and package endpoints.
+  - **Data key:** the device's data key is escrowed on the grant, so a forgotten PIN (5 wrong attempts) never loses records; an online sign-in restores the key.
+  - **Lost device:** revoking a device ends its sync.
+- **Frontend:** React 18 + TypeScript + Vite PWA at `/outreach` (the user's choice, replacing the earlier Vue + frappe-ui note). It is built by `bench build` from the app's root `package.json`.
