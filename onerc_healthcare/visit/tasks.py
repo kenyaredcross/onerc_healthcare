@@ -75,6 +75,7 @@ def raise_event(visit: str, action: str, comment: str | None = None, **kw) -> bo
 	if action not in engine.TRANSITIONS:
 		raise ValueError(f"Unknown visit action: {action}")
 	doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)  # DoesNotExistError if missing
+	doc.flags.locked = True  # guard reads (encounter) lock too: Visit -> Encounter
 	why = blocked_reason(doc, action)
 	if why:
 		doc.add_comment("Comment", _("Skipped {0}: {1}").format(action, why))

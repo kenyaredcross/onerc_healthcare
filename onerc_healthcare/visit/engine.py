@@ -19,7 +19,8 @@ Invariants (kept by every action):
 1. Closed (Discharged / Referred) visits never change status again. `closed_at` is set exactly when the
    visit enters a closed status. Close Visit and Discharge leave no open task; Referred may keep open
    tasks, and the lab/pharmacy events then only clear the flags.
-2. Discharged by `discharge` or by a system event requires ``lab_open == pharmacy_open == 0``.
+2. Discharged by a system event (or the retired, server-only `discharge`) requires
+   ``lab_open == pharmacy_open == 0``.
 3. Before completion an open laboratory task takes precedence: ``lab_open`` implies Awaiting Laboratory
    (the results bring the patient back to In Consultation). ``pharmacy_open`` alone gives Awaiting
    Pharmacy, or In Consultation once results have come back.
@@ -115,10 +116,18 @@ class GuardFailure(str):
 		return obj
 
 
+def _encounter_docstatus(doc) -> int | None:
+	"""Docstatus of the visit's encounter. Lock order is Visit -> Encounter: when the visit is locked
+	(inside `transition` / `raise_event`, ``doc.flags.locked``) the encounter is read with a lock too."""
+	encounter = doc.get("encounter")
+	if not encounter:
+		return None
+	return frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, "docstatus", for_update=bool(doc.flags.locked))
+
+
 def is_consultation_complete(doc) -> bool:
 	"""The visit's encounter is a submitted Patient Encounter."""
-	encounter = doc.get("encounter")
-	return bool(encounter) and frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, "docstatus") == 1
+	return _encounter_docstatus(doc) == 1
 
 
 def _guard_lab_open(doc) -> str | None:
@@ -150,15 +159,17 @@ def _guard_discharge(doc) -> str | None:
 	failure = _guard_no_open_tasks(doc)
 	if failure:
 		return failure
-	encounter = doc.get("encounter")
-	if encounter and frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, "docstatus") == 0:
+	if _encounter_docstatus(doc) == 0:
 		return _("Visit {0} has an unfinished consultation. Use Complete Consultation on {1}.").format(
-			doc.name, encounter
+			doc.name, doc.encounter
 		)
 	return None
 
 
-def _guard_encounter_submitted(doc) -> str | None:
+def _guard_complete_consultation(doc) -> str | None:
+	"""Encounter submitted, and the consultation not completed before (DEFECT-2)."""
+	if any(row.action == ACTION_COMPLETE_CONSULTATION for row in doc.get("status_log") or []):
+		return _("The consultation of visit {0} has already been completed.").format(doc.name)
 	if not is_consultation_complete(doc):
 		return _("Submit the consultation (Patient Encounter) for visit {0} before completing it.").format(
 			doc.name
@@ -180,6 +191,9 @@ class Transition:
 	timestamp_field: str | None = None
 	# guard(doc) -> error message when the action is impossible in the current flag / encounter state.
 	guard: Callable | None = None
+	# Server code only (engine.transition): refused by apply_action for every role and never offered as
+	# a form button. The consultation / referral code runs these with their own checks (M1 / DEFECT-1).
+	api_only: bool = False
 
 	@property
 	def is_system(self) -> bool:
@@ -223,6 +237,7 @@ TRANSITIONS: dict[str, Transition] = {
 		VISIT_STATUS_IN_CONSULTATION,
 		CONSULTING_ROLES,
 		timestamp_field="consultation_started_at",
+		api_only=True,  # clinical.consultation.start_consultation (creates the encounter)
 	),
 	ACTION_REQUEST_LAB: Transition(
 		_("Laboratory Requested"),
@@ -251,20 +266,24 @@ TRANSITIONS: dict[str, Transition] = {
 		None,
 		guard=_guard_pharmacy_open,
 	),
+	# Retired as a user action (M1): Complete Consultation and Close Visit cover the real cases. Kept as
+	# a server-only system event so old status-log rows still read and server code can still use it.
 	ACTION_DISCHARGE: Transition(
 		_("Discharge"),
 		(VISIT_STATUS_IN_CONSULTATION,),
 		VISIT_STATUS_DISCHARGED,
-		CONSULTING_ROLES,
+		(),
 		timestamp_field="closed_at",
 		guard=_guard_discharge,
+		api_only=True,
 	),
 	ACTION_COMPLETE_CONSULTATION: Transition(
 		_("Complete Consultation"),
 		(VISIT_STATUS_IN_CONSULTATION, VISIT_STATUS_AWAITING_LAB, VISIT_STATUS_AWAITING_PHARMACY),
 		None,
 		CONSULTING_ROLES,
-		guard=_guard_encounter_submitted,
+		guard=_guard_complete_consultation,
+		api_only=True,  # clinical.consultation.complete_consultation (diagnosis rule, submit)
 	),
 	ACTION_REFER: Transition(
 		_("Refer"),
@@ -275,6 +294,7 @@ TRANSITIONS: dict[str, Transition] = {
 		CONSULTING_ROLES,
 		needs_comment=True,
 		timestamp_field="closed_at",
+		api_only=True,  # clinical.referral (creates the Referral record, BR-14)
 	),
 	ACTION_CLOSE_VISIT: Transition(
 		_("Close Visit"),
@@ -349,7 +369,9 @@ def transition(visit: str, action: str, **kwargs):
 	department = (department or "").strip() or None
 	vital_signs = kwargs.get("vital_signs")
 
+	# Lock order: Visit first, then Encounter / Observation / Medication Request (guards read with locks).
 	doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)
+	doc.flags.locked = True
 	_check_role(doc, action, rule, system)
 
 	if doc.status not in rule.from_statuses:
@@ -625,7 +647,7 @@ def get_available_actions(doc, user: str | None = None) -> list[dict]:
 	roles = set(frappe.get_roles(user))
 	actions = []
 	for action, rule in TRANSITIONS.items():
-		if rule.is_system or doc.status not in rule.from_statuses:
+		if rule.is_system or rule.api_only or doc.status not in rule.from_statuses:
 			continue
 		if user != "Administrator" and not roles & set(rule.roles):
 			continue
@@ -648,7 +670,7 @@ def get_available_actions(doc, user: str | None = None) -> list[dict]:
 def link_encounter(visit: str, encounter: str):
 	"""Link the visit's consultation (Patient Encounter). Called by the encounter code (B1)."""
 	doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)
-	patient = frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, "patient")
+	patient = frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, "patient", for_update=True)
 	if not patient:
 		frappe.throw(
 			_("Patient Encounter {0} does not exist.").format(encounter), IllegalVisitTransitionError
@@ -683,6 +705,14 @@ def apply_action(
 	closure_reason: str | None = None,
 ) -> dict:
 	"""Perform a visit action as the current user (form buttons, Vital Signs Route action)."""
+	rule = TRANSITIONS.get(action)
+	if rule and rule.api_only:
+		frappe.throw(
+			_("{0} is done from the consultation or the referral, not from the visit.").format(
+				frappe.bold(rule.label)
+			),
+			frappe.PermissionError,
+		)
 	doc = transition(
 		visit,
 		action,

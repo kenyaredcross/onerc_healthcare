@@ -26,14 +26,19 @@ from onerc_healthcare.constants import (
 	DEPT_RECEPTION,
 	ROLE_MIC,
 	ROLE_RECEPTIONIST,
+	ROLE_TRIAGE,
+	SCREENING_DOCTYPE,
 	VISIT_CLOSED_STATUSES,
 	VISIT_CLOSURE_REASONS,
 	VISIT_DOCTYPE,
+	VISIT_OPEN_STATUSES,
 	VISIT_STATUS_REGISTERED,
+	VISIT_STATUS_ROUTED,
 )
 from onerc_healthcare.setup.operations import get_company, get_operation
 from onerc_healthcare.visit.engine import (
 	ACTION_REGISTER,
+	CONSULTING_ROLES,
 	NON_ROUTABLE_DEPARTMENTS,
 	PROTECTED_FIELDS,
 	STATUS_LOG_FIELDS,
@@ -44,6 +49,8 @@ from onerc_healthcare.visit.patients import assert_patient_active, lock_patient
 from onerc_healthcare.visit.queue import get_primary_identifier, next_queue_number
 
 OUTREACH_SESSION_MAX_LENGTH = 140
+# Roles that record screening at the entrance (decision 2026-11-13).
+SCREENING_ROLES = frozenset((ROLE_RECEPTIONIST, ROLE_TRIAGE))
 STAGE_TIMESTAMPS = ("triage_started_at", "routed_at", "consultation_started_at", "closed_at")
 
 
@@ -77,11 +84,36 @@ class PatientVisit(Document):
 		self.set_onload("non_routable_departments", list(NON_ROUTABLE_DEPARTMENTS))
 		self.set_onload("has_triage_vitals", has_submitted_triage_vitals(self))
 		self.set_onload("closure_reasons", list(VISIT_CLOSURE_REASONS))
+		roles = set(frappe.get_roles())
+		is_admin = frappe.session.user == "Administrator"
 		self.set_onload(
-			"can_recheck_tasks",
-			bool(self.lab_open or self.pharmacy_open)
-			and (frappe.session.user == "Administrator" or ROLE_MIC in frappe.get_roles()),
+			"can_recheck_tasks", bool(self.lab_open or self.pharmacy_open) and (is_admin or ROLE_MIC in roles)
 		)
+		# Start Consultation is B1's endpoint (it creates the encounter); not an apply_action button.
+		self.set_onload(
+			"can_start_consultation",
+			self.status == VISIT_STATUS_ROUTED and (is_admin or bool(roles & set(CONSULTING_ROLES))),
+		)
+		self.set_onload(
+			"can_record_screening",
+			self.status in VISIT_OPEN_STATUSES and (is_admin or bool(roles & SCREENING_ROLES)),
+		)
+		self.set_onload("latest_screening", self.get_latest_screening())
+
+	def get_latest_screening(self) -> dict | None:
+		"""Latest submitted Screening Record of this visit (L2), for users with patient-level access."""
+		if 1 not in self.meta.get_permlevel_access("read"):
+			return None  # Head of Operations: status only
+		try:
+			from onerc_healthcare.frontdesk.screening import latest_screening_for_visit
+		except ImportError:
+			return None
+		name = latest_screening_for_visit(self.name)
+		if not name:
+			return None
+		row = frappe.db.get_value(SCREENING_DOCTYPE, name, ["name", "outcome", "screened_at"], as_dict=True)
+		row["can_open"] = frappe.has_permission(SCREENING_DOCTYPE, "read", doc=name)
+		return row
 
 	def validate(self):
 		self.validate_required()

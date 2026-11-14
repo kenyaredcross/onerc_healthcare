@@ -332,7 +332,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-14 09:00:00.000000",
+ "modified": "2026-11-15 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Visit",
  "name": "Patient Visit",
@@ -449,6 +449,26 @@
    "read": 1,
    "report": 1,
    "role": "Head of Operations"
+  },
+  {
+   "permlevel": 2,
+   "read": 1,
+   "role": "Triage Nurse"
+  },
+  {
+   "permlevel": 2,
+   "read": 1,
+   "role": "Clinical Officer"
+  },
+  {
+   "permlevel": 2,
+   "read": 1,
+   "role": "Mental Health Officer"
+  },
+  {
+   "permlevel": 2,
+   "read": 1,
+   "role": "Medical In-Charge"
   }
  ],
  "row_format": "Dynamic",
@@ -458,5 +478,5 @@
  "sort_order": "DESC",
  "states": [],
  "title_field": "patient_name",
- "track_changes": 1
+ "track_changes": 0
 }

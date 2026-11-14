@@ -34,8 +34,7 @@ onerc_healthcare.visit.run_action = function (visit, a, after, opts = {}) {
 				after && after(r.message);
 			});
 
-	const asks_comment =
-		a.needs_comment || a.needs_closure_reason || ["discharge", "refer"].includes(a.action);
+	const asks_comment = a.needs_comment || a.needs_closure_reason;
 	if (!a.needs_department && !asks_comment) {
 		call({});
 		return;
@@ -136,6 +135,21 @@ onerc_healthcare.visit.offer_close_previous = function (frm) {
 		});
 };
 
+// Latest screening result of the visit (L2): outcome, time and a link when the user may open it.
+onerc_healthcare.visit.screening_text = function (s) {
+	if (!s) return "";
+	const label = s.can_open
+		? `<a href="/app/screening-record/${encodeURIComponent(s.name)}">${frappe.utils.escape_html(
+				s.name
+		  )}</a>`
+		: frappe.utils.escape_html(s.name);
+	return __("Screening {0}: {1} ({2}).", [
+		label,
+		__(s.outcome || "No outcome"),
+		frappe.datetime.str_to_user(s.screened_at),
+	]);
+};
+
 onerc_healthcare.visit.minutes_since = function (value) {
 	if (!value) return 0;
 	return Math.max(0, Math.floor(moment().diff(frappe.datetime.str_to_obj(value), "minutes")));
@@ -154,29 +168,27 @@ frappe.ui.form.on("Patient Visit", {
 
 	refresh(frm) {
 		if (frm.is_new()) return;
-		// Refer is done from the consultation (it creates the Referral record, BR-14), not the visit.
-		const actions = ((frm.doc.__onload || {}).available_actions || []).filter(
-			(a) => a.action !== "refer"
-		);
+		const onload = frm.doc.__onload || {};
+		// Refer, Complete Consultation and Start Consultation are server-only (api_only) and never in
+		// available_actions; they run from the consultation / referral code.
+		const actions = onload.available_actions || [];
+		if (onload.can_start_consultation) {
+			// Starting a consultation creates (or reopens) the visit's Patient Encounter (B1).
+			frm.add_custom_button(__("Start Consultation"), () =>
+				frappe
+					.call({
+						method: "onerc_healthcare.clinical.consultation.start_consultation",
+						type: "POST",
+						args: { visit: frm.doc.name },
+						freeze: true,
+					})
+					.then((r) => {
+						const enc = r.message && (r.message.encounter || r.message.name || r.message);
+						if (enc) frappe.set_route("Form", "Patient Encounter", enc);
+					})
+			).addClass("btn-primary");
+		}
 		actions.forEach((a) => {
-			if (a.action === "start_consultation") {
-				// Starting a consultation creates (or reopens) the visit's Patient Encounter (B1).
-				const btn = frm.add_custom_button(__(a.label), () =>
-					frappe
-						.call({
-							method: "onerc_healthcare.clinical.consultation.start_consultation",
-							type: "POST",
-							args: { visit: frm.doc.name },
-							freeze: true,
-						})
-						.then((r) => {
-							const enc = r.message && (r.message.encounter || r.message.name || r.message);
-							if (enc) frappe.set_route("Form", "Patient Encounter", enc);
-						})
-				);
-				btn.addClass("btn-primary");
-				return;
-			}
 			const btn = frm.add_custom_button(
 				__(a.label),
 				() =>
@@ -222,6 +234,17 @@ frappe.ui.form.on("Patient Visit", {
 			);
 		}
 
+		if (onload.can_record_screening) {
+			frm.add_custom_button(__("Record Screening"), () =>
+				frappe.new_doc("Screening Record", {
+					person_type: "Patient",
+					patient: frm.doc.patient,
+					visit: frm.doc.name,
+					facility: frm.doc.facility,
+				})
+			);
+		}
+
 		const triage_actions = actions.filter((a) => ["start_triage", "route"].includes(a.action));
 		if (triage_actions.length) {
 			frm.add_custom_button(__("Record Vital Signs"), () => {
@@ -244,7 +267,14 @@ frappe.ui.form.on("Patient Visit", {
 			];
 			if (frm.doc.lab_open) parts.push(__("Laboratory task open."));
 			if (frm.doc.pharmacy_open) parts.push(__("Pharmacy task open."));
-			frm.set_intro(parts.join(" "), "blue");
+			const screening = onerc_healthcare.visit.screening_text(onload.latest_screening);
+			if (screening) parts.push(screening);
+			const flagged =
+				onload.latest_screening && onload.latest_screening.outcome === "Outside Expected Range";
+			frm.set_intro(parts.join(" "), flagged ? "orange" : "blue");
+		} else {
+			const screening = onerc_healthcare.visit.screening_text(onload.latest_screening);
+			if (screening) frm.set_intro(screening, "blue");
 		}
 	},
 });
