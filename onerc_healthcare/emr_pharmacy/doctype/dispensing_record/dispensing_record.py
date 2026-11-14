@@ -11,6 +11,9 @@
 - `final` closes the line even when less than the prescribed quantity was given.
 - Submit and cancel recompute the line (`pharmacy.dispensing.recompute_line`) and raise the visit event.
 - Cancel: the Pharmacist who dispensed it, with a reason, while the visit is still open.
+- Held or stopped lines (prescriber's hold, `pharmacy.api`) accept no new record.
+- Locking (M7 / L1): submit and cancel lock the Patient Visit, then the Medication Request
+  (`dispensing.lock_line`); the totals and the visit's other lines are then read with `FOR UPDATE`.
 - No medicine stock, ledger or price is touched (C-5).
 """
 
@@ -21,7 +24,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, now_datetime
 
-from onerc_healthcare.constants import ROLE_PHARMACIST
+from onerc_healthcare.constants import ROLE_PHARMACIST, VISIT_CLOSED_STATUSES
 from onerc_healthcare.pharmacy import dispensing as line
 from onerc_healthcare.pharmacy.catalogue import items_for_medication, medication_for_item
 
@@ -30,9 +33,11 @@ QTY_TOLERANCE = 1e-9
 
 class DispensingRecord(Document):
 	def validate(self):
-		if self._action == "submit":
-			# Serialise concurrent dispensing of one line; the totals below are read under this lock.
-			frappe.db.get_value(line.MR_DOCTYPE, self.medication_request, "name", for_update=True)
+		self._krcs_locked = self._action == "submit"
+		self._mr_row = self._visit_row = None
+		if self._krcs_locked:
+			# Lock order Visit -> Medication Request; every read below is then a locking read.
+			self._visit_row, self._mr_row = line.lock_line(self.medication_request)
 		if self.docstatus == 0:
 			self.dispensed_by = self.dispensed_at = None  # set by the server at submit
 		self.set_prescription()
@@ -61,7 +66,10 @@ class DispensingRecord(Document):
 			frappe.throw(
 				_("Enter the reason for cancelling this dispensing record."), title=_("Reason Required")
 			)
-		if self.visit and not line.visit_is_open(self.visit):
+		# Lock order Visit -> Medication Request (M7 / L1); the visit status comes from the locked row.
+		visit_row = line.lock_visit(self.visit)
+		line.lock_request(self.medication_request)
+		if visit_row and visit_row.status in VISIT_CLOSED_STATUSES:
 			frappe.throw(
 				_(
 					"Visit {0} is closed. A dispensing record can be cancelled only while the visit is open."
@@ -80,22 +88,8 @@ class DispensingRecord(Document):
 		from onerc_healthcare.visit.patients import assert_patient_active
 		from onerc_healthcare.visit.tasks import visit_for_encounter
 
-		mr = frappe.db.get_value(
-			line.MR_DOCTYPE,
-			self.medication_request,
-			[
-				"docstatus",
-				"status",
-				"patient",
-				"order_group",
-				"medication",
-				"medication_item",
-				"dosage",
-				"period",
-				"quantity",
-				"total_dispensable_quantity",
-			],
-			as_dict=True,
+		mr = self._mr_row or frappe.db.get_value(
+			line.MR_DOCTYPE, self.medication_request, list(line.MR_LOCK_FIELDS), as_dict=True
 		)
 		if not mr:
 			frappe.throw(_("Medication Request {0} does not exist.").format(self.medication_request))
@@ -113,9 +107,13 @@ class DispensingRecord(Document):
 		self.prescribed_dosage = mr.dosage
 		self.prescribed_period = mr.period
 		self.prescribed_quantity = line.dispensable_quantity(mr)
-		self.visit = visit_for_encounter(mr.order_group) if mr.order_group else None
+		if self._krcs_locked:
+			self.visit = self._visit_row.name if self._visit_row else None
+		else:
+			self.visit = visit_for_encounter(mr.order_group) if mr.order_group else None
 		assert_patient_active(self.patient)
 		self._mr_status = mr.status
+		self._hold = mr.get(line.HOLD_FIELD) or line.HOLD_NONE
 
 	def validate_outcome(self):
 		if self.outcome == line.OUTCOME_NOT_DISPENSED:
@@ -184,7 +182,9 @@ class DispensingRecord(Document):
 			frappe.throw(_("Item {0} is disabled and cannot be dispensed.").format(self.dispensed_item))
 
 	def validate_running_total(self):
-		dispensed, final = line.line_totals(self.medication_request, exclude=self.name)
+		dispensed, final = line.line_totals(
+			self.medication_request, exclude=self.name, for_update=self._krcs_locked
+		)
 		state = line.compute_line_state(self.prescribed_quantity, dispensed, final)
 		if state in line.RESOLVED_LINE_STATES:
 			frappe.throw(
@@ -193,6 +193,15 @@ class DispensingRecord(Document):
 				),
 				line.LineResolvedError,
 				title=_("Line Resolved"),
+			)
+		if self._hold:
+			frappe.throw(
+				_("The prescriber has {0} prescription line {1}. It cannot be dispensed.").format(
+					frappe.bold(_("stopped") if self._hold == line.HOLD_STOPPED else _("put on hold")),
+					self.medication_request,
+				),
+				line.LineHeldError,
+				title=_("Line On Hold"),
 			)
 		if self._mr_status not in line.DISPENSABLE_MR_STATUSES:
 			frappe.throw(

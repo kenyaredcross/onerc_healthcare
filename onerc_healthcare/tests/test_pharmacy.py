@@ -24,6 +24,7 @@ from onerc_healthcare.constants import (
 	VISIT_STATUS_DISCHARGED,
 )
 from onerc_healthcare.emr_pharmacy.report.pharmacy_worklist import pharmacy_worklist
+from onerc_healthcare.pharmacy import api as line_api
 from onerc_healthcare.pharmacy import catalogue, dispensing
 from onerc_healthcare.pharmacy import setup as pharmacy_setup
 from onerc_healthcare.pharmacy.dispensing import (
@@ -34,6 +35,7 @@ from onerc_healthcare.pharmacy.dispensing import (
 	LINE_PENDING,
 	LINE_STATES,
 	MR_DOCTYPE,
+	LineHeldError,
 	LineResolvedError,
 	OverDispenseError,
 	compute_line_state,
@@ -65,11 +67,12 @@ class PharmacyTestCase(EMRTestCase):
 		finally:
 			frappe.set_user("Administrator")
 
-	def prescribed_visit(self, drugs=((PARA, "BID", "5 Day"),), lab=False):
+	def prescribed_visit(self, drugs=((PARA, "BID", "5 Day"),), lab=False, user=None):
 		"""A visit through B1's consultation flow: start_consultation -> drug rows -> complete_consultation.
 
 		Marley creates the Medication Requests on submit and B1 raises `prescribe` (Awaiting Pharmacy).
-		With `lab`, a laboratory task is open when the consultation is completed.
+		With `lab`, a laboratory task is open when the consultation is completed. With `user` (a key of
+		self.users), that clinician runs the consultation and is the prescriber of the lines.
 		"""
 		from onerc_healthcare.clinical.consultation import complete_consultation, start_consultation
 
@@ -79,6 +82,21 @@ class PharmacyTestCase(EMRTestCase):
 		engine.transition(
 			visit, engine.ACTION_ROUTE, department=DEPT_OUTPATIENT, without_vitals_reason="T- test routing"
 		)
+		if user:
+			frappe.set_user(self.users[user])
+		try:
+			encounter = self._consult(visit, drugs, lab, start_consultation, complete_consultation)
+		finally:
+			frappe.set_user("Administrator")
+		mrs = {
+			r.medication: r.name
+			for r in frappe.get_all(
+				MR_DOCTYPE, filters={"order_group": encounter, "docstatus": 1}, fields=["name", "medication"]
+			)
+		}
+		return frappe._dict(patient=patient, visit=visit, encounter=encounter, mrs=mrs)
+
+	def _consult(self, visit, drugs, lab, start_consultation, complete_consultation) -> str:
 		encounter = start_consultation(visit)["encounter"]
 		if drugs:
 			enc = frappe.get_doc(ENCOUNTER_DOCTYPE, encounter)
@@ -99,13 +117,7 @@ class PharmacyTestCase(EMRTestCase):
 		complete_consultation(
 			encounter, reason="T- results pending" if lab else None, no_diagnosis_reason="T- test"
 		)
-		mrs = {
-			r.medication: r.name
-			for r in frappe.get_all(
-				MR_DOCTYPE, filters={"order_group": encounter, "docstatus": 1}, fields=["name", "medication"]
-			)
-		}
-		return frappe._dict(patient=patient, visit=visit, encounter=encounter, mrs=mrs)
+		return encounter
 
 	def dispense(self, mr: str, qty=None, outcome="Dispensed", final=0, submit=True, user="pharmacist", **kw):
 		with self.as_user(user):
@@ -681,3 +693,307 @@ class TestPermissions(PharmacyTestCase):
 		doc = self.dispense(v.mrs[PARA], qty=2, submit=False)
 		with self.assertRaises(frappe.PermissionError):
 			frappe.delete_doc(DISPENSING_DOCTYPE, doc.name, ignore_permissions=True)
+
+
+def _queries(spy) -> list[str]:
+	"""Normalised SQL text of every frappe.db.sql call recorded by `spy`."""
+	return [" ".join(str(c.args[0]).split()).lower() for c in spy.call_args_list if c.args]
+
+
+def _first(queries: list[str], *needles: str) -> int:
+	return next(i for i, q in enumerate(queries) if all(n in q for n in needles))
+
+
+class TestLocking(PharmacyTestCase):
+	"""Fix round M7 / L1: lock the visit, then the line; every later read is a locking read."""
+
+	def assert_lock_shape(self, queries: list[str]):
+		visit_lock = _first(queries, "for update", "`tabpatient visit`")
+		mr_lock = _first(queries, "for update", "`tabmedication request`")
+		self.assertLess(visit_lock, mr_lock, "the visit must be locked before the Medication Request")
+		after = queries[visit_lock:]
+		totals = [
+			q for q in after if q.startswith("select") and "`tabdispensing record`" in q and "`outcome`" in q
+		]
+		self.assertTrue(totals, "running totals not read")
+		self.assertTrue(all(q.endswith("for update") for q in totals), totals)
+		return after
+
+	def test_submit_lock_order_and_locking_reads(self):
+		v = self.prescribed_visit(drugs=((PARA, "BID", "5 Day"), (AMOX, "TID", "5 Day")))
+		self.dispense(v.mrs[AMOX], qty=15)
+		doc = self.dispense(v.mrs[PARA], qty=10, submit=False)
+		db = frappe.local.db
+		with self.as_user("pharmacist"), patch.object(db, "sql", wraps=db.sql) as spy:
+			doc.reload()
+			doc.submit()
+		after = self.assert_lock_shape(_queries(spy))
+		# The visit's other lines are read with a lock before `dispensed` is raised.
+		lines = [
+			q
+			for q in after
+			if q.startswith("select")
+			and "`krcs_dispense_status`" in q
+			and "`krcs_hold_status`" in q
+			and "`order_group`" in q
+		]
+		self.assertTrue(lines, "other lines' statuses not read")
+		self.assertTrue(all("for update" in q for q in lines), lines)
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, v.visit, "status"), VISIT_STATUS_DISCHARGED)
+
+	def test_cancel_lock_order(self):
+		v = self.prescribed_visit(drugs=((PARA, "BID", "5 Day"), (AMOX, "TID", "5 Day")))
+		doc = self.dispense(v.mrs[PARA], qty=4)
+		db = frappe.local.db
+		with self.as_user("pharmacist"), patch.object(db, "sql", wraps=db.sql) as spy:
+			dispensing.cancel_dispensing(doc.name, "T- reason")
+		self.assert_lock_shape(_queries(spy))
+
+	def test_hold_action_lock_order(self):
+		v = self.prescribed_visit()
+		db = frappe.local.db
+		with self.as_user("mic"), patch.object(db, "sql", wraps=db.sql) as spy:
+			line_api.hold_line(v.mrs[PARA], "T- reason")
+		queries = _queries(spy)
+		self.assertLess(
+			_first(queries, "for update", "`tabpatient visit`"),
+			_first(queries, "for update", "`tabmedication request`"),
+		)
+
+
+LINE_ACTIONS = {
+	dispensing.ACTION_HOLD: line_api.hold_line,
+	dispensing.ACTION_STOP: line_api.stop_line,
+	dispensing.ACTION_RESUME: line_api.resume_line,
+}
+
+
+class TestPrescriberHold(PharmacyTestCase):
+	"""Fix round L3 / DEFECT-3: hold, stop and resume a prescription line."""
+
+	def hold(self, mr: str) -> frappe._dict:
+		return frappe.db.get_value(
+			MR_DOCTYPE,
+			mr,
+			["krcs_dispense_status", "krcs_hold_status", "status", "krcs_hold_reason"],
+			as_dict=True,
+		)
+
+	def test_introspection(self):
+		self.assertEqual(set(dispensing.HOLD_TRANSITIONS), set(LINE_ACTIONS))
+		for action in LINE_ACTIONS:
+			self.assertIn(action, dispensing.LINE_EVENTS)
+		meta = frappe.get_meta(MR_DOCTYPE)
+		self.assertEqual(meta.get_field("krcs_hold_status").options.split("\n"), list(dispensing.HOLD_STATES))
+		self.assertTrue(meta.get_field("krcs_hold_status").read_only)
+		for status in dispensing.HOLD_MARLEY_STATUS.values():
+			self.assertTrue(frappe.db.exists("Code Value", status), status)
+
+	def test_matrix(self):
+		"""Every action x line state x hold state x role: allowed, illegal (state) or denied (role)."""
+		v = self.prescribed_visit(user="clinician")
+		mr = v.mrs[PARA]
+		allowed_roles = {"clinician", "mic"}  # the prescriber (own line) and the Medical In-Charge
+		for action, rule in dispensing.HOLD_TRANSITIONS.items():
+			for state in LINE_STATES:
+				for hold in dispensing.HOLD_STATES:
+					for key in ("clinician", "mho", "mic", "pharmacist", "reception", "sysadmin"):
+						case = (action, state, hold, key)
+						frappe.db.savepoint("krcs_hold_case")
+						try:
+							frappe.db.set_value(
+								MR_DOCTYPE, mr, {"krcs_dispense_status": state, "krcs_hold_status": hold}
+							)
+							legal = state in rule.from_line_states and hold in rule.from_holds
+							with self.as_user(key):
+								if key not in allowed_roles:
+									with self.assertRaises(frappe.PermissionError, msg=case):
+										LINE_ACTIONS[action](mr, "T- reason")
+								elif not legal:
+									with self.assertRaises(line_api.IllegalLineActionError, msg=case):
+										LINE_ACTIONS[action](mr, "T- reason")
+								else:
+									result = LINE_ACTIONS[action](mr, "T- reason")
+									row = self.hold(mr)
+									self.assertEqual(
+										(row.krcs_hold_status or "", result["hold"]),
+										(rule.to_hold,) * 2,
+										case,
+									)
+									self.assertEqual(
+										row.status, dispensing.marley_status_for(state, rule.to_hold), case
+									)
+									self.assertEqual(row.krcs_dispense_status, state, case)
+						finally:
+							frappe.db.rollback(save_point="krcs_hold_case")
+
+	def test_reason_required(self):
+		v = self.prescribed_visit()
+		with self.as_user("mic"):
+			for reason in ("", "   ", None):
+				with self.assertRaises(frappe.ValidationError):
+					line_api.hold_line(v.mrs[PARA], reason)
+			with self.assertRaises(frappe.ValidationError):
+				line_api.stop_line(v.mrs[PARA], "x" * 1001)
+		self.assertFalse(self.hold(v.mrs[PARA]).krcs_hold_status)
+
+	def test_hold_blocks_dispensing_until_resumed(self):
+		v = self.prescribed_visit(user="clinician")
+		mr = v.mrs[PARA]
+		draft = self.dispense(mr, qty=2, submit=False)
+		with self.as_user("clinician"):
+			line_api.hold_line(mr, "T- check allergy first")
+		row = self.hold(mr)
+		self.assertEqual(
+			(row.krcs_hold_status, row.status, row.krcs_hold_reason),
+			("Held", "on-hold-Medication Request Status", "T- check allergy first"),
+		)
+		self.assertTrue(
+			frappe.db.exists(
+				"Comment",
+				{"reference_doctype": MR_DOCTYPE, "reference_name": mr, "content": ["like", "Hold:%"]},
+			)
+		)
+		with self.assertRaises(LineHeldError):
+			self.dispense(mr, qty=1)
+		with self.as_user("pharmacist"), self.assertRaises(LineHeldError):
+			draft.reload()
+			draft.submit()
+		# A held line is open: the visit keeps its pharmacy task.
+		self.assertFalse(is_pharmacy_complete(v.visit))
+		self.assertEqual(self.visit(v.visit).status, VISIT_STATUS_AWAITING_PHARMACY)
+		rows = {r["medication_request"]: r for r in pharmacy_worklist.execute({})[1]}
+		self.assertEqual((rows[mr]["hold_status"], rows[mr]["action"]), ("Held", None))
+		with self.as_user("mic"):
+			line_api.resume_line(mr, "T- allergy excluded")
+		row = self.hold(mr)
+		self.assertEqual(
+			(row.krcs_hold_status or "", row.status, row.krcs_hold_reason),
+			("", "active-Medication Request Status", None),
+		)
+		self.dispense(mr, qty=10)
+		self.assertEqual(self.visit(v.visit).status, VISIT_STATUS_DISCHARGED)
+
+	def test_stop_last_open_line_raises_dispensed(self):
+		v = self.prescribed_visit(drugs=((PARA, "BID", "5 Day"), (AMOX, "TID", "5 Day")), user="clinician")
+		self.dispense(v.mrs[PARA], qty=10)
+		self.assertEqual(self.visit(v.visit).status, VISIT_STATUS_AWAITING_PHARMACY)
+		with self.as_user("clinician"):
+			result = line_api.stop_line(v.mrs[AMOX], "T- not needed any more")
+		self.assertTrue(result["visit_event_raised"])
+		row = self.hold(v.mrs[AMOX])
+		self.assertEqual(
+			(row.krcs_hold_status, row.status, row.krcs_dispense_status),
+			("Stopped", "stopped-Medication Request Status", LINE_PENDING),
+		)
+		self.assertTrue(is_pharmacy_complete(v.visit))
+		self.assertEqual(self.visit(v.visit).status, VISIT_STATUS_DISCHARGED)
+		self.assertNotIn(v.mrs[AMOX], [r["medication_request"] for r in pharmacy_worklist.execute({})[1]])
+		with self.assertRaises(LineHeldError):
+			self.dispense(v.mrs[AMOX], qty=1)
+
+	def test_stop_held_line(self):
+		v = self.prescribed_visit()
+		with self.as_user("mic"):
+			line_api.hold_line(v.mrs[PARA], "T- wait")
+			line_api.stop_line(v.mrs[PARA], "T- stop")
+			with self.assertRaises(line_api.IllegalLineActionError):
+				line_api.resume_line(v.mrs[PARA], "T- resume")
+		self.assertEqual(self.visit(v.visit).status, VISIT_STATUS_DISCHARGED)
+
+	def test_hold_kept_when_dispensing_cancelled(self):
+		"""DEFECT-3: recompute_line keeps the hold / stop status."""
+		v = self.prescribed_visit(
+			drugs=((PARA, "BID", "5 Day"), (AMOX, "TID", "5 Day"), (IBU, "TID", "3 Day"))
+		)
+		held = self.dispense(v.mrs[PARA], qty=4)
+		stopped = self.dispense(v.mrs[AMOX], qty=3)
+		with self.as_user("mic"):
+			line_api.hold_line(v.mrs[PARA], "T- hold")
+			line_api.stop_line(v.mrs[AMOX], "T- stop")
+		with self.as_user("pharmacist"):
+			dispensing.cancel_dispensing(held.name, "T- reason")
+			dispensing.cancel_dispensing(stopped.name, "T- reason")
+		self.assertEqual(
+			self.hold(v.mrs[PARA]),
+			{
+				"krcs_dispense_status": LINE_PENDING,
+				"krcs_hold_status": "Held",
+				"status": "on-hold-Medication Request Status",
+				"krcs_hold_reason": "T- hold",
+			},
+		)
+		row = self.hold(v.mrs[AMOX])
+		self.assertEqual(
+			(row.krcs_dispense_status, row.krcs_hold_status, row.status),
+			(LINE_PENDING, "Stopped", "stopped-Medication Request Status"),
+		)
+		self.assertEqual(self.visit(v.visit).status, VISIT_STATUS_AWAITING_PHARMACY)
+
+
+class TestExternalStatus(PharmacyTestCase):
+	"""DEFECT-3 (second case): a Marley status set outside our machine is kept and acts as a hold."""
+
+	def set_marley_status(self, mr: str, status: str):
+		from healthcare.healthcare.doctype.medication_request.medication_request import (
+			set_medication_request_status,
+		)
+
+		set_medication_request_status(mr, status)
+
+	def test_external_on_hold_kept_on_cancel_and_blocks_dispensing(self):
+		v = self.prescribed_visit()
+		mr = v.mrs[PARA]
+		doc = self.dispense(mr, qty=4)
+		self.set_marley_status(mr, "on-hold-Medication Request Status")
+		with self.as_user("pharmacist"):
+			dispensing.cancel_dispensing(doc.name, "T- wrong quantity")
+		self.assertEqual(
+			self.line(mr),
+			{
+				"krcs_dispense_status": LINE_PENDING,
+				"krcs_qty_dispensed": 0,
+				"status": "on-hold-Medication Request Status",
+			},
+		)
+		with self.assertRaises(frappe.ValidationError):
+			self.dispense(mr, qty=1)
+		self.assertFalse(is_pharmacy_complete(v.visit))  # on hold stays open
+		row = next(r for r in pharmacy_worklist.execute({})[1] if r["medication_request"] == mr)
+		self.assertIsNone(row["action"])
+
+	def test_external_stop_resolves_line_for_the_visit(self):
+		v = self.prescribed_visit(drugs=((PARA, "BID", "5 Day"), (AMOX, "TID", "5 Day")))
+		self.set_marley_status(v.mrs[AMOX], "stopped-Medication Request Status")
+		self.dispense(v.mrs[PARA], qty=10)
+		self.assertTrue(is_pharmacy_complete(v.visit))
+		self.assertEqual(self.visit(v.visit).status, VISIT_STATUS_DISCHARGED)
+
+	def test_external_status_rules(self):
+		ext = dispensing.external_status
+		self.assertIsNone(ext(LINE_PARTLY, "", "active-Medication Request Status"))
+		self.assertIsNone(ext(LINE_NOT_DISPENSED, "", "stopped-Medication Request Status"))  # ours
+		self.assertIsNone(ext(LINE_PENDING, "Held", "on-hold-Medication Request Status"))  # our hold
+		self.assertEqual(
+			ext(LINE_PARTLY, "", "stopped-Medication Request Status"), "stopped-Medication Request Status"
+		)
+		for status, resolved in (
+			("on-hold-Medication Request Status", False),
+			("unknown-Medication Request Status", False),
+			("stopped-Medication Request Status", True),
+			("cancelled-Medication Request Status", True),
+			("entered-in-error-Medication Request Status", True),
+			("ended-Medication Request Status", True),
+		):
+			self.assertEqual(dispensing.is_line_resolved(LINE_PARTLY, "", status), resolved, status)
+
+
+class TestReportLogging(PharmacyTestCase):
+	def test_worklist_run_is_logged(self):
+		"""Fix round M4 (FR-40): each worklist run goes to the access log."""
+		path = "onerc_healthcare.emr_pharmacy.report.pharmacy_worklist.pharmacy_worklist.log_report_run"
+		with patch(path) as log:
+			pharmacy_worklist.execute({"facility": get_facility(0)})
+		log.assert_called_once()
+		self.assertEqual(log.call_args.args[0], REPORT_PHARMACY_WORKLIST)
+		self.assertEqual(log.call_args.kwargs["filters"]["facility"], get_facility(0))

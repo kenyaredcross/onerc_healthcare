@@ -7,7 +7,11 @@ const KRCS_OPEN_LINES = ["Pending", "Partly Dispensed"];
 frappe.ui.form.on("Dispensing Record", {
 	setup(frm) {
 		frm.set_query("medication_request", () => ({
-			filters: { docstatus: 1, krcs_dispense_status: ["in", KRCS_OPEN_LINES] },
+			filters: {
+				docstatus: 1,
+				krcs_dispense_status: ["in", KRCS_OPEN_LINES],
+				krcs_hold_status: ["is", "not set"],
+			},
 		}));
 		frm.set_query("dispensed_medication", () => ({
 			filters: { disabled: 0, is_orderable: 1 },

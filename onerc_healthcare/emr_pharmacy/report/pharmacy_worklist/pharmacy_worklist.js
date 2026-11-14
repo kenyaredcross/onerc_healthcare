@@ -19,7 +19,8 @@ frappe.query_reports["Pharmacy Worklist"] = {
 	],
 
 	formatter(value, row, column, data, default_formatter) {
-		if (column.fieldname === "action" && data && data.medication_request) {
+		if (column.fieldname === "action") {
+			if (!data || !data.action || !data.medication_request) return "";
 			const mr = encodeURIComponent(data.medication_request);
 			return `<button class="btn btn-xs btn-primary" data-krcs-dispense="${mr}">${__(
 				"Dispense"

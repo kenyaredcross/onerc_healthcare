@@ -4,7 +4,9 @@
 
 Open line = a submitted Medication Request whose dispense status is Pending or Partly Dispensed and that
 the clinician has not stopped, cancelled or entered in error. Lines of a visit closed in the meantime stay
-on the list (the visit status column shows it). Filters: facility (the visit's) and order date.
+on the list (the visit status column shows it). A line the prescriber has put on hold is listed with its
+hold and reason but without the Dispense action; a stopped line leaves the list. Filters: facility (the
+visit's) and order date. Each run is written to the access log (FR-40, fix round M4).
 """
 
 from __future__ import annotations
@@ -16,10 +18,14 @@ from frappe.utils import flt
 from onerc_healthcare.constants import (
 	ENCOUNTER_DOCTYPE,
 	ENCOUNTER_VISIT_FIELD,
+	REPORT_PHARMACY_WORKLIST,
 	VISIT_DOCTYPE,
 	VISIT_ENCOUNTER_FIELD,
 )
 from onerc_healthcare.pharmacy.dispensing import (
+	DISPENSABLE_MR_STATUSES,
+	HOLD_FIELD,
+	HOLD_REASON_FIELD,
 	LINE_PENDING,
 	MR_DOCTYPE,
 	OPEN_LINE_STATES,
@@ -27,6 +33,7 @@ from onerc_healthcare.pharmacy.dispensing import (
 	STATUS_FIELD,
 	dispensable_quantity,
 )
+from onerc_healthcare.privacy.access_log import log_report_run
 
 # Marley statuses that take a line off the worklist even when nothing was dispensed.
 EXCLUDED_MR_STATUSES = (
@@ -39,6 +46,7 @@ EXCLUDED_MR_STATUSES = (
 
 def execute(filters: dict | None = None):
 	filters = frappe._dict(filters or {})
+	log_report_run(REPORT_PHARMACY_WORKLIST, filters=filters)  # FR-40 / M4: patient-level report
 	return get_columns(), get_data(filters)
 
 
@@ -102,6 +110,7 @@ def get_columns() -> list[dict]:
 		{"label": _("Dispensed Qty"), "fieldname": "dispensed_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Remaining Qty"), "fieldname": "remaining_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Dispense Status"), "fieldname": "dispense_status", "fieldtype": "Data", "width": 120},
+		{"label": _("Prescriber Hold"), "fieldname": "hold_status", "fieldtype": "Data", "width": 110},
 		{"label": _("Comment"), "fieldname": "comment", "fieldtype": "Data", "width": 160},
 		{"label": _("Action"), "fieldname": "action", "fieldtype": "Data", "width": 100},
 	]
@@ -120,6 +129,7 @@ def get_data(filters: frappe._dict) -> list[dict]:
 		filters=conditions,
 		fields=[
 			"name",
+			"status",
 			"order_date",
 			"order_time",
 			"patient",
@@ -134,6 +144,8 @@ def get_data(filters: frappe._dict) -> list[dict]:
 			"comment",
 			STATUS_FIELD,
 			QTY_FIELD,
+			HOLD_FIELD,
+			HOLD_REASON_FIELD,
 		],
 		order_by="order_date asc, order_time asc, name asc",
 	)
@@ -166,8 +178,14 @@ def get_data(filters: frappe._dict) -> list[dict]:
 				"dispensed_qty": dispensed,
 				"remaining_qty": max(prescribed - dispensed, 0),
 				"dispense_status": ln.get(STATUS_FIELD) or LINE_PENDING,
-				"comment": ln.comment,
-				"action": "Dispense",
+				"hold_status": ln.get(HOLD_FIELD) or None,
+				"comment": ln.comment
+				if not ln.get(HOLD_FIELD)
+				else f"{_(ln.get(HOLD_FIELD))}: {ln.get(HOLD_REASON_FIELD) or ''}",
+				# A held line stays visible (the Pharmacist knows to wait) but cannot be dispensed.
+				"action": None
+				if ln.get(HOLD_FIELD) or ln.status not in DISPENSABLE_MR_STATUSES
+				else "Dispense",
 			}
 		)
 	return rows

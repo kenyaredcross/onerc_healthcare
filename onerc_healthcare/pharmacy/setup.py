@@ -2,7 +2,8 @@
 # For license information, please see license.txt
 """pharmacy install hook (setup/install.py calls install() on after_install and after_migrate). Idempotent.
 
-- Medication Request dispensing fields (`krcs_dispense_status`, `krcs_qty_dispensed`), FR-21.
+- Medication Request dispensing fields (`krcs_dispense_status`, `krcs_qty_dispensed`), FR-21, and the
+  prescriber hold (`krcs_hold_status`, `krcs_hold_reason`), fix round L3.
 - The PROVISIONAL medication catalogue (OI-9), non-stock and price-free (C-5).
 """
 
@@ -11,6 +12,9 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from onerc_healthcare.pharmacy.catalogue import seed_catalogue
 from onerc_healthcare.pharmacy.dispensing import (
+	HOLD_FIELD,
+	HOLD_REASON_FIELD,
+	HOLD_STATES,
 	LINE_PENDING,
 	LINE_STATES,
 	MR_DOCTYPE,
@@ -50,6 +54,26 @@ MR_CUSTOM_FIELDS = {
 			"read_only": 1,
 			"no_copy": 1,
 			"insert_after": "krcs_dispensing_column",
+		},
+		{
+			"fieldname": HOLD_FIELD,
+			"label": "Prescriber Hold",
+			"fieldtype": "Select",
+			"options": "\n".join(HOLD_STATES),
+			"read_only": 1,
+			"no_copy": 1,
+			"in_standard_filter": 1,
+			"description": "Set with Hold / Stop / Resume (prescriber or Medical In-Charge)",
+			"insert_after": QTY_FIELD,
+		},
+		{
+			"fieldname": HOLD_REASON_FIELD,
+			"label": "Hold Reason",
+			"fieldtype": "Small Text",
+			"read_only": 1,
+			"no_copy": 1,
+			"depends_on": f"eval:doc.{HOLD_FIELD}",
+			"insert_after": HOLD_FIELD,
 		},
 	]
 }

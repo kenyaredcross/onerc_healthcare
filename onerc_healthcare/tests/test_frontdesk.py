@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import frappe
 from frappe.utils import add_days, add_to_date, now_datetime, today
@@ -517,3 +518,62 @@ class TestDailyEntryReport(FrontDeskTestCase):
 		self.assertFalse(daily_facility_entry.counts_only("Administrator"))
 		self.assertTrue(daily_facility_entry.counts_only(self.users["hoo"]))
 		self.assertFalse(daily_facility_entry.counts_only(self.users["reception"]))
+
+
+class TestVisitorArchive(FrontDeskTestCase):
+	"""Fix round L5 (NFR-9): an Exited visitor record can be archived (Receptionist or Medical In-Charge)."""
+
+	def setUp(self):
+		super().setUp()
+		if not frappe.get_meta(VISITOR_DOCTYPE).has_field(visitor.ARCHIVED_FIELD):
+			self.skipTest("security setup has not added the archive flag")
+
+	def exited(self):
+		vr = self.new_visitor()
+		with self.as_user("reception"):
+			record_exit(vr.name)
+		return vr.name
+
+	def test_medical_in_charge_archives_exited_record(self):
+		name = self.exited()
+		with self.as_user("mic"):
+			self.assertEqual(visitor.set_archived(name, 1)[visitor.ARCHIVED_FIELD], 1)
+		self.assertEqual(frappe.db.get_value(VISITOR_DOCTYPE, name, visitor.ARCHIVED_FIELD), 1)
+		with self.as_user("mic"):
+			visitor.set_archived(name, 0)
+		self.assertEqual(frappe.db.get_value(VISITOR_DOCTYPE, name, visitor.ARCHIVED_FIELD), 0)
+
+	def test_receptionist_archives_in_the_form(self):
+		name = self.exited()
+		with self.as_user("reception"):
+			doc = frappe.get_doc(VISITOR_DOCTYPE, name)
+			doc.set(visitor.ARCHIVED_FIELD, 1)
+			doc.save()
+			doc.reload()
+			doc.set(visitor.ARCHIVED_FIELD, 0)
+			doc.visitor_name = "T- Changed"
+			with self.assertRaises(VisitorRecordLockedError):
+				doc.save()  # archive flag together with another change
+
+	def test_archive_refused(self):
+		inside = self.new_visitor().name
+		with self.as_user("reception"), self.assertRaises(VisitorRecordLockedError):
+			visitor.set_archived(inside, 1)  # only after exit
+		name = self.exited()
+		for key in ("triage", "clinician", "hoo", "sysadmin"):
+			with self.as_user(key), self.assertRaises(frappe.PermissionError, msg=key):
+				visitor.set_archived(name, 1)
+		self.assertEqual(frappe.db.get_value(VISITOR_DOCTYPE, name, visitor.ARCHIVED_FIELD), 0)
+
+
+class TestDailyEntryLogging(FrontDeskTestCase):
+	def test_runs_are_logged(self):
+		"""Fix round M4 (FR-40): every run is logged, the counts-only view included."""
+		path = (
+			"onerc_healthcare.emr_front_desk.report.daily_facility_entry.daily_facility_entry.log_report_run"
+		)
+		for key in ("reception", "hoo"):
+			with patch(path) as log, self.as_user(key):
+				daily_facility_entry.execute({"facility": get_facility(0)})
+			log.assert_called_once()
+			self.assertEqual(log.call_args.args[0], REPORT_DAILY_ENTRY)

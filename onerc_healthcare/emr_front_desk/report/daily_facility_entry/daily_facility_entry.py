@@ -8,6 +8,8 @@ with the latest screening outcome.
 
 The Head of Operations sees daily counts only (SDD §6.1: no patient-level content). That is enforced here
 by role: a user without a full-view role gets the counts view whatever filter is sent.
+
+Every run is written to the access log (FR-40, fix round M4), the counts view included.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from frappe import _
 from frappe.utils import add_days, getdate, today
 
 from onerc_healthcare.constants import (
+	REPORT_DAILY_ENTRY,
 	ROLE_HEAD_OPS,
 	ROLE_MIC,
 	ROLE_RECEPTIONIST,
@@ -26,6 +29,7 @@ from onerc_healthcare.constants import (
 	VISITOR_DOCTYPE,
 )
 from onerc_healthcare.frontdesk.screening import OUTCOME_OUT_OF_RANGE
+from onerc_healthcare.privacy.access_log import log_report_run
 
 FULL_VIEW_ROLES = (ROLE_RECEPTIONIST, ROLE_TRIAGE, ROLE_MIC)
 COUNTS_ONLY_ROLES = (ROLE_HEAD_OPS,)
@@ -48,6 +52,7 @@ def counts_only(user: str | None = None) -> bool:
 def execute(filters: dict | None = None):
 	filters = frappe._dict(filters or {})
 	filters.date = getdate(filters.get("date") or today())
+	log_report_run(REPORT_DAILY_ENTRY, filters=filters)  # FR-40 / M4: names of everyone present
 	rows = get_entries(filters)
 	if counts_only():
 		return count_columns(), get_counts(rows)

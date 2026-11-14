@@ -10,6 +10,8 @@
 `status`, `exit_time` and the log change only through `transition()` (flag `from_workflow`); the log is
 append-only. An Exited record is read-only. Records are never deleted (NFR-9). Visitor data is limited to
 what the entry record needs (C-3): name, relationship, an optional identifier and the patient accompanied.
+
+Archiving (`set_archived`, POST): Exited records only, Nurse Receptionist or Medical In-Charge (L5).
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime, now_datetime
 
-from onerc_healthcare.constants import ROLE_RECEPTIONIST, VISITOR_DOCTYPE
+from onerc_healthcare.constants import ROLE_MIC, ROLE_RECEPTIONIST, VISITOR_DOCTYPE
 
 STATUS_INSIDE = "Inside"
 STATUS_EXITED = "Exited"
@@ -28,6 +30,11 @@ STATUSES = (STATUS_INSIDE, STATUS_EXITED)
 
 ACTION_RECORD_ENTRY = "record_entry"
 ACTION_RECORD_EXIT = "record_exit"
+
+# Archiving an Exited record (NFR-9, fix round L5): the Receptionist owns the record, the Medical In-Charge
+# manages retention. The flag is the security setup's `krcs_archived`.
+ARCHIVE_ROLES = (ROLE_RECEPTIONIST, ROLE_MIC)
+ARCHIVED_FIELD = "krcs_archived"
 
 # Allowed clock skew between the browser and the server for "not in the future" checks.
 FUTURE_TOLERANCE_SECONDS = 300
@@ -121,3 +128,27 @@ def record_exit(visitor_record: str, exit_time: str | None = None, comment: str 
 	"""Nurse Receptionist: record that the visitor left the facility."""
 	doc = transition(visitor_record, ACTION_RECORD_EXIT, exit_time=exit_time, comment=comment)
 	return {"name": doc.name, "status": doc.status, "exit_time": str(doc.exit_time)}
+
+
+def can_archive(user: str | None = None) -> bool:
+	user = user or frappe.session.user
+	return user == "Administrator" or bool(set(frappe.get_roles(user)) & set(ARCHIVE_ROLES))
+
+
+@frappe.whitelist(methods=["POST"])
+def set_archived(visitor_record: str, archived: int = 1) -> dict:
+	"""Archive (or un-archive) an Exited visitor record: Nurse Receptionist or Medical In-Charge (L5)."""
+	if not can_archive():
+		frappe.throw(
+			_("Only the Nurse Receptionist or the Medical In-Charge can archive a visitor record."),
+			frappe.PermissionError,
+		)
+	frappe.has_permission(VISITOR_DOCTYPE, "read", doc=visitor_record, throw=True)
+	if not frappe.get_meta(VISITOR_DOCTYPE).has_field(ARCHIVED_FIELD):
+		frappe.throw(_("Visitor records have no archive flag on this site."))
+	doc = frappe.get_doc(VISITOR_DOCTYPE, visitor_record, for_update=True)
+	doc.set(ARCHIVED_FIELD, 1 if archived else 0)
+	# The Medical In-Charge only reads visitor records; the role check above authorises this one change,
+	# and the controller refuses anything but the archive flag on an Exited record.
+	doc.save(ignore_permissions=True)
+	return {"name": doc.name, ARCHIVED_FIELD: doc.get(ARCHIVED_FIELD)}

@@ -1,21 +1,27 @@
 # Copyright (c) 2026, Lennox Mwita and contributors
 # For license information, please see license.txt
 """Visitor Record: a non-patient visitor's entry and exit (FR-41, BR-13, C-3). Lifecycle in
-`onerc_healthcare.frontdesk.visitor` (Inside -> Exited through `record_exit`)."""
+`onerc_healthcare.frontdesk.visitor` (Inside -> Exited through `record_exit`).
+
+Archiving (NFR-9, fix round L5): the archive flag (`krcs_archived`, added by security setup) may change
+only on an Exited record, in a save that touches nothing else, by the Nurse Receptionist (form or
+`visitor.set_archived`) or the Medical In-Charge (`visitor.set_archived`, since that role only reads
+visitor records). Every other change to an Exited record is refused.
+"""
 
 from __future__ import annotations
 
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import cint, flt, get_datetime, now_datetime
 
 from onerc_healthcare.constants import VISIT_DOCTYPE
 from onerc_healthcare.frontdesk import visitor as lifecycle
 
 PROTECTED_FIELDS = ("status", "exit_time")
-# Fields that may still change once the visitor has exited (the NFR-9 archive flag added by security setup).
-EDITABLE_AFTER_EXIT = {"krcs_archived"}
+# The NFR-9 archive flag (added by security setup): the only field that may change once the visitor exited.
+ARCHIVE_FIELDS = {"krcs_archived"}
 LOG_FIELDS = ("from_status", "to_status", "action", "user", "timestamp", "comment")
 
 
@@ -83,7 +89,18 @@ class VisitorRecord(Document):
 		if self.flags.from_workflow:
 			self.guard_log(before, allow_append=True)
 			return
-		if before.status == lifecycle.STATUS_EXITED and self.changed_fields(before) - EDITABLE_AFTER_EXIT:
+		changed_all = self.changed_fields(before)
+		if changed_all & ARCHIVE_FIELDS:
+			if before.status != lifecycle.STATUS_EXITED:
+				self._locked(_("A visitor record can be archived only after the visitor has exited."))
+			if changed_all - ARCHIVE_FIELDS:
+				self._locked(_("Archive the record in a separate save, without other changes."))
+			if not lifecycle.can_archive():
+				frappe.throw(
+					_("Only the Nurse Receptionist or the Medical In-Charge can archive a visitor record."),
+					frappe.PermissionError,
+				)
+		elif before.status == lifecycle.STATUS_EXITED and changed_all:
 			self._locked(_("The visitor has exited; this record can no longer be changed."))
 		changed = [f for f in PROTECTED_FIELDS if _norm(f, self.get(f)) != _norm(f, before.get(f))]
 		if changed:
@@ -100,7 +117,7 @@ class VisitorRecord(Document):
 			df.fieldname
 			for df in self.meta.fields
 			if df.fieldtype not in skip
-			and _norm(df.fieldname, self.get(df.fieldname)) != _norm(df.fieldname, before.get(df.fieldname))
+			and _typed(df, self.get(df.fieldname)) != _typed(df, before.get(df.fieldname))
 		}
 
 	def guard_log(self, before, allow_append: bool):
@@ -123,6 +140,17 @@ def _norm(fieldname: str, value):
 	if value in (None, ""):
 		return None
 	return get_datetime(value) if fieldname in DATETIME_FIELDS else str(value)
+
+
+def _typed(df, value):
+	"""Comparable value of any field by its type (form saves send checks and datetimes as strings)."""
+	if df.fieldtype in ("Check", "Int"):
+		return cint(value)
+	if df.fieldtype in ("Float", "Currency", "Percent"):
+		return flt(value)
+	if df.fieldtype in ("Datetime", "Date"):
+		return get_datetime(value) if value else None
+	return value or None
 
 
 def _log_row(row) -> tuple:
