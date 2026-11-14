@@ -27,6 +27,15 @@ Steps:
 12. The run's Excel and PDF download.
 13. The aggregate API answers the HIS Officer and refuses the Receptionist and Head of Operations.
 14. Once submitted, the run cannot be generated again.
+15. Phase 4: the HIS Officer plans an outreach session over a new catchment area; an outreach user signs in.
+16. The outreach user's account cannot read patients over the REST API (no DocPerms, D58).
+17. The device enrols and downloads the reference data and the catchment patients with its grant.
+18. The grant is refused on any other endpoint.
+19. A batch syncs: an offline registration, a visit with a positive MRDT and a dispensed prescription,
+    and a health talk.
+20. Re-sending the same batch creates nothing new.
+21. An offline registration with an existing UNHCR ID raises a Sync Conflict; the HIS Officer links it.
+22. Revoking the device ends its sync.
 
 Exit code 0 when every step passes.
 """
@@ -306,6 +315,7 @@ def main() -> int:
 		not other_rec.login(users["reception"][1], PASSWORD).ok,
 	)
 	phase3_checks(a, clients, visit["name"])
+	phase4_checks(a, admin, clients, unhcr)
 	return summary()
 
 
@@ -318,16 +328,19 @@ def phase3_checks(a, clients: dict, visit: str) -> None:
 	r = cli.post(f"{method}.visit.engine.apply_action", {"visit": visit, "action": "refer", "comment": "T-"})
 	check("10. 'refer' is refused as a plain visit action", r.status_code in (403, 417), err(r))
 
-	# 11. HIS Officer creates and generates a MOH 717 run (custom period: this month so far)
-	today = date.today()
+	# 11. HIS Officer creates and generates a MOH 717 run (custom one-day period, random so a re-run on the same
+	# site never collides with the one active run per period, D54)
+	from datetime import timedelta
+
+	day = date.today() - timedelta(days=random.randint(1, 3000))
 	r = his.post(
 		"/api/resource/MOH Report Run",
 		{
 			"report": "MOH 717",
 			"facility": a.facility,
 			"period_type": "Custom",
-			"from_date": today.replace(day=1).isoformat(),
-			"to_date": today.isoformat(),
+			"from_date": day.isoformat(),
+			"to_date": day.isoformat(),
 		},
 	)
 	run = r.json().get("data", {}).get("name") if r.ok else None
@@ -365,6 +378,300 @@ def phase3_checks(a, clients: dict, visit: str) -> None:
 	check("14a. HIS Officer marks the run submitted", r.ok, "" if r.ok else err(r))
 	r = his.post(f"{method}.reporting.run.apply_action", {"run": run, "action": "generate"})
 	check("14b. Generating a submitted run is refused", not r.ok, f"HTTP {r.status_code}")
+
+
+def phase4_checks(a, admin: "Client", clients: dict, existing_unhcr: str) -> None:
+	"""Steps 15-22: an outreach device simulated over HTTP (Phase 4, docs/OUTREACH_PROTOCOL.md)."""
+	import base64
+	import os
+	import uuid
+
+	rec, his = clients["reception"], clients["his"]
+	m = "/api/method/onerc_healthcare.outreach"
+	tag = rand(4)
+
+	# 15. Session planning
+	roots = (
+		his.get(
+			"/api/resource/Residence Location",
+			filters=[["parent_residence_location", "is", "not set"]],
+			fields=["name"],
+		)
+		.json()
+		.get("data", [])
+	)
+	residence = None
+	for level in ("Village", "Block"):
+		r = his.post(
+			"/api/resource/Residence Location",
+			{
+				"location_name": f"Smoke Village {tag}",
+				"parent_residence_location": roots[0]["name"] if roots else None,
+				"level": level,
+				"is_group": 0,
+			},
+		)
+		if r.ok:
+			residence = r.json()["data"]["name"]
+			break
+	if not check("15a. HIS Officer adds a residence", bool(residence), "" if residence else err(r)):
+		return
+	r = his.post(
+		"/api/resource/Catchment Area",
+		{
+			"area_name": f"Smoke Area {tag}",
+			"facility": a.facility,
+			"locations": [{"residence_location": residence}],
+		},
+	)
+	area = r.json().get("data", {}).get("name") if r.ok else None
+	check("15b. HIS Officer creates a catchment area", bool(area), area or err(r))
+	email = f"smoke-outreach-{tag.lower()}@test.krcs"
+	r = admin.post(
+		"/api/resource/User",
+		{
+			"email": email,
+			"first_name": "Smoke outreach",
+			"send_welcome_email": 0,
+			"new_password": PASSWORD,
+			"roles": [{"role": "Outreach Team Member"}],
+		},
+	)
+	check("15c. Create an Outreach Team Member", r.ok, "" if r.ok else err(r))
+	today = date.today().isoformat()
+	r = his.post(
+		"/api/resource/Outreach Session",
+		{
+			"title": f"Smoke outreach {tag}",
+			"facility": a.facility,
+			"catchment_area": area,
+			"start_date": today,
+			"end_date": today,
+			"team": [{"user": email, "is_lead": 1}],
+			"departments": [{"department": "Outpatient"}],
+		},
+	)
+	session = r.json().get("data", {}).get("name") if r.ok else None
+	if not check("15d. HIS Officer plans an outreach session", bool(session), session or err(r)):
+		return
+	r = rec.post(
+		"/api/resource/Patient",
+		{
+			"first_name": f"Neema{rand(3)}",
+			"last_name": "Catchment",
+			"sex": "Female",
+			"dob": "1988-07-01",
+			"krcs_residence": residence,
+			"krcs_identifiers": [{"identifier_type": "UNHCR ID", "identifier_value": f"SMK-{rand(8)}"}],
+		},
+	)
+	check("15e. A patient lives in the catchment area", r.ok, "" if r.ok else err(r))
+
+	member = Client(a.url, a.site)
+	check("15f. The outreach user signs in online", member.login(email, PASSWORD).ok)
+	csrf = member.get(f"{m.replace('.outreach', '')}.www.outreach.get_boot").json().get("message") or {}
+	member.s.headers["X-Frappe-CSRF-Token"] = csrf.get("csrf_token") or ""
+
+	# 16. No REST access to patients
+	r = member.get("/api/resource/Patient")
+	check(
+		"16. The outreach account cannot list patients over REST",
+		r.status_code == 403,
+		f"HTTP {r.status_code}",
+	)
+
+	# 17. Enrol and download
+	sessions = member.get(f"{m}.devices.my_sessions").json().get("message", [])
+	check("17a. my_sessions lists the session", any(x.get("name") == session for x in sessions))
+	device_id = str(uuid.uuid4())
+	r = member.post(
+		f"{m}.devices.enrol",
+		{
+			"session": session,
+			"device_id": device_id,
+			"device_label": "Smoke tablet",
+			"data_key": base64.b64encode(os.urandom(32)).decode(),
+		},
+	)
+	grant = r.json().get("message", {}) if r.ok else {}
+	if not check("17b. The device enrols", bool(grant.get("secret")), "" if r.ok else err(r)):
+		return
+	device = Client(a.url, a.site)
+	device.s.headers["Authorization"] = f"krcs-outreach {grant['grant']}:{grant['secret']}"
+	ref = device.get(f"{m}.package.get_reference", session=session).json().get("message", {})
+	data = ref.get("data") or {}
+	check(
+		"17c. Reference data downloads with the grant",
+		bool(data.get("icd11")) and "Mental Health" not in (data.get("departments") or []),
+		f"{len(data.get('icd11') or [])} ICD-11 codes, departments {data.get('departments')}",
+	)
+	pkg = device.get(f"{m}.package.get_patients", session=session).json().get("message", {})
+	check(
+		"17d. The catchment patient is in the package", pkg.get("total", 0) >= 1, f"total {pkg.get('total')}"
+	)
+
+	# 18. The grant is refused elsewhere
+	r = device.get("/api/resource/Patient")
+	check("18. The grant is refused on /api/resource", r.status_code == 401, f"HTTP {r.status_code}")
+
+	# 19. Sync a batch
+	icd = next((row for row in data["icd11"] if row[1].startswith("1F40") and row[3]), data["icd11"][0])
+	med = (data.get("medications") or [{}])[0]
+	mrdt = next(
+		(t for t in data.get("lab_templates", []) if t.get("abbr") == "MRDT" or "Malaria Rapid" in t["name"]),
+		None,
+	)
+	positive = next((o for o in (mrdt or {}).get("options", []) if o.lower().startswith("positive")), None)
+	now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+	def envelope(kind, payload, depends=()):
+		return {
+			"client_uuid": str(uuid.uuid4()),
+			"type": kind,
+			"session": session,
+			"device_id": device_id,
+			"captured_at": now,
+			"depends_on": list(depends),
+			"payload": payload,
+		}
+
+	reg = envelope(
+		"patient.register",
+		{
+			# unique per run: a near-identical name from an earlier run is (rightly) a duplicate conflict
+			"first_name": f"Ou{rand(6)}",
+			"last_name": f"Sm{rand(6)}",
+			"sex": "Male",
+			"estimated_age_years": random.randint(18, 70),
+			"residence": residence,
+			"is_walk_in": 1,
+			"identifiers": [],
+		},
+	)
+	visit = envelope(
+		"visit.capture",
+		{
+			"patient": None,
+			"patient_ref": reg["client_uuid"],
+			"department": "Outpatient",
+			"vitals": {
+				"triage_level": (data.get("triage_levels") or ["Non-urgent"])[-1],
+				"chief_complaint": "Fever",
+				"temperature": 38.4,
+				"pulse": 96,
+			},
+			"consultation": {
+				"presenting_complaint": "Fever for two days",
+				"diagnoses": [{"code": icd[0], "case_type": "New", "is_primary": 1}],
+			},
+			"lab_requests": [
+				{
+					"line_id": "l1",
+					"observation_template": mrdt["name"],
+					"poc_result": {"result": positive, "resulted_at": now},
+				}
+			]
+			if mrdt and positive
+			else [],
+			"prescriptions": [
+				{
+					"line_id": "p1",
+					"medication": med.get("name"),
+					"dosage": med.get("default_dosage"),
+					"period": med.get("default_period"),
+					"dosage_form": med.get("dosage_form"),
+					"dispensed": {"quantity": 1, "dispensed_at": now},
+				}
+			]
+			if med.get("name")
+			else [],
+			"outcome": "Discharged home",
+		},
+		depends=[reg["client_uuid"]],
+	)
+	talk = envelope(
+		"community.activity",
+		{
+			"activity_type": (data.get("community_activity_types") or ["Health talk"])[0],
+			"activity_date": today,
+			"location": "Smoke market",
+			"topic": "Malaria prevention",
+			"participants_male": 5,
+			"participants_female": 7,
+			"participants_total": 12,
+		},
+	)
+	batch = {
+		"session": session,
+		"device_id": device_id,
+		"batch_id": str(uuid.uuid4()),
+		"records": [reg, visit, talk],
+	}
+	r = device.s.post(f"{device.url}{m}.sync.push", json=batch)
+	results = r.json().get("message", {}).get("results", []) if r.ok else []
+	got = [x.get("result") for x in results]
+	check(
+		"19a. The batch syncs: three records accepted",
+		got == ["accepted"] * 3,
+		err(r) if not r.ok else str([(x.get("result"), x.get("name"), x.get("error")) for x in results]),
+	)
+	pv = next((x.get("name") for x in results if x.get("doctype") == "Patient Visit"), None)
+	vdoc = his.get(f"/api/resource/Patient Visit/{pv}").json().get("data", {}) if pv else {}
+	check(
+		"19b. The visit is an outreach visit of the session",
+		vdoc.get("is_outreach") == 1 and vdoc.get("outreach_session") == session,
+		f"{pv} {vdoc.get('status')}",
+	)
+
+	# 20. Re-send
+	r = device.s.post(f"{device.url}{m}.sync.push", json=batch)
+	again = [x.get("result") for x in r.json().get("message", {}).get("results", [])] if r.ok else []
+	check("20. Re-sending the batch creates nothing new", again == ["duplicate"] * 3, str(again) or err(r))
+
+	# 21. Duplicate registration -> conflict -> HIS links it
+	dup = envelope(
+		"patient.register",
+		{
+			"first_name": "Dup",
+			"last_name": "Smoke",
+			"sex": "Female",
+			"dob": "1994-03-12",
+			"is_walk_in": 0,
+			"identifiers": [{"identifier_type": "UNHCR ID", "identifier_value": existing_unhcr}],
+		},
+	)
+	r = device.s.post(
+		f"{device.url}{m}.sync.push", json={**batch, "batch_id": str(uuid.uuid4()), "records": [dup]}
+	)
+	res = (r.json().get("message", {}).get("results") or [{}])[0] if r.ok else {}
+	conflict = res.get("conflict")
+	check(
+		"21a. An existing UNHCR ID raises a Sync Conflict",
+		res.get("result") == "conflict" and bool(conflict),
+		str(res) if r.ok else err(r),
+	)
+	if conflict:
+		r = his.post(
+			f"{m}.conflicts.resolve",
+			{"conflict": conflict, "decision": "Link as the same patient", "reason": "Smoke: same person"},
+		)
+		check("21b. The HIS Officer links it to the existing patient", r.ok, "" if r.ok else err(r))
+		st = (
+			device.get(f"{m}.sync.status", session=session, uuids=[dup["client_uuid"]])
+			.json()
+			.get("message", {})
+		)
+		check(
+			"21c. The device sees the record accepted",
+			(st.get("results") or [{}])[0].get("result") == "accepted",
+			str(st),
+		)
+
+	# 22. Revoke
+	r = his.post(f"{m}.devices.revoke_device", {"device": device_id, "reason": "Smoke: lost tablet"})
+	check("22a. The HIS Officer revokes the device", r.ok, "" if r.ok else err(r))
+	r = device.s.post(f"{device.url}{m}.sync.push", json={**batch, "batch_id": str(uuid.uuid4())})
+	check("22b. A revoked device cannot sync", r.status_code == 401, f"HTTP {r.status_code}")
 
 
 def summary() -> int:

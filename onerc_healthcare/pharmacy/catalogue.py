@@ -101,6 +101,24 @@ def _ensure_item(data: dict, row: dict) -> str:
 	return code
 
 
+# Dose interval: once per day-slot of the dosage (BID = 2 doses a day, every day).
+DEFAULT_INTERVAL = 1
+DEFAULT_INTERVAL_UOM = "Day"
+
+
+def set_default_intervals() -> int:
+	"""Give every Medication without a dose interval the daily interval (DEFECT-RX-1). Returns the count."""
+	names = frappe.get_all("Medication", filters={"default_interval": ["in", [0, None]]}, pluck="name")
+	for name in names:
+		frappe.db.set_value(
+			"Medication",
+			name,
+			{"default_interval": DEFAULT_INTERVAL, "default_interval_uom": DEFAULT_INTERVAL_UOM},
+			update_modified=False,
+		)
+	return len(names)
+
+
 def _insert_medication(data: dict, row: dict, item: str) -> None:
 	med = frappe.get_doc(
 		{
@@ -112,6 +130,10 @@ def _insert_medication(data: dict, row: dict, item: str) -> None:
 			"dosage_form": row["dosage_form"],
 			"default_prescription_dosage": _if_exists("Prescription Dosage", row.get("dosage")),
 			"default_prescription_duration": _if_exists("Prescription Duration", row.get("duration")),
+			# Marley multiplies the daily dose by the course length only when an interval is set; without it
+			# the prescribed quantity is one day's dose and a full course cannot be dispensed (DEFECT-RX-1).
+			"default_interval": DEFAULT_INTERVAL,
+			"default_interval_uom": DEFAULT_INTERVAL_UOM,
 			"is_orderable": 1,
 			"disabled": 0,
 		}
