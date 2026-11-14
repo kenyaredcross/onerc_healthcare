@@ -16,6 +16,10 @@ from onerc_healthcare.constants import (
 	IDENTIFIER_RATION,
 	IDENTIFIER_TYPES,
 	IDENTIFIER_UNHCR,
+	PATIENT_DOB_ESTIMATED_FIELD,
+	PATIENT_DOB_ESTIMATED_ON_FIELD,
+	PATIENT_ESTIMATED_AGE_MONTHS_FIELD,
+	PATIENT_ESTIMATED_AGE_YEARS_FIELD,
 	PATIENT_IDENTIFIER_DOCTYPE,
 	PATIENT_IDENTIFIER_TYPE_DOCTYPE,
 	PATIENT_IDENTIFIERS_FIELD,
@@ -194,11 +198,56 @@ PATIENT_CUSTOM_FIELDS = {
 	]
 }
 
+# Phase 3 (R3): exact or estimated date of birth (registration/dob.py), next to Marley's `dob`.
+DOB_CUSTOM_FIELDS = {
+	"Patient": [
+		{
+			"fieldname": PATIENT_DOB_ESTIMATED_FIELD,
+			"label": "DOB Estimated",
+			"fieldtype": "Check",
+			"insert_after": "dob",
+			"read_only": 1,
+			"no_copy": 1,
+			"in_standard_filter": 1,
+			"description": "The date of birth was calculated from an estimated age.",
+		},
+		{
+			"fieldname": PATIENT_ESTIMATED_AGE_YEARS_FIELD,
+			"label": "Age (estimated), Years",
+			"fieldtype": "Int",
+			"insert_after": PATIENT_DOB_ESTIMATED_FIELD,
+			"non_negative": 1,
+			"no_copy": 1,
+			"description": "When the date of birth is not known: the age the patient or carer gives.",
+		},
+		{
+			"fieldname": PATIENT_ESTIMATED_AGE_MONTHS_FIELD,
+			"label": "Age (estimated), Months",
+			"fieldtype": "Int",
+			"insert_after": PATIENT_ESTIMATED_AGE_YEARS_FIELD,
+			"non_negative": 1,
+			"no_copy": 1,
+			"description": "0 to 11; for young children.",
+		},
+		{
+			"fieldname": PATIENT_DOB_ESTIMATED_ON_FIELD,
+			"label": "Age Estimated On",
+			"fieldtype": "Date",
+			"insert_after": PATIENT_ESTIMATED_AGE_MONTHS_FIELD,
+			"read_only": 1,
+			"no_copy": 1,
+			"depends_on": f"eval:doc.{PATIENT_DOB_ESTIMATED_FIELD}",
+			"description": "Date the age was given; the estimated date of birth counts back from it.",
+		},
+	]
+}
+
 
 def install() -> None:
 	seed_identifier_types()
 	_apply_seed_updates()
 	create_custom_fields(PATIENT_CUSTOM_FIELDS, ignore_validate=True)
+	create_custom_fields(DOB_CUSTOM_FIELDS, ignore_validate=True)
 	set_patient_properties()
 	backfill_name_keys()
 	ensure_identifier_unique_index()

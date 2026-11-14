@@ -33,10 +33,15 @@ def find_similar_patients(
 	dob: str | None = None,
 	residence: str | None = None,
 	exclude: str | None = None,
+	dob_estimated: int | None = None,
 ) -> list[dict]:
-	"""Possible duplicates of a patient about to be registered, best match first (FR-2)."""
+	"""Possible duplicates of a patient about to be registered, best match first (FR-2).
+
+	`dob_estimated`: the DOB was estimated from an age, so births within ±2 years count as similar."""
 	frappe.has_permission("Patient", "read", throw=True)
-	return find_similar(first_name, last_name, sex, dob, residence, exclude)
+	return find_similar(
+		first_name, last_name, sex, dob, residence, exclude, dob_estimated=bool(cint(dob_estimated))
+	)
 
 
 @frappe.whitelist()

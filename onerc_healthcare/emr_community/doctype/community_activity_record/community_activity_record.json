@@ -1,0 +1,260 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-14 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "activity_type",
+  "activity_date",
+  "facility",
+  "column_break_header",
+  "location",
+  "lead_staff",
+  "topic",
+  "participants_section",
+  "participants_male",
+  "participants_female",
+  "column_break_participants",
+  "participants_total",
+  "notes_section",
+  "notes",
+  "cancel_section",
+  "cancel_reason",
+  "column_break_cancel",
+  "cancelled_by",
+  "cancelled_at",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CAR-.YYYY.-",
+   "default": "CAR-.YYYY.-",
+   "hidden": 1,
+   "reqd": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "activity_type",
+   "fieldtype": "Link",
+   "label": "Activity Type",
+   "options": "Community Activity Type",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "activity_date",
+   "fieldtype": "Date",
+   "label": "Activity Date",
+   "reqd": 1,
+   "default": "Today",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "label": "Location",
+   "reqd": 1,
+   "description": "Where it took place, e.g. the village, block or school."
+  },
+  {
+   "fieldname": "lead_staff",
+   "fieldtype": "Link",
+   "label": "Lead Staff",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "topic",
+   "fieldtype": "Small Text",
+   "label": "Topic"
+  },
+  {
+   "fieldname": "participants_section",
+   "fieldtype": "Section Break",
+   "label": "Participants"
+  },
+  {
+   "fieldname": "participants_male",
+   "fieldtype": "Int",
+   "label": "Male",
+   "non_negative": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "participants_female",
+   "fieldtype": "Int",
+   "label": "Female",
+   "non_negative": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "column_break_participants",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "participants_total",
+   "fieldtype": "Int",
+   "label": "Total",
+   "non_negative": 1,
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "At least Male + Female (some participants may not be counted by sex). Filled from them when left at 0."
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "description": "Group activity only: no patient names."
+  },
+  {
+   "fieldname": "cancel_section",
+   "fieldtype": "Section Break",
+   "label": "Cancellation",
+   "depends_on": "eval:doc.docstatus==2"
+  },
+  {
+   "fieldname": "cancel_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancel Reason",
+   "read_only": 1,
+   "no_copy": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "column_break_cancel",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cancelled_by",
+   "fieldtype": "Link",
+   "label": "Cancelled By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cancelled_at",
+   "fieldtype": "Datetime",
+   "label": "Cancelled At",
+   "read_only": 1,
+   "no_copy": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Community Activity Record",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "search_index": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-14 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Community",
+ "name": "Community Activity Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Clinical Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "amend": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "Mental Health Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "amend": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "Outreach Team Member",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "amend": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "activity_date",
+ "sort_order": "DESC",
+ "states": [],
+ "is_submittable": 1,
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "track_changes": 1,
+ "title_field": "activity_type",
+ "search_fields": "activity_type,location,facility",
+ "show_title_field_in_link": 0,
+ "document_type": "Document",
+ "description": "A health talk, home visit or other community activity (SDD §5.12.7). Group counts only."
+}

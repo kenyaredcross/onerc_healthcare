@@ -1,0 +1,216 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-14 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "visit",
+  "patient",
+  "patient_name",
+  "facility",
+  "column_break_header",
+  "service_type",
+  "service_date",
+  "provided_by",
+  "status",
+  "notes_section",
+  "notes",
+  "void_section",
+  "void_reason",
+  "column_break_void",
+  "voided_by",
+  "voided_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "SVC-.YYYY.-",
+   "default": "SVC-.YYYY.-",
+   "hidden": 1,
+   "reqd": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "visit",
+   "fieldtype": "Link",
+   "label": "Visit",
+   "options": "Patient Visit",
+   "reqd": 1,
+   "set_only_once": 1,
+   "search_index": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "read_only": 1,
+   "search_index": 1,
+   "in_standard_filter": 1,
+   "description": "From the visit."
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "read_only": 1,
+   "search_index": 1,
+   "in_standard_filter": 1,
+   "description": "From the visit."
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "service_type",
+   "fieldtype": "Link",
+   "label": "Service",
+   "options": "Visit Service Type",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "service_date",
+   "fieldtype": "Date",
+   "label": "Service Date",
+   "reqd": 1,
+   "default": "Today",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "provided_by",
+   "fieldtype": "Link",
+   "label": "Provided By",
+   "options": "User",
+   "read_only": 1,
+   "description": "The user who recorded the service."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nVoided",
+   "default": "Active",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "description": "Only what the service record needs; social-work details are sensitive."
+  },
+  {
+   "fieldname": "void_section",
+   "fieldtype": "Section Break",
+   "label": "Voided",
+   "depends_on": "eval:doc.status=='Voided'"
+  },
+  {
+   "fieldname": "void_reason",
+   "fieldtype": "Small Text",
+   "label": "Void Reason",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_void",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "voided_by",
+   "fieldtype": "Link",
+   "label": "Voided By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "voided_at",
+   "fieldtype": "Datetime",
+   "label": "Voided At",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-14 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Community",
+ "name": "Service Delivered",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Clinical Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Mental Health Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "track_changes": 1,
+ "title_field": "service_type",
+ "search_fields": "patient_name,service_type",
+ "show_title_field_in_link": 0,
+ "document_type": "Document",
+ "description": "A social-work or rehabilitation service given during a visit (SDD §5.12.7, MOH 711). Kept apart from the visit so only Clinical Officers, Mental Health Officers, the Medical In-Charge and the HIS Officer see it."
+}

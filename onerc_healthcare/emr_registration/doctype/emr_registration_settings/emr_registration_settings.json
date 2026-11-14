@@ -2,7 +2,7 @@
  "actions": [],
  "creation": "2026-11-13 12:00:00.000000",
  "custom": 0,
- "description": "Registration configuration (walk-in identifier format, default facility).",
+ "description": "Registration configuration (walk-in identifier format, default facility, attendance rule).",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -13,6 +13,9 @@
   "default_registration_facility",
   "duplicate_section",
   "similarity_candidate_limit",
+  "attendance_section",
+  "attendance_year_basis",
+  "allow_reception_attendance_override",
   "seed_version"
  ],
  "fields": [
@@ -61,6 +64,26 @@
    "description": "How many records matching one name sound are scored, newest first. Exact matches on both names, or on one name with the same date of birth and sex, are always scored."
   },
   {
+   "fieldname": "attendance_section",
+   "fieldtype": "Section Break",
+   "label": "Attendance (MOH 717)"
+  },
+  {
+   "fieldname": "attendance_year_basis",
+   "fieldtype": "Select",
+   "label": "Attendance Year",
+   "options": "Calendar year",
+   "default": "Calendar year",
+   "description": "A visit is a New attendance when it is the patient's first visit to the facility in this year; later visits are Re-attendances. Visits closed as Registered in error or Superseded are not counted."
+  },
+  {
+   "fieldname": "allow_reception_attendance_override",
+   "fieldtype": "Check",
+   "label": "Allow Reception Attendance Override",
+   "default": "1",
+   "description": "The Nurse Receptionist may mark a visit as a Re-attendance (Seen here before in SmartCare, or Correct Attendance while the visit is Registered). The HIS Officer can always correct attendance."
+  },
+  {
    "fieldname": "seed_version",
    "fieldtype": "Int",
    "label": "Seed Version",
@@ -71,7 +94,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-11-13 18:00:00.000000",
+ "modified": "2026-11-14 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Registration",
  "name": "EMR Registration Settings",

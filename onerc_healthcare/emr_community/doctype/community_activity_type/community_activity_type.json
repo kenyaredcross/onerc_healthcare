@@ -1,0 +1,132 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-14 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "activity_type_name",
+  "category",
+  "column_break_main",
+  "moh_line",
+  "enabled",
+  "notes_section",
+  "description",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "activity_type_name",
+   "fieldtype": "Data",
+   "label": "Activity Type",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "Category",
+   "reqd": 1,
+   "options": "Health Talk\nHome Visit\nOutreach\nCommunity Mobilisation\nOther",
+   "default": "Other",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "moh_line",
+   "fieldtype": "Data",
+   "label": "MOH Report Line",
+   "in_list_view": 1,
+   "description": "The MOH report line this activity counts on (PROVISIONAL — HIS Officer to confirm (OI-5))."
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Status Note",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set for seeded types until the HIS Officer confirms them."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-14 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Community",
+ "name": "Community Activity Type",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Clinical Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  },
+  {
+   "role": "Mental Health Officer",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  },
+  {
+   "role": "Outreach Team Member",
+   "permlevel": 0,
+   "read": 1,
+   "report": 1,
+   "print": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "activity_type_name",
+ "sort_order": "ASC",
+ "states": [],
+ "autoname": "field:activity_type_name",
+ "naming_rule": "By fieldname",
+ "track_changes": 1,
+ "title_field": "activity_type_name",
+ "document_type": "Setup",
+ "description": "Kinds of community activity (SDD §5.12.7: health talks, home visits)."
+}

@@ -12,15 +12,23 @@ last names possibly swapped, in three bounded sets that are merged before scorin
 So a common surname can push weak matches out of set 3 but never an exact duplicate. Each candidate is
 scored; only those with a name match and a total of at least `MIN_SCORE` are returned, best first.
 Merged records are left out.
+
+Estimated dates of birth (Phase 3): when either record's DOB is estimated from an age, a DOB within
+`ESTIMATED_DOB_WINDOW_YEARS` (±2 years) scores like the same year of birth, and set 2 above uses that
+window instead of the exact date.
 """
 
 from difflib import SequenceMatcher
 
 import frappe
 from frappe import _
-from frappe.utils import cint, getdate
+from frappe.utils import add_years, cint, getdate
 
-from onerc_healthcare.constants import PATIENT_IDENTIFIER_DOCTYPE, PATIENT_IDENTIFIERS_FIELD
+from onerc_healthcare.constants import (
+	PATIENT_DOB_ESTIMATED_FIELD,
+	PATIENT_IDENTIFIER_DOCTYPE,
+	PATIENT_IDENTIFIERS_FIELD,
+)
 from onerc_healthcare.registration.identifiers import MERGED_INTO_FIELD, RESIDENCE_FIELD
 from onerc_healthcare.registration.names import (
 	FIRST_NAME_KEY_FIELD,
@@ -36,6 +44,14 @@ STRONG_LIMIT = 2000
 SETTINGS_DOCTYPE = "EMR Registration Settings"
 
 EXACT, SIMILAR = 3, 2
+# Either DOB estimated from an age: births this many years apart still count as similar.
+ESTIMATED_DOB_WINDOW_YEARS = 2
+
+
+def within_estimate_window(a, b, years: int = ESTIMATED_DOB_WINDOW_YEARS) -> bool:
+	"""`b` lies within ±`years` of `a` (calendar years, same day of month, clamped at month end)."""
+	a, b = getdate(a), getdate(b)
+	return getdate(add_years(a, -years)) <= b <= getdate(add_years(a, years))
 
 
 def _clean(name: str | None) -> str:
@@ -57,19 +73,43 @@ def get_candidate_limit() -> int:
 	return limit if limit > 0 else DEFAULT_CANDIDATE_LIMIT
 
 
+def _has_estimate_field() -> bool:
+	return frappe.get_meta("Patient").has_field(PATIENT_DOB_ESTIMATED_FIELD)
+
+
 def _fetch_candidates(
-	first_key: str, last_key: str, sex: str | None, dob: str | None, exclude: str | None
+	first_key: str,
+	last_key: str,
+	sex: str | None,
+	dob: str | None,
+	exclude: str | None,
+	dob_estimated: bool = False,
 ) -> list[frappe._dict]:
 	keys = tuple(k for k in (first_key, last_key) if k)
 	if not keys:
 		return []
+	has_estimate = _has_estimate_field()
+	estimated_col = f"`{PATIENT_DOB_ESTIMATED_FIELD}`" if has_estimate else "0"
 	fields = (
 		f"name, patient_name, first_name, last_name, sex, dob, status, image, `{RESIDENCE_FIELD}` as residence, "
-		f"`{FIRST_NAME_KEY_FIELD}` as first_key, `{LAST_NAME_KEY_FIELD}` as last_key"
+		f"`{FIRST_NAME_KEY_FIELD}` as first_key, `{LAST_NAME_KEY_FIELD}` as last_key, "
+		f"{estimated_col} as dob_estimated"
 	)
 	base = f"ifnull(`{MERGED_INTO_FIELD}`, '') = '' and name != %(exclude)s"
 	one_name = f"(`{FIRST_NAME_KEY_FIELD}` in %(keys)s or `{LAST_NAME_KEY_FIELD}` in %(keys)s)"
 	values = {"exclude": exclude or "", "keys": keys, "fk": first_key, "lk": last_key, "sex": sex, "dob": dob}
+	if dob:
+		values["dob_lo"] = str(getdate(add_years(dob, -ESTIMATED_DOB_WINDOW_YEARS)))
+		values["dob_hi"] = str(getdate(add_years(dob, ESTIMATED_DOB_WINDOW_YEARS)))
+	# Set 2: the same DOB, or within the window when either DOB is estimated.
+	if dob_estimated:
+		dob_match = "dob between %(dob_lo)s and %(dob_hi)s"
+	elif has_estimate:
+		dob_match = (
+			f"(dob = %(dob)s or (ifnull({estimated_col}, 0) = 1 and dob between %(dob_lo)s and %(dob_hi)s))"
+		)
+	else:
+		dob_match = "dob = %(dob)s"
 	queries = []
 	if first_key and last_key:
 		queries.append(
@@ -81,7 +121,7 @@ def _fetch_candidates(
 			)
 		)
 	if dob and sex:
-		queries.append((f"{one_name} and dob = %(dob)s and sex = %(sex)s", "", STRONG_LIMIT))
+		queries.append((f"{one_name} and {dob_match} and sex = %(sex)s", "", STRONG_LIMIT))
 	queries.append((one_name, "order by creation desc", get_candidate_limit()))
 
 	seen: dict[str, frappe._dict] = {}
@@ -103,13 +143,17 @@ def find_similar(
 	residence: str | None = None,
 	exclude: str | None = None,
 	limit: int = MAX_RESULTS,
+	dob_estimated: bool = False,
 ) -> list[dict]:
+	"""Possible duplicates, best first. `dob_estimated`: the given DOB was estimated from an age."""
 	first, last = _clean(first_name), _clean(last_name)
 	if not first:
 		frappe.throw(_("First Name is required to look for similar patients."), title=_("Missing Value"))
 
 	first_sx, last_sx = name_key(first_name), name_key(last_name)
-	candidates = _fetch_candidates(first_sx, last_sx, sex, str(getdate(dob)) if dob else None, exclude)
+	candidates = _fetch_candidates(
+		first_sx, last_sx, sex, str(getdate(dob)) if dob else None, exclude, bool(dob_estimated)
+	)
 
 	given_dob = getdate(dob) if dob else None
 	results = []
@@ -155,6 +199,11 @@ def find_similar(
 			elif c_dob.year == given_dob.year:
 				score += 1
 				reasons.append(_("same year of birth"))
+			elif (dob_estimated or cint(c.dob_estimated)) and within_estimate_window(given_dob, c_dob):
+				score += 1
+				reasons.append(
+					_("date of birth within {0} years (estimated)").format(ESTIMATED_DOB_WINDOW_YEARS)
+				)
 			elif abs(c_dob.year - given_dob.year) > 5:
 				score -= 2
 		if residence and c.residence and residence == c.residence:
@@ -168,6 +217,7 @@ def find_similar(
 				"patient_name": c.patient_name,
 				"sex": c.sex,
 				"dob": c.dob,
+				"dob_estimated": cint(c.dob_estimated),
 				"residence": c.residence,
 				"status": c.status,
 				"image": c.image,

@@ -457,6 +457,7 @@ class TestRegistrationPermissions(EMRTestCase):
 					"doctype": "Patient",
 					"first_name": f"T-{random_string(6)}",
 					"sex": "Female",
+					"dob": "1990-01-01",  # Phase 3: exact DOB or estimated age required
 					PATIENT_IDENTIFIERS_FIELD: [ident(IDENTIFIER_UNHCR)],
 				}
 			)

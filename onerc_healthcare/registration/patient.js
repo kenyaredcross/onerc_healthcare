@@ -47,6 +47,7 @@ frappe.ui.form.on("Patient", {
 	},
 
 	refresh(frm) {
+		krcs.registration.show_dob_estimated(frm);
 		if (frm.doc.krcs_merged_into) {
 			frm.dashboard.set_headline_alert(
 				__("This record was merged into {0} and is kept read-only (NFR-9).", [
@@ -87,6 +88,7 @@ frappe.ui.form.on("Patient", {
 				sex: frm.doc.sex || null,
 				dob: frm.doc.dob || null,
 				residence: frm.doc.krcs_residence || null,
+				dob_estimated: frm.doc.krcs_dob_estimated ? 1 : 0,
 			})
 			.then((matches) => {
 				if (matches && matches.length) {
@@ -96,6 +98,86 @@ frappe.ui.form.on("Patient", {
 			});
 	},
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3 (R3): exact date of birth or an estimated age (registration/dob.py). The server recomputes
+// the estimate; the form shows it at once. Typing an age ticks "DOB Estimated" and fills the DOB;
+// typing a DOB yourself clears the age.
+// ---------------------------------------------------------------------------
+
+frappe.ui.form.on("Patient", {
+	krcs_estimated_age_years(frm) {
+		krcs.registration.apply_estimated_age(frm);
+	},
+	krcs_estimated_age_months(frm) {
+		krcs.registration.apply_estimated_age(frm);
+	},
+	dob(frm) {
+		if (frm.__krcs_setting_dob) return;
+		if (frm.doc.krcs_dob_estimated && frm.doc.dob) {
+			// An exact date of birth replaces the estimate.
+			frm.__krcs_setting_age = true;
+			Promise.all([
+				frm.set_value("krcs_dob_estimated", 0),
+				frm.set_value("krcs_estimated_age_years", 0),
+				frm.set_value("krcs_estimated_age_months", 0),
+			]).finally(() => {
+				frm.__krcs_setting_age = false;
+				krcs.registration.show_dob_estimated(frm);
+			});
+		}
+	},
+});
+
+// Same convention as the server: estimate date minus (years * 12 + months) months, clamped at month end.
+krcs.registration.estimate_dob = function (estimated_on, years, months) {
+	const total = (parseInt(years, 10) || 0) * 12 + (parseInt(months, 10) || 0);
+	return moment(estimated_on || frappe.datetime.get_today())
+		.subtract(total, "months")
+		.format("YYYY-MM-DD");
+};
+
+krcs.registration.apply_estimated_age = function (frm) {
+	if (frm.__krcs_setting_age) return;
+	const years = parseInt(frm.doc.krcs_estimated_age_years, 10) || 0;
+	const months = parseInt(frm.doc.krcs_estimated_age_months, 10) || 0;
+	frm.__krcs_setting_dob = true;
+	let done;
+	if (years || months) {
+		const on = frm.doc.krcs_dob_estimated ? frm.doc.krcs_dob_estimated_on : null;
+		done = Promise.all([
+			frm.set_value("krcs_dob_estimated", 1),
+			frm.set_value("dob", krcs.registration.estimate_dob(on, years, months)),
+		]);
+	} else if (frm.doc.krcs_dob_estimated) {
+		// Age removed: no estimate left, so the date of birth must be entered.
+		done = Promise.all([frm.set_value("krcs_dob_estimated", 0), frm.set_value("dob", "")]);
+	} else {
+		done = Promise.resolve();
+	}
+	done.finally(() => {
+		frm.__krcs_setting_dob = false;
+		krcs.registration.show_dob_estimated(frm);
+	});
+};
+
+krcs.registration.show_dob_estimated = function (frm) {
+	const estimated = !!frm.doc.krcs_dob_estimated;
+	frm.set_df_property(
+		"dob",
+		"label",
+		estimated ? __("Date of birth (estimated)") : __("Date of birth")
+	);
+	frm.set_df_property(
+		"dob",
+		"description",
+		estimated
+			? __("Calculated from the estimated age given on {0}. Enter the exact date if it becomes known.", [
+					frappe.datetime.str_to_user(frm.doc.krcs_dob_estimated_on || frappe.datetime.get_today()),
+			  ])
+			: __("If the date of birth is not known, enter the estimated age instead.")
+	);
+};
 
 krcs.registration.show_matches = function (frm, matches) {
 	const esc = frappe.utils.escape_html;
@@ -109,7 +191,9 @@ krcs.registration.show_matches = function (frm, matches) {
 					: ""
 			}</td>
 			<td><b>${esc(m.patient_name || "")}</b><br><span class="text-muted">${esc(m.name)}</span></td>
-			<td>${esc(m.sex || "")}<br>${m.dob ? frappe.datetime.str_to_user(m.dob) : ""}</td>
+			<td>${esc(m.sex || "")}<br>${m.dob ? frappe.datetime.str_to_user(m.dob) : ""}${
+				m.dob_estimated ? ` <span class="text-muted">${__("(estimated)")}</span>` : ""
+			}</td>
 			<td>${(m.identifiers || []).map(esc).join("<br>")}${
 				m.residence ? `<br><span class="text-muted">${esc(m.residence)}</span>` : ""
 			}</td>

@@ -167,6 +167,30 @@ async function krcs_complete(frm) {
 			description: __("Laboratory results are still pending. You will still be notified when they are ready."),
 		});
 	}
+	// Phase 3 (R3): the visit outcome. "Died" only for the roles allowed to record a death (DIED_ROLES);
+	// the server checks again (engine.resolve_outcome).
+	const outcomes = ["Discharged home", "Admitted"];
+	if (frappe.user.has_role(["Clinical Officer", "Mental Health Officer", "Medical In-Charge"])) {
+		outcomes.push("Died");
+	}
+	fields.unshift(
+		{
+			fieldname: "intro",
+			fieldtype: "HTML",
+			options: `<p class="text-muted">${__(
+				"Prescriptions are sent to the pharmacy and the note is locked."
+			)}</p>`,
+		},
+		{
+			fieldname: "outcome",
+			fieldtype: "Select",
+			label: __("Outcome"),
+			options: outcomes.join("\n"),
+			default: "Discharged home",
+			reqd: 1,
+			description: __("Where the patient goes after this consultation."),
+		}
+	);
 	const run = (values) =>
 		frappe
 			.call({
@@ -183,19 +207,13 @@ async function krcs_complete(frm) {
 				});
 				frm.reload_doc();
 			});
-	if (!fields.length) {
-		frappe.confirm(
-			__("Complete the consultation? Prescriptions are sent to the pharmacy and the note is locked."),
-			() => run(),
-		);
-		return;
-	}
 	const d = new frappe.ui.Dialog({
 		title: __("Complete Consultation"),
 		fields,
 		primary_action_label: __("Complete"),
 		primary_action(values) {
 			d.hide();
+			delete values.intro;
 			run(values);
 		},
 	});
