@@ -118,9 +118,16 @@ def needs_sample(template: str) -> bool:
 class EncounterLab:
 	"""Snapshot of an encounter's lab requests, their Observation trees and sample rows.
 
-	``lock=True`` re-reads the relevant Observations with ``SELECT ... FOR UPDATE`` (by primary key, so only
-	this encounter's rows are locked), so the decision uses the latest committed state. Call it after the
-	visit row is locked.
+	``lock=True`` re-reads the relevant Observations with ``SELECT ... FOR UPDATE SKIP LOCKED`` (by primary
+	key, so only this encounter's rows are locked), so the decision uses the latest committed state. Call it
+	after the visit row is locked (lock order Visit -> Encounter -> Observation).
+
+	SKIP LOCKED: Frappe's ``check_if_latest`` locks the Observation being submitted *before* any hook runs,
+	so a concurrent approval on the same encounter holds its own row while it waits for the visit lock this
+	transaction holds. Waiting for that row would deadlock. A row locked elsewhere is an approval in flight:
+	it counts as not done here (conservative), and that transaction decides once it gets the visit lock.
+	Rows changed elsewhere since this transaction's snapshot give a retryable ER_CHECKREAD
+	(``innodb_snapshot_isolation``), never a wrong decision; the reconciler covers any miss.
 	"""
 
 	def __init__(self, encounter: str, lock: bool = False):
@@ -152,16 +159,23 @@ class EncounterLab:
 		if lock:
 			names = self._tree_names()
 			if names:
-				obs = DocType("Observation")
-				fresh = (
-					frappe.qb.from_(obs)
-					.select(obs.name, obs.docstatus, obs.status, obs.result)
-					.where(obs.name.isin(names))
-					.for_update()
-					.run(as_dict=True)
-				)
+				fresh = self._locked_rows(names)
 				for f in fresh:
 					self.rows[f.name].update(f)
+				for name in set(names) - {f.name for f in fresh}:
+					self.rows[name].docstatus = 0  # locked by an approval in flight: not done yet
+
+	@staticmethod
+	def _locked_rows(names: list[str]) -> list[frappe._dict]:
+		"""Latest committed state of `names`, locked; rows locked by another transaction are skipped."""
+		obs = DocType("Observation")
+		return (
+			frappe.qb.from_(obs)
+			.select(obs.name, obs.docstatus, obs.status, obs.result)
+			.where(obs.name.isin(names))
+			.for_update(skip_locked=True)
+			.run(as_dict=True)
+		)
 
 	def _tree_names(self) -> list[str]:
 		requests = set(self.request_names)

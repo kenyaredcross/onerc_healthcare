@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import frappe
 from frappe.permissions import add_permission, update_permission_property
@@ -35,7 +36,7 @@ from onerc_healthcare.constants import (
 	VISIT_STATUS_IN_CONSULTATION,
 )
 from onerc_healthcare.emr_laboratory.report.laboratory_worklist import laboratory_worklist
-from onerc_healthcare.lab import api, setup, tasks
+from onerc_healthcare.lab import api, guards, setup, tasks
 from onerc_healthcare.lab.guards import make_observation
 from onerc_healthcare.lab.orders import ensure_observations
 from onerc_healthcare.tests.base import EMRTestCase
@@ -65,6 +66,52 @@ def b1_endpoint(name: str):
 		return frappe.get_attr(f"onerc_healthcare.clinical.consultation.{name}")
 	except (ImportError, AttributeError):
 		return None
+
+
+# Visit-lock hooks reported for hooks.py (Phase 2 review M6); the tests add them while unwired.
+LOCK_HOOKS = {
+	"before_submit": "onerc_healthcare.lab.events.observation_before_submit",
+	"before_cancel": "onerc_healthcare.lab.events.observation_before_cancel",
+}
+
+
+@contextmanager
+def observation_lock_hooks():
+	"""Make sure the Observation before_submit / before_cancel visit-lock hooks are active."""
+	events = frappe.get_doc_hooks().setdefault("Observation", {})
+	added = []
+	for event, path in LOCK_HOOKS.items():
+		hooks = events.setdefault(event, [])
+		if path not in hooks:
+			hooks.append(path)
+			added.append((event, path))
+	try:
+		yield
+	finally:
+		for event, path in added:
+			events[event].remove(path)
+
+
+@contextmanager
+def capture_sql():
+	"""Record every SQL statement sent through frappe.db.sql."""
+	queries: list[str] = []
+	original = frappe.db.sql
+
+	def spy(query, *args, **kwargs):
+		queries.append(str(query))
+		return original(query, *args, **kwargs)
+
+	with patch.object(frappe.db, "sql", side_effect=spy):
+		yield queries
+
+
+def first_index(queries: list[str], *needles: str) -> int:
+	for i, query in enumerate(queries):
+		low = " ".join(query.lower().split())
+		if all(n.lower() in low for n in needles):
+			return i
+	return -1
 
 
 def grant_lab_fixups() -> None:
@@ -560,9 +607,10 @@ class TestLabFlow(LabTestCase):
 		self.assertIn(hb, doc.status_log[-1].comment)
 
 	def test_sample_collection_cancel_keeps_report(self):
-		"""Marley's on_cancel would delete the Diagnostic Report; the guard refuses deletes (NFR-9)."""
+		"""Marley's on_cancel would delete the Diagnostic Report; the guard refuses deletes (NFR-9). The
+		results of the cancelled collection can still be entered and approved."""
 		visit = self.visit_in_consultation()
-		enc, _srs = self.send_lab_orders(visit, [MRDT])
+		enc, (mrdt,) = self.send_lab_orders(visit, [MRDT])
 		self.collect_all(enc.name)
 		collection = frappe.get_doc("Sample Collection", self.sample_rows(enc.name)[0].parent)
 		collection.submit()
@@ -574,6 +622,14 @@ class TestLabFlow(LabTestCase):
 		self.assertEqual(frappe.db.get_value("Sample Collection", collection.name, "docstatus"), 2)
 		self.assertTrue(frappe.db.exists("Diagnostic Report", report))
 		self.assertFalse(frappe.db.get_value("Diagnostic Report", report, "sample_collection"))
+		obs = self.root(mrdt)
+		self.assertEqual(
+			frappe.db.get_value("Observation", obs, ["reference_doctype", "reference_docname"]),
+			("Patient Encounter", enc.name),
+		)
+		self.result_single(mrdt)
+		self.assertEqual(self.visit(visit.name).status, VISIT_STATUS_IN_CONSULTATION)
+		self.assertEqual(frappe.db.get_value("Diagnostic Report", report, "status"), "Approved")
 
 	def test_is_lab_complete_without_encounter(self):
 		self.assertFalse(tasks.is_lab_complete(make_visit().name))
@@ -664,6 +720,23 @@ class TestLaboratoryWorklist(LabTestCase):
 		self.assertFalse(self.rows_for(srs, from_date=add_days(today(), -5), to_date=add_days(today(), -1)))
 		self.assertIn(srs[0], self.rows_for(srs, from_date=today(), to_date=today()))
 
+	def test_run_is_access_logged(self):
+		"""Phase 2 review M4 (FR-40, NFR-7): a worklist run writes an Access Log Entry."""
+		with self.as_user("lab"):
+			laboratory_worklist.execute({"facility": get_facility(0)})
+		entry = frappe.get_all(
+			"Access Log Entry",
+			filters={
+				"user": self.users["lab"],
+				"reference_doctype": "Report",
+				"reference_name": REPORT_LAB_WORKLIST,
+			},
+			fields=["action", "details"],
+		)
+		self.assertEqual(len(entry), 1)
+		self.assertEqual(entry[0].action, "Report")
+		self.assertIn("facility", entry[0].details)
+
 	def test_report_roles(self):
 		report = frappe.get_doc("Report", REPORT_LAB_WORKLIST)
 		self.assertEqual(report.module, "EMR Laboratory")
@@ -678,6 +751,89 @@ def _facilities() -> list[str]:
 	from onerc_healthcare.setup.operations import get_facilities
 
 	return list(get_facilities())
+
+
+class TestLockOrder(LabTestCase):
+	"""Phase 2 review M6: lock order Visit -> Observation, so concurrent approvals cannot deadlock."""
+
+	def test_visit_locked_before_observation_written_on_approve(self):
+		visit = self.visit_in_consultation()
+		enc, (mrdt,) = self.send_lab_orders(visit, [MRDT])
+		self.collect_all(enc.name)
+		obs = self.root(mrdt)
+		self.enter([obs], "Negative")
+		with observation_lock_hooks(), capture_sql() as queries, self.as_user("lab"):
+			set_observation_status(obs, "Approved")
+		visit_lock = first_index(queries, "from `tabPatient Visit`", "for update")
+		write = first_index(queries, "update `tabObservation` set")
+		self.assertGreaterEqual(visit_lock, 0)
+		self.assertGreaterEqual(write, 0)
+		self.assertLess(visit_lock, write)
+		self.assertGreaterEqual(first_index(queries, "from `tabObservation`", "for update skip locked"), 0)
+		self.assertEqual(self.visit(visit.name).status, VISIT_STATUS_IN_CONSULTATION)
+
+	def test_visit_locked_before_observation_written_on_reject(self):
+		visit = self.visit_in_consultation()
+		enc, (mrdt,) = self.send_lab_orders(visit, [MRDT])
+		self.collect_all(enc.name)
+		obs = self.result_single(mrdt)
+		with observation_lock_hooks(), capture_sql() as queries:
+			self.reject(obs)
+		visit_lock = first_index(queries, "from `tabPatient Visit`", "for update")
+		write = first_index(queries, "update `tabObservation` set")
+		self.assertGreaterEqual(visit_lock, 0)
+		self.assertLess(visit_lock, write)
+		self.assertEqual(self.visit(visit.name).status, VISIT_STATUS_AWAITING_LAB)
+
+	def test_row_locked_elsewhere_counts_as_not_done(self):
+		"""A root skipped by SKIP LOCKED (an approval in flight) is not done."""
+		visit = self.visit_in_consultation()
+		enc, (mrdt,) = self.send_lab_orders(visit, [MRDT])
+		self.collect_all(enc.name)
+		obs = self.result_single(mrdt)
+		self.assertTrue(tasks.EncounterLab(enc.name, lock=True).is_done(mrdt))
+		with patch.object(tasks.EncounterLab, "_locked_rows", return_value=[]):
+			self.assertFalse(tasks.EncounterLab(enc.name, lock=True).is_done(mrdt))
+		self.assertTrue(tasks.EncounterLab(enc.name).is_done(mrdt), "an unlocked read is unaffected")
+		self.assertTrue(obs)
+
+
+class TestMarleyMappingGuards(LabTestCase):
+	"""Phase 2 review M8: Marley's Service Request mapping endpoints leak order and patient details."""
+
+	def test_receptionist_refused(self):
+		visit = self.visit_in_consultation()
+		_enc, (sr,) = self.make_encounter(visit, [MRDT])
+		calls = {
+			"make_lab_test": lambda: guards.make_lab_test(sr),
+			"make_clinical_procedure": lambda: guards.make_clinical_procedure(sr),
+			"make_appointment": lambda: guards.make_appointment(sr),
+		}
+		for name, call in calls.items():
+			with (
+				self.subTest(endpoint=name),
+				self.as_user("reception"),
+				self.assertRaises(frappe.PermissionError),
+			):
+				call()
+
+	def test_legacy_routes_administrator_only(self):
+		visit = self.visit_in_consultation()
+		_enc, (sr,) = self.make_encounter(visit, [MRDT])
+		for key in ("lab", "clinician"):
+			with self.subTest(user=key), self.as_user(key):
+				with self.assertRaises(frappe.PermissionError):
+					guards.make_lab_test(sr)
+				with self.assertRaises(frappe.PermissionError):
+					guards.make_clinical_procedure(sr)
+		self.assertEqual(guards.make_lab_test(sr).service_request, sr)
+
+	def test_make_appointment_enforces_permissions(self):
+		visit = self.visit_in_consultation()
+		_enc, (sr,) = self.make_encounter(visit, [MRDT])
+		with self.as_user("pharmacist"), self.assertRaises(frappe.PermissionError):
+			guards.make_appointment(sr, ignore_permissions=True)
+		self.assertEqual(guards.make_appointment(sr).service_request, sr)
 
 
 class TestLabSetup(LabTestCase):

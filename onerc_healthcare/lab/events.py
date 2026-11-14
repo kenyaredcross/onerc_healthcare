@@ -3,9 +3,11 @@
 """Observation / Service Request / Sample Collection doc_events (wired in hooks.py). Owned by B2.
 
 Visit events come from Observations and Service Request cancellation only, never from Service Request
-status (Phase 2 brief, fact 3). Every handler locks the Patient Visit row first, then reads the
-encounter's Observations with ``FOR UPDATE`` (`lab.tasks.EncounterLab(lock=True)`), so two results
-approved at the same moment cannot both see the other one as pending (write skew). Visit events are
+status (Phase 2 brief, fact 3). Lock order is Visit -> Encounter -> Observation: ``before_submit`` /
+``before_cancel`` lock the Patient Visit row before Frappe writes the Observation, and the ``on_*``
+handlers re-read the encounter's Observations with ``FOR UPDATE SKIP LOCKED``
+(`lab.tasks.EncounterLab(lock=True)`), so two results approved at the same moment can neither both see
+the other as pending (write skew) nor wait on each other (deadlock). Visit events are
 raised only through `visit.tasks.raise_event`, which never fails a lab record because of the visit's state.
 
 | Event | Condition | Effect |
@@ -16,7 +18,7 @@ raised only through `visit.tasks.raise_event`, which never fails a lab record be
 | Observation cancel (rejection) | as above | "Lab result withdrawn" notification to the clinician; also the Medical In-Charge when the visit is closed |
 | Observation cancel | always | its Patient Medical Record removed as the system (see `remove_medical_record`) |
 | Service Request cancel | lab order, ``lab_open == 1``, lab task now complete | ``lab_results_ready`` |
-| Sample Collection before cancel | always | unlink its Diagnostic Report, so Marley's ``on_cancel`` does not try to delete it |
+| Sample Collection before cancel | always | unlink its Diagnostic Report, so Marley's ``on_cancel`` does not try to delete it; re-point its Observations to the encounter |
 
 "Becomes" compares the state with this document's change undone against the state with it applied, so a
 panel approved component by component notifies once, and a stray later approval raises nothing.
@@ -84,6 +86,21 @@ def _lock_visit(visit: str | None) -> None:
 
 def _request_row(lab: EncounterLab, name: str) -> frappe._dict:
 	return next(r for r in lab.requests if r.name == name)
+
+
+def lock_observation_visit(doc) -> None:
+	"""Lock the Observation's visit before Frappe writes the Observation (lock order Visit -> Observation)."""
+	ctx = observation_context(doc)
+	if ctx:
+		_lock_visit(ctx.visit)
+
+
+def observation_before_submit(doc, method=None) -> None:
+	lock_observation_visit(doc)
+
+
+def observation_before_cancel(doc, method=None) -> None:
+	lock_observation_visit(doc)
 
 
 def observation_on_submit(doc, method=None) -> None:
@@ -169,5 +186,26 @@ def service_request_on_cancel(doc, method=None) -> None:
 
 def sample_collection_before_cancel(doc, method=None) -> None:
 	"""Marley's `Sample Collection.on_cancel` deletes the linked Diagnostic Report, which the delete guard
-	refuses (NFR-9). Unlink it first: the report belongs to the encounter and keeps its results."""
+	refuses (NFR-9). Unlink it first: the report belongs to the encounter and keeps its results.
+
+	The Observations collected on this Sample Collection reference it; once it is cancelled, saving a result
+	on them fails ("Cannot link cancelled document"). They are re-pointed to the encounter, which is the same
+	Diagnostic Report key Marley derives from the Sample Collection (`set_diagnostic_report_status`)."""
 	frappe.db.set_value("Diagnostic Report", {"sample_collection": doc.name}, "sample_collection", None)
+	if doc.reference_doc == ENCOUNTER_DOCTYPE and doc.reference_name:
+		for name in frappe.get_all(
+			"Observation",
+			filters={
+				"patient": doc.patient,
+				"reference_doctype": "Sample Collection",
+				"reference_docname": doc.name,
+				"docstatus": ["!=", 2],
+			},
+			pluck="name",
+		):
+			frappe.db.set_value(
+				"Observation",
+				name,
+				{"reference_doctype": ENCOUNTER_DOCTYPE, "reference_docname": doc.reference_name},
+				update_modified=False,
+			)

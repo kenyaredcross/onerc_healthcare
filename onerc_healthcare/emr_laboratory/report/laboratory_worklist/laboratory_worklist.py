@@ -5,7 +5,7 @@
 A row is an active lab Service Request (submitted, Observation Template, not revoked) that is not done
 (`lab.tasks.EncounterLab.is_done`: its root Observation is not submitted). Sample and result status come
 from the Sample Collection rows and the Observations, never from the Service Request status. Filters:
-facility (the visit's) and order date range.
+facility (the visit's) and order date range. Each run is written to the access log (FR-40, NFR-7).
 """
 
 from __future__ import annotations
@@ -14,14 +14,22 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, get_datetime, getdate, today
 
-from onerc_healthcare.constants import ENCOUNTER_DOCTYPE, ENCOUNTER_VISIT_FIELD, VISIT_DOCTYPE
+from onerc_healthcare.constants import (
+	ENCOUNTER_DOCTYPE,
+	ENCOUNTER_VISIT_FIELD,
+	REPORT_LAB_WORKLIST,
+	VISIT_DOCTYPE,
+)
 from onerc_healthcare.lab.tasks import LAB_TEMPLATE_DT, SR_REVOKED, EncounterLab
+from onerc_healthcare.privacy.access_log import log_report_run
 
 DEFAULT_DAYS_BACK = 30
 
 
 def execute(filters: dict | None = None):
 	filters = frappe._dict(filters or {})
+	# Patient-level report: every run goes to the Access Log Entry (FR-40, NFR-7).
+	log_report_run(REPORT_LAB_WORKLIST, filters=filters)
 	return get_columns(), get_data(filters)
 
 
