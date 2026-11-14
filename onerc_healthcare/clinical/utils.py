@@ -12,11 +12,14 @@ from onerc_healthcare.constants import (
 	ENCOUNTER_VISIT_FIELD,
 	ROLE_CLINICIAN,
 	ROLE_MHO,
+	VISIT_DOCTYPE,
 )
 
 # Clinical Officers and Mental Health Officers consult in any department (decision 2026-11-13; OI-7 may
 # restrict Mental Health later).
 CONSULTING_ROLES = (ROLE_CLINICIAN, ROLE_MHO)
+# Lab Prescription rows withdrawn when the visit was closed before they were sent (never deleted).
+LAB_WITHDRAWN_FIELD = "krcs_withdrawn"
 
 
 def has_any_role(roles: tuple[str, ...] | list[str], user: str | None = None) -> bool:
@@ -37,19 +40,43 @@ def require_roles(roles: tuple[str, ...] | list[str], label: str) -> None:
 		)
 
 
-def active_encounter_for_visit(visit: str, exclude: str | None = None) -> str | None:
-	"""The visit's draft or submitted Patient Encounter (one per visit), else None."""
+def active_encounter_for_visit(
+	visit: str, exclude: str | None = None, for_update: bool = False
+) -> str | None:
+	"""The visit's draft or submitted Patient Encounter (one per visit), else None.
+
+	With `for_update` the row is read with a locking read (``SELECT ... FOR UPDATE``), so under REPEATABLE
+	READ a transaction waiting on the visit lock sees an encounter inserted by the one before it. Lock
+	order: Patient Visit, then Patient Encounter, then child rows.
+	"""
 	filters = {ENCOUNTER_VISIT_FIELD: visit, "docstatus": ["<", 2]}
 	if exclude:
 		filters["name"] = ["!=", exclude]
-	rows = frappe.get_all(ENCOUNTER_DOCTYPE, filters=filters, pluck="name", order_by="creation asc", limit=1)
-	return rows[0] if rows else None
+	return frappe.db.get_value(
+		ENCOUNTER_DOCTYPE, filters, "name", order_by="creation asc", for_update=for_update
+	)
+
+
+def lock_visit_and_encounter(encounter: str):
+	"""Lock the encounter's visit, then the encounter (the agreed order: Patient Visit -> Patient Encounter
+	-> child records such as Service Request, Medication Request, Observation). Returns (visit_doc, doc).
+
+	Every entry point of the clinical package that changes an encounter goes through this. `visit_doc` is
+	None when the encounter has no visit (`krcs_visit` never changes after insert, so reading it before
+	the lock is safe).
+	"""
+	visit = frappe.db.get_value(ENCOUNTER_DOCTYPE, encounter, ENCOUNTER_VISIT_FIELD)
+	visit_doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True) if visit else None
+	doc = frappe.get_doc(ENCOUNTER_DOCTYPE, encounter, for_update=True)
+	return visit_doc, doc
 
 
 def unsent_lab_rows(doc) -> list:
-	"""Lab rows of an encounter that have no Service Request yet."""
+	"""Lab rows of an encounter that have no Service Request yet and were not withdrawn."""
 	return [
 		row
 		for row in doc.get("lab_test_prescription") or []
-		if (row.observation_template or row.lab_test_code) and not row.service_request
+		if (row.observation_template or row.lab_test_code)
+		and not row.service_request
+		and not row.get(LAB_WITHDRAWN_FIELD)
 	]

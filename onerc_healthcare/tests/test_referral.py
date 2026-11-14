@@ -144,9 +144,11 @@ class TestReferralMeta(ReferralTestCase):
 			self.assertFalse(p.delete, role)
 		for role in ("Clinical Officer", "Mental Health Officer"):
 			self.assertTrue(perms[role].read and perms[role].write and perms[role].create)
-		for role in ("HIS Officer", "Medical In-Charge"):
-			self.assertTrue(perms[role].read)
-			self.assertFalse(perms[role].write or perms[role].create)
+		self.assertTrue(perms["HIS Officer"].read)
+		self.assertFalse(perms["HIS Officer"].write or perms["HIS Officer"].create)
+		# The Medical In-Charge writes only to archive (L5; enforced by the controller).
+		self.assertTrue(perms["Medical In-Charge"].read and perms["Medical In-Charge"].write)
+		self.assertFalse(perms["Medical In-Charge"].create)
 		self.assertNotIn(ROLE_SYSADMIN, perms)
 		for doctype in (REFERRAL_FACILITY_DOCTYPE, "Referral Status Log", "EMR Encounter Diagnosis"):
 			self.assertFalse(any(p.delete for p in frappe.get_meta(doctype).permissions), doctype)
@@ -227,6 +229,48 @@ class TestReferralSave(ReferralTestCase):
 		doc.reason = "after send"
 		with self.assertRaises(ReferralLockedError):
 			doc.save(ignore_permissions=True)
+
+
+class TestReferralArchive(ReferralTestCase):
+	def test_mic_archives_in_any_status(self):
+		"""L5 / NFR-9: the Medical In-Charge may archive a referral after Draft; nothing else changes."""
+		for status in (ref.STATUS_SENT, ref.STATUS_COMPLETED, ref.STATUS_DRAFT):
+			name = self.referral_in(status)
+			with as_user(self.u("mic")):
+				doc = frappe.get_doc(REFERRAL_DOCTYPE, name)
+				doc.krcs_archived = 1
+				doc.save()
+			self.assertEqual(frappe.db.get_value(REFERRAL_DOCTYPE, name, "krcs_archived"), 1, status)
+			self.assertEqual(self.status(name), status)
+
+	def test_archive_with_other_change_refused(self):
+		name = self.referral_in(ref.STATUS_SENT)
+		with as_user(self.u("mic")):
+			doc = frappe.get_doc(REFERRAL_DOCTYPE, name)
+			doc.krcs_archived = 1
+			doc.reason = "T- rewritten"
+			with self.assertRaises(ReferralLockedError):
+				doc.save()
+		draft = self.draft()
+		with as_user(self.u("mic")):
+			doc = frappe.get_doc(REFERRAL_DOCTYPE, draft)
+			doc.reason = "T- MIC may not edit a draft"
+			with self.assertRaises(ReferralLockedError):
+				doc.save()
+
+	def test_only_mic_archives(self):
+		name = self.referral_in(ref.STATUS_SENT)
+		for key in ("clinician", "mho"):
+			with as_user(self.u(key)):
+				doc = frappe.get_doc(REFERRAL_DOCTYPE, name)
+				doc.krcs_archived = 1
+				with self.assertRaises(ReferralLockedError, msg=key):
+					doc.save()
+		with as_user(self.u("his")):
+			doc = frappe.get_doc(REFERRAL_DOCTYPE, name)
+			doc.krcs_archived = 1
+			with self.assertRaises(frappe.PermissionError):
+				doc.save()
 
 
 class TestReferralSend(ReferralTestCase):
@@ -464,3 +508,20 @@ class TestReferralMatrix(ReferralTestCase):
 			{a["action"] for a in ref.get_available_actions(sent, self.u("clinician"))},
 			{"record_outcome", "mark_lost"},
 		)
+
+
+class TestReferralLocking(ReferralTestCase):
+	def test_send_locks_visit_before_encounter(self):
+		"""M7: `send` locks the source visit before the encounter it completes."""
+		from unittest.mock import patch
+
+		name = self.draft()
+		db = frappe.local.db
+		with patch.object(db, "sql", wraps=db.sql) as spy:
+			ref.transition(name, ref.ACTION_SEND, system=True)
+		queries = [" ".join(str(c.args[0]).split()).lower() for c in spy.call_args_list if c.args]
+		visit_lock = next(i for i, q in enumerate(queries) if "for update" in q and "`tabpatient visit`" in q)
+		enc_lock = next(
+			i for i, q in enumerate(queries) if "for update" in q and "`tabpatient encounter`" in q
+		)
+		self.assertLess(visit_lock, enc_lock)

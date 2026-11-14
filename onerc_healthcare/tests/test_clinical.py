@@ -13,6 +13,7 @@ from onerc_healthcare.clinical import setup as clinical_setup
 from onerc_healthcare.clinical.consultation import ConsultationError
 from onerc_healthcare.clinical.diagnosis import DiagnosisError
 from onerc_healthcare.clinical.events import EncounterGuardError
+from onerc_healthcare.clinical.utils import active_encounter_for_visit, unsent_lab_rows
 from onerc_healthcare.constants import (
 	DEFAULT_APPOINTMENT_TYPE,
 	DEPT_MENTAL_HEALTH,
@@ -134,6 +135,18 @@ class TestStartConsultation(ClinicalTestCase):
 		v = frappe.get_doc(VISIT_DOCTYPE, visit.name)
 		self.assertEqual((v.status, v.encounter), (VISIT_STATUS_IN_CONSULTATION, enc.name))
 
+	def test_active_encounter_locking_read(self):
+		"""M7: the active encounter is read with a locking read after the visit lock."""
+		visit, enc = self.consulting()
+		self.assertEqual(active_encounter_for_visit(visit, for_update=True), enc)
+		self.assertIsNone(active_encounter_for_visit(visit, exclude=enc, for_update=True))
+		# A visit whose link was lost still returns its active encounter (no duplicate created).
+		frappe.db.set_value(VISIT_DOCTYPE, visit, "encounter", None)
+		with as_user(self.u("clinician")):
+			out = consultation.start_consultation(visit)
+		self.assertEqual((out["encounter"], out["created"]), (enc, False))
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, visit, "encounter"), enc)
+
 	def test_mho_consults_any_department(self):
 		"""Decision 2026-11-13: CO and MHO may consult in any department."""
 		_visit, enc = self.consulting(DEPT_OUTPATIENT, user="mho")
@@ -208,6 +221,27 @@ class TestEncounterGuards(ClinicalTestCase):
 			doc.cancel()
 		with as_user(self.u("clinician")), self.assertRaises((EncounterGuardError, frappe.PermissionError)):
 			frappe.get_doc(ENCOUNTER_DOCTYPE, enc).cancel()
+		self.assertEqual(frappe.db.get_value(ENCOUNTER_DOCTYPE, enc, "docstatus"), 1)
+
+	def test_clinician_cancel_refused_before_marley(self):
+		"""Cancel/amend refused by the permission hook, before Marley's before_cancel touches the orders."""
+		from onerc_healthcare.clinical.permissions import encounter_has_permission
+
+		_visit, enc = self.consulting()
+		add_lab_row(enc)
+		sr = self.send_labs(enc)["service_requests"][0]
+		add_diagnosis(enc)
+		self.complete(enc, reason="T- results to follow")
+		doc = frappe.get_doc(ENCOUNTER_DOCTYPE, enc)
+		for key in ("clinician", "mho", "mic"):
+			self.assertFalse(encounter_has_permission(doc, "cancel", self.u(key)), key)
+			self.assertFalse(encounter_has_permission(doc, "amend", self.u(key)), key)
+			self.assertTrue(encounter_has_permission(doc, "read", self.u(key)), key)
+		with as_user(self.u("clinician")):
+			self.assertFalse(frappe.has_permission(ENCOUNTER_DOCTYPE, "cancel", doc=enc))
+			with self.assertRaises(frappe.PermissionError):
+				frappe.get_doc(ENCOUNTER_DOCTYPE, enc).cancel()
+		self.assertEqual(frappe.db.get_value("Service Request", sr, "docstatus"), 1)
 		self.assertEqual(frappe.db.get_value(ENCOUNTER_DOCTYPE, enc, "docstatus"), 1)
 
 	def test_no_draft_save_after_close(self):
@@ -438,10 +472,19 @@ class TestConsultationFlow(ClinicalTestCase):
 		doc = transition(
 			visit, "close_visit", system=True, closure_reason=VISIT_CLOSURE_REASONS[1], comment="T-"
 		)
-		consultation.on_visit_closed(doc)
+		consultation.on_visit_closed(doc)  # also registered in VISIT_CLOSED_HANDLERS; idempotent
 		enc_doc = frappe.get_doc(ENCOUNTER_DOCTYPE, enc)
 		self.assertEqual(enc_doc.docstatus, 0)
-		self.assertEqual([r.observation_template for r in enc_doc.lab_test_prescription], [LAB_TEST])
+		# L4: rows are kept and flagged, never deleted.
+		rows = [
+			(r.observation_template, bool(r.service_request), r.krcs_withdrawn)
+			for r in enc_doc.lab_test_prescription
+		]
+		self.assertEqual(rows, [(LAB_TEST, True, 0), (LAB_TEST_2, False, 1)])
+		self.assertEqual(unsent_lab_rows(enc_doc), [])
+		self.assertTrue(
+			frappe.db.exists("Comment", {"reference_name": enc, "content": ["like", f"%{LAB_TEST_2}%"]})
+		)
 		with as_user(self.u("clinician")), self.assertRaises(ConsultationError):
 			consultation.complete_consultation(enc)
 
@@ -617,9 +660,103 @@ class TestHistory(ClinicalTestCase):
 			lab = history.get_encounter_lab_results(enc)
 		self.assertIn("orders", lab)
 
+	def test_history_access_logged(self):
+		"""M3 / DPR-16: one Open entry per call, plus one sensitive entry per Mental Health consultation."""
+		visit, enc = self.consulting(DEPT_MENTAL_HEALTH, user="mho")
+		add_diagnosis(enc)
+		self.complete(enc, user="mho")
+		patient = frappe.db.get_value(VISIT_DOCTYPE, visit, "patient")
+		visit2 = routed_visit(DEPT_OUTPATIENT, patient=patient)
+		enc2 = start(visit2.name, self.u("clinician"))
+		add_diagnosis(enc2)
+		self.complete(enc2)
+		calls = []
+
+		def recorder(action, reference_doctype, reference_name, patient, sensitive=False, detail=None):
+			calls.append((action, reference_doctype, reference_name, patient, bool(sensitive), detail))
+
+		with patch.object(history, "_log_access_fn", return_value=recorder), as_user(self.u("clinician")):
+			data = history.get_patient_history(patient)
+		self.assertEqual(len(data["encounters"]), 2)
+		self.assertEqual(
+			sorted(calls),
+			sorted(
+				[
+					("Open", "Patient", patient, patient, False, "History panel"),
+					("Open", ENCOUNTER_DOCTYPE, enc, patient, True, "History panel"),
+				]
+			),
+		)
+		with patch.object(history, "LOG_ACCESS", "onerc_healthcare.privacy.no_such.log_access"):
+			self.assertIsNone(history._log_access_fn())
+			self.assertEqual(history.log_history_access(patient, data["encounters"]), 0)
+
 	def test_history_permission(self):
 		visit, _enc = self.consulting()
 		patient = frappe.db.get_value(VISIT_DOCTYPE, visit, "patient")
 		for key in ("lab", "pharmacist", "sysadmin", "triage"):
 			with as_user(self.u(key)), self.assertRaises(frappe.PermissionError, msg=key):
 				history.get_patient_history(patient)
+
+
+def _queries(spy) -> list[str]:
+	"""Normalised SQL text of every frappe.db.sql call recorded by `spy`."""
+	return [" ".join(str(c.args[0]).split()).lower() for c in spy.call_args_list if c.args]
+
+
+def _first(queries: list[str], *needles: str) -> int:
+	return next(i for i, q in enumerate(queries) if all(n in q for n in needles))
+
+
+class TestLocking(ClinicalTestCase):
+	"""M7: lock order Patient Visit -> Patient Encounter -> children, on every clinical entry point."""
+
+	def assert_visit_first(self, spy, child: str | None = None):
+		queries = _queries(spy)
+		visit_lock = _first(queries, "for update", "`tabpatient visit`")
+		enc_lock = _first(queries, "for update", "`tabpatient encounter`")
+		self.assertLess(visit_lock, enc_lock, "the visit must be locked before the encounter")
+		if child:
+			child_lock = _first(queries, "for update", f"`tab{child}`")
+			self.assertLess(enc_lock, child_lock, f"the encounter must be locked before {child}")
+
+	def spy(self):
+		db = frappe.local.db
+		return patch.object(db, "sql", wraps=db.sql)
+
+	def test_send_lab_orders_lock_order(self):
+		_visit, enc = self.consulting()
+		add_lab_row(enc)
+		with self.spy() as spy, as_user(self.u("clinician")):
+			consultation.send_lab_orders(enc)
+		self.assert_visit_first(spy)
+
+	def test_complete_consultation_lock_order(self):
+		_visit, enc = self.consulting()
+		add_diagnosis(enc)
+		add_drug_row(enc)
+		with self.spy() as spy, as_user(self.u("clinician")):
+			consultation.complete_consultation(enc)
+		self.assert_visit_first(spy)
+
+	def test_start_consultation_lock_order(self):
+		visit, enc = self.consulting()
+		with self.spy() as spy, as_user(self.u("clinician")):
+			self.assertEqual(consultation.start_consultation(visit)["encounter"], enc)
+		self.assert_visit_first(spy)
+
+	def test_cancel_lab_order_lock_order(self):
+		_visit, enc = self.consulting()
+		add_lab_row(enc)
+		sr = self.send_labs(enc)["service_requests"][0]
+		with self.spy() as spy, as_user(self.u("clinician")):
+			consultation.cancel_lab_order(sr, "T- wrong test")
+		self.assert_visit_first(spy, child="service request")
+
+	def test_add_addendum_lock_order(self):
+		_visit, enc = self.consulting()
+		add_diagnosis(enc)
+		self.complete(enc)
+		with self.spy() as spy, as_user(self.u("clinician")):
+			consultation.add_addendum(enc, "T- correction")
+		self.assert_visit_first(spy)

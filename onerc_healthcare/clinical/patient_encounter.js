@@ -347,7 +347,13 @@ async function krcs_render_lab_results(frm) {
 	}
 	let data;
 	try {
-		data = await frappe.xcall(KRCS_HISTORY + "get_encounter_lab_results", { encounter: frm.doc.name }, "GET");
+		data = (
+			await frappe.call({
+				method: KRCS_HISTORY + "get_encounter_lab_results",
+				type: "GET",
+				args: { encounter: frm.doc.name },
+			})
+		).message;
 	} catch (e) {
 		$w.html(`<div class="text-muted small">${__("Laboratory results could not be loaded.")}</div>`);
 		return;
@@ -412,11 +418,13 @@ async function krcs_render_history(frm) {
 	const $w = $(field.wrapper).empty();
 	let data;
 	try {
-		data = await frappe.xcall(
-			KRCS_HISTORY + "get_patient_history",
-			{ patient: frm.doc.patient, exclude: frm.doc.name },
-			"GET",
-		);
+		data = (
+			await frappe.call({
+				method: KRCS_HISTORY + "get_patient_history",
+				type: "GET",
+				args: { patient: frm.doc.patient, exclude: frm.doc.name },
+			})
+		).message;
 	} catch (e) {
 		return;
 	}

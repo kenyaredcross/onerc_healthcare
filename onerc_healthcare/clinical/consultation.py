@@ -27,7 +27,9 @@ from frappe.utils import cint, format_datetime, now_datetime, nowdate, nowtime
 from onerc_healthcare.clinical import diagnosis, practitioner
 from onerc_healthcare.clinical.utils import (
 	CONSULTING_ROLES,
+	LAB_WITHDRAWN_FIELD,
 	active_encounter_for_visit,
+	lock_visit_and_encounter,
 	require_roles,
 	unsent_lab_rows,
 )
@@ -67,7 +69,14 @@ def start_consultation(visit: str) -> dict:
 
 		receive_for_visit(visit_doc)
 
-	existing = active_encounter_for_visit(visit)
+	# Locking reads after the visit lock (M7): a concurrent call that waited on the visit sees the
+	# encounter the first call inserted, instead of its REPEATABLE READ snapshot.
+	existing = None
+	if visit_doc.get("encounter") and frappe.db.get_value(
+		ENCOUNTER_DOCTYPE, {"name": visit_doc.encounter, "docstatus": ["<", 2]}, "name", for_update=True
+	):
+		existing = visit_doc.encounter
+	existing = existing or active_encounter_for_visit(visit, for_update=True)
 	if existing:
 		if visit_doc.get("encounter") != existing:
 			engine.link_encounter(visit, existing)
@@ -118,9 +127,9 @@ def send_lab_orders(encounter: str) -> dict:
 	"""Send the encounter's unsent lab rows to the laboratory (FR-12/FR-15). Returns the new orders."""
 	require_roles(CONSULTING_ROLES, _("send laboratory orders"))
 	frappe.has_permission(ENCOUNTER_DOCTYPE, "write", doc=encounter, throw=True)
-	doc = frappe.get_doc(ENCOUNTER_DOCTYPE, encounter, for_update=True)
+	visit_doc, doc = lock_visit_and_encounter(encounter)
 	_assert_draft(doc)
-	visit = _open_visit(doc)
+	visit = _open_visit(doc, visit_doc)
 	if not unsent_lab_rows(doc):
 		frappe.throw(_("There are no new laboratory tests to send."), ConsultationError)
 
@@ -163,10 +172,14 @@ def cancel_lab_order(service_request: str, reason: str) -> dict:
 		frappe.throw(
 			_("The reason is limited to {0} characters.").format(MAX_REASON_LENGTH), ConsultationError
 		)
-	sr = frappe.get_doc("Service Request", service_request, for_update=True)
-	if sr.source_doc != ENCOUNTER_DOCTYPE or not sr.order_group:
+	source = frappe.db.get_value(
+		"Service Request", service_request, ["source_doc", "order_group"], as_dict=True
+	)
+	if not source or source.source_doc != ENCOUNTER_DOCTYPE or not source.order_group:
 		frappe.throw(_("{0} is not a consultation order.").format(service_request), ConsultationError)
-	frappe.has_permission(ENCOUNTER_DOCTYPE, "write", doc=sr.order_group, throw=True)
+	frappe.has_permission(ENCOUNTER_DOCTYPE, "write", doc=source.order_group, throw=True)
+	lock_visit_and_encounter(source.order_group)
+	sr = frappe.get_doc("Service Request", service_request, for_update=True)
 	if sr.docstatus != 1:
 		frappe.throw(_("Laboratory order {0} is not active.").format(service_request), ConsultationError)
 	if lab_work_started(service_request):
@@ -219,10 +232,9 @@ def complete_consultation(
 	"""
 	require_roles(CONSULTING_ROLES, _("complete a consultation"))
 	frappe.has_permission(ENCOUNTER_DOCTYPE, "write", doc=encounter, throw=True)
-	doc = frappe.get_doc(ENCOUNTER_DOCTYPE, encounter, for_update=True)
+	visit_doc, doc = lock_visit_and_encounter(encounter)
 	_assert_draft(doc)
-	visit = _open_visit(doc)
-	visit_doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)
+	visit = _open_visit(doc, visit_doc)
 	reason = (reason or "").strip() or None
 
 	# Pre-check the engine rule so nothing is submitted when the visit cannot be completed.
@@ -298,7 +310,7 @@ def add_addendum(encounter: str, text: str) -> dict:
 		frappe.throw(_("Enter the addendum text."), ConsultationError)
 	if len(text) > 5000:
 		frappe.throw(_("The addendum is limited to 5000 characters."), ConsultationError)
-	doc = frappe.get_doc(ENCOUNTER_DOCTYPE, encounter, for_update=True)
+	_visit_doc, doc = lock_visit_and_encounter(encounter)
 	if doc.docstatus != 1:
 		frappe.throw(
 			_("An addendum is added to a completed consultation. Edit the draft directly instead."),
@@ -320,7 +332,10 @@ def add_addendum(encounter: str, text: str) -> dict:
 
 
 def on_visit_closed(visit_doc) -> None:
-	"""Close Visit handler (`tasks.VISIT_CLOSED_HANDLERS`): revoke the draft encounter's unsent lab rows.
+	"""Close Visit handler (`tasks.VISIT_CLOSED_HANDLERS`): withdraw the draft encounter's unsent lab rows.
+
+	The rows are kept and flagged `krcs_withdrawn` (L4: clinical content is never deleted); they are
+	never sent afterwards.
 
 	The draft encounter itself is left as it is (no cancel in Phase 2); it can no longer be saved or
 	completed because its visit is closed.
@@ -333,7 +348,7 @@ def on_visit_closed(visit_doc) -> None:
 	if not unsent:
 		return
 	for row in unsent:
-		frappe.db.delete("Lab Prescription", {"name": row.name, "parent": doc.name})
+		frappe.db.set_value("Lab Prescription", row.name, LAB_WITHDRAWN_FIELD, 1, update_modified=False)
 	doc.add_comment(
 		"Comment",
 		_("Visit {0} was closed; unsent laboratory tests withdrawn: {1}").format(
@@ -354,11 +369,12 @@ def _assert_draft(doc) -> None:
 		)
 
 
-def _open_visit(doc) -> str:
+def _open_visit(doc, visit_doc) -> str:
+	"""The encounter's visit name; refuses a closed visit. `visit_doc` is the locked visit (M7)."""
 	visit = doc.get(ENCOUNTER_VISIT_FIELD)
-	if not visit:
+	if not visit or not visit_doc:
 		frappe.throw(_("Consultation {0} has no visit.").format(doc.name), ConsultationError)
-	status = frappe.db.get_value(VISIT_DOCTYPE, visit, "status")
+	status = visit_doc.status
 	if status in VISIT_CLOSED_STATUSES:
 		frappe.throw(
 			_("Visit {0} is closed ({1}).").format(visit, _(status)),

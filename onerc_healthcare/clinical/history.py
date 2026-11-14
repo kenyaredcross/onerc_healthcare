@@ -6,6 +6,9 @@
 approved laboratory results (B2's `lab.api.get_encounter_results`), prescriptions with their dispensing
 status (B3's `krcs_dispense_status` on Medication Request) and referrals. The B2 and B3 parts are
 optional: until they exist the panel shows the rest.
+
+Every call is written to the access log (B4 `privacy.access_log.log_access`): one "Open" entry for the
+patient and one sensitive entry per Mental Health consultation returned (FR-40, DPR-16).
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from frappe.utils import cint
 
 from onerc_healthcare.clinical.diagnosis import DIAGNOSES_FIELD
 from onerc_healthcare.constants import (
+	DEPT_MENTAL_HEALTH,
 	ENCOUNTER_DIAGNOSIS_DOCTYPE,
 	ENCOUNTER_DOCTYPE,
 	ENCOUNTER_VISIT_FIELD,
@@ -23,8 +27,33 @@ from onerc_healthcare.constants import (
 )
 
 LAB_RESULTS_API = "onerc_healthcare.lab.api.get_encounter_results"
+# B4's access-log helper: log_access(action, reference_doctype, reference_name, patient, sensitive, detail)
+LOG_ACCESS = "onerc_healthcare.privacy.access_log.log_access"
+HISTORY_DETAIL = "History panel"
 DISPENSE_STATUS_FIELD = "krcs_dispense_status"
 DEFAULT_LIMIT = 20
+
+
+def _log_access_fn():
+	try:
+		return frappe.get_attr(LOG_ACCESS)
+	except (ImportError, AttributeError):
+		return None
+
+
+def log_history_access(patient: str, encounters: list) -> int:
+	"""FR-40 / DPR-16 (M3): one "Open" entry for the patient, plus one sensitive entry per Mental Health
+	consultation shown. Returns the number of entries written (0 while B4's helper is missing)."""
+	log = _log_access_fn()
+	if not log:
+		return 0
+	log("Open", "Patient", patient, patient, sensitive=False, detail=HISTORY_DETAIL)
+	count = 1
+	for enc in encounters:
+		if enc.get("department") == DEPT_MENTAL_HEALTH:
+			log("Open", ENCOUNTER_DOCTYPE, enc.name, patient, sensitive=True, detail=HISTORY_DETAIL)
+			count += 1
+	return count
 
 
 def _lab_results_fn():
@@ -97,6 +126,7 @@ def get_patient_history(patient: str, exclude: str | None = None, limit: int = D
 		enc.prescriptions = prescriptions.get(enc.name, [])
 		enc.referrals = referrals.get(enc.name, [])
 		enc.lab_results = _lab_results(lab_fn, enc.name)
+	log_history_access(patient, encounters)
 	return {"encounters": encounters, "lab_results_available": bool(lab_fn)}
 
 

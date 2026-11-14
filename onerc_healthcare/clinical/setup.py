@@ -3,7 +3,7 @@
 """clinical install hook (setup/install.py calls install() on after_install and after_migrate). Idempotent.
 
 - Consultation fields on Marley's Patient Encounter (FR-10, FR-11): visit link, clinical notes, ICD-11
-  diagnosis table, addendum and the lab-results / history panels.
+  diagnosis table, addendum and the lab-results / history panels; `krcs_withdrawn` on Lab Prescription.
 - Property setters on Patient Encounter, created only when missing (an admin's later change is kept):
   default and hidden appointment type, read-only practitioner, and the Marley parts the EMR does not use
   hidden (orders-on-save, free-text diagnosis, procedures, therapies, insurance, treatment plans).
@@ -17,6 +17,7 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from onerc_healthcare.clinical.practitioner import strip_all_user_permissions
+from onerc_healthcare.clinical.utils import LAB_WITHDRAWN_FIELD
 from onerc_healthcare.constants import (
 	DEFAULT_APPOINTMENT_TYPE,
 	ENCOUNTER_DIAGNOSIS_DOCTYPE,
@@ -157,6 +158,22 @@ ENCOUNTER_CUSTOM_FIELDS = {
 	]
 }
 
+# Unsent lab rows of a visit closed before they were sent are flagged, never deleted (L4).
+LAB_PRESCRIPTION_CUSTOM_FIELDS = {
+	"Lab Prescription": [
+		{
+			"fieldname": LAB_WITHDRAWN_FIELD,
+			"label": "Withdrawn",
+			"fieldtype": "Check",
+			"insert_after": "service_request",
+			"read_only": 1,
+			"no_copy": 1,
+			"in_list_view": 0,
+			"description": "Not sent: the visit was closed first",
+		}
+	]
+}
+
 # (fieldname, property, value, property_type); written only when no setter exists for that pair.
 ENCOUNTER_PROPERTIES = (
 	("appointment_type", "default", DEFAULT_APPOINTMENT_TYPE, "Text"),
@@ -183,6 +200,7 @@ ENCOUNTER_PROPERTIES = (
 def install() -> None:
 	ensure_appointment_type()
 	create_custom_fields(ENCOUNTER_CUSTOM_FIELDS, ignore_validate=True)
+	create_custom_fields(LAB_PRESCRIPTION_CUSTOM_FIELDS, ignore_validate=True)
 	set_encounter_properties()
 	strip_all_user_permissions()
 

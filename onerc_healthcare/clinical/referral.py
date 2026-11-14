@@ -38,9 +38,10 @@ from dataclasses import dataclass
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime, getdate, now_datetime, today
+from frappe.model import no_value_fields, table_fields
+from frappe.utils import cint, get_datetime, getdate, now_datetime, today
 
-from onerc_healthcare.clinical.utils import CONSULTING_ROLES, has_any_role
+from onerc_healthcare.clinical.utils import CONSULTING_ROLES, has_any_role, lock_visit_and_encounter
 from onerc_healthcare.constants import (
 	ENCOUNTER_DOCTYPE,
 	ENCOUNTER_VISIT_FIELD,
@@ -80,6 +81,9 @@ PROTECTED_FIELDS = ("status", "sent_at", "target_visit", "outcome", "outcome_dat
 # Fields set from the source consultation.
 SOURCE_FIELDS = ("patient", "source_visit", "source_encounter")
 LOG_FIELDS = ("from_status", "to_status", "action", "user", "timestamp", "comment")
+# The archive flag added to every clinical DocType by security/setup.py (NFR-9) and who may set it (L5).
+ARCHIVE_FIELDS = ("krcs_archived", "krcs_archive_section")
+ARCHIVE_ROLES = (ROLE_MIC,)
 
 
 class IllegalReferralTransitionError(frappe.ValidationError):
@@ -256,9 +260,8 @@ def _send(doc, system: bool = False) -> None:
 	from onerc_healthcare.clinical.consultation import submit_encounter
 
 	validate_destination(doc)
-	encounter = frappe.get_doc(ENCOUNTER_DOCTYPE, doc.source_encounter, for_update=True)
-	visit = encounter.get(ENCOUNTER_VISIT_FIELD)
-	visit_doc = frappe.get_doc(VISIT_DOCTYPE, visit, for_update=True)
+	visit_doc, encounter = lock_visit_and_encounter(doc.source_encounter)  # Visit -> Encounter (M7)
+	visit = visit_doc.name
 	refer_rule = engine.TRANSITIONS[engine.ACTION_REFER]
 	if visit_doc.status not in refer_rule.from_statuses:
 		frappe.throw(
@@ -464,7 +467,11 @@ def validate_new(doc) -> None:
 
 
 def guard_changes(doc, before) -> None:
-	"""After insert: only Draft referrals are edited by hand, and never their protected fields or log."""
+	"""After insert: only Draft referrals are edited by hand, and never their protected fields or log.
+
+	Archiving (L5) is the exception: the Medical In-Charge may change only the archive flag, in any status.
+	Other roles with write access to the record (Clinical Officer, MHO) edit Draft referrals only.
+	"""
 	old_log = [_log_row(r) for r in before.get("status_log") or []]
 	new_log = [_log_row(r) for r in doc.get("status_log") or []]
 	if new_log[: len(old_log)] != old_log:
@@ -473,17 +480,45 @@ def guard_changes(doc, before) -> None:
 		return
 	if len(new_log) != len(old_log):
 		_locked(_("Status history rows are added only by referral actions."))
-	changed = [
-		f for f in (*PROTECTED_FIELDS, *SOURCE_FIELDS) if (doc.get(f) or None) != (before.get(f) or None)
-	]
-	if changed:
+	changed = changed_fields(doc, before)
+	if changed and set(changed) <= set(ARCHIVE_FIELDS):
+		if not has_any_role(ARCHIVE_ROLES):
+			_locked(_("Only the Medical In-Charge can archive a referral."))
+		return
+	if changed and not has_any_role(CONSULTING_ROLES):
+		_locked(_("You can only archive this referral."))
+	protected = [f for f in (*PROTECTED_FIELDS, *SOURCE_FIELDS) if f in changed]
+	if protected:
 		_locked(
 			_("{0} can only change through referral actions.").format(
-				", ".join(_(doc.meta.get_label(f)) for f in changed)
+				", ".join(_(doc.meta.get_label(f)) for f in protected)
 			)
 		)
-	if before.status != STATUS_DRAFT:
+	if changed and before.status != STATUS_DRAFT:
 		_locked(_("Referral {0} is {1} and can no longer be edited.").format(doc.name, _(before.status)))
+
+
+def changed_fields(doc, before) -> list[str]:
+	"""Hand-entered value fields whose value differs from the saved document.
+
+	Tables, layout fields and fetched fields (`fetch_from`, refreshed by the server on save) are skipped.
+	"""
+	out = []
+	for df in doc.meta.fields:
+		if df.fieldtype in no_value_fields or df.fieldtype in table_fields or df.fetch_from:
+			continue
+		new, old = doc.get(df.fieldname), before.get(df.fieldname)
+		if df.fieldtype in ("Check", "Int"):
+			differs = cint(new) != cint(old)
+		elif df.fieldtype == "Date":
+			differs = (getdate(new) if new else None) != (getdate(old) if old else None)
+		elif df.fieldtype == "Datetime":
+			differs = (get_datetime(new) if new else None) != (get_datetime(old) if old else None)
+		else:
+			differs = (new or None) != (old or None)
+		if differs:
+			out.append(df.fieldname)
+	return out
 
 
 def _log_row(row) -> tuple:
