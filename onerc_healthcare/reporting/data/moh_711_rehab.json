@@ -1,0 +1,242 @@
+{
+ "name": "MOH 711 Rehabilitation and Social Work",
+ "title": "MOH 711: Rehabilitation and Medical Social Work Services",
+ "status": "Active - Provisional",
+ "version": "provisional-2026-11",
+ "period_type": "Monthly",
+ "note": "PROVISIONAL — HIS Officer to confirm (OI-5)",
+ "blocked_reason": null,
+ "age_bands": [],
+ "dimensions": [],
+ "elements": [
+  {
+   "code": "711R-01",
+   "label": "Psycho-social counselling",
+   "section": "Medical social work",
+   "sort_order": 1,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Psycho-social counselling"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-02",
+   "label": "Alcohol and drug abuse",
+   "section": "Medical social work",
+   "sort_order": 2,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Alcohol and drug abuse"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-03",
+   "label": "Mental illness",
+   "section": "Medical social work",
+   "sort_order": 3,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Mental illness"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-04",
+   "label": "Adolescent issues",
+   "section": "Medical social work",
+   "sort_order": 4,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Adolescent issues"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-05",
+   "label": "Psycho-social assessments",
+   "section": "Medical social work",
+   "sort_order": 5,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Psycho-social assessments"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-06",
+   "label": "Social investigations",
+   "section": "Medical social work",
+   "sort_order": 6,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Social investigations"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-07",
+   "label": "Social rehabilitation",
+   "section": "Medical social work",
+   "sort_order": 7,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Social rehabilitation"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-08",
+   "label": "Outreach services and health talks",
+   "section": "Medical social work",
+   "sort_order": 8,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Outreach services and health talks"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-09",
+   "label": "Referrals",
+   "section": "Medical social work",
+   "sort_order": 9,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Referrals"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-10",
+   "label": "Total medical social work services",
+   "section": "Medical social work",
+   "sort_order": 10,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Psycho-social counselling",
+     "Alcohol and drug abuse",
+     "Mental illness",
+     "Adolescent issues",
+     "Psycho-social assessments",
+     "Social investigations",
+     "Social rehabilitation",
+     "Outreach services and health talks",
+     "Referrals"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-11",
+   "label": "Clients served (distinct patients)",
+   "section": "Medical social work",
+   "sort_order": 11,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Psycho-social counselling",
+     "Alcohol and drug abuse",
+     "Mental illness",
+     "Adolescent issues",
+     "Psycho-social assessments",
+     "Social investigations",
+     "Social rehabilitation",
+     "Outreach services and health talks",
+     "Referrals"
+    ],
+    "unit": "patients"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-12",
+   "label": "Physiotherapy",
+   "section": "Rehabilitation services",
+   "sort_order": 12,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no physiotherapy service; an HIS Officer can add a Visit Service Type and make this element Available",
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-13",
+   "label": "Occupational therapy",
+   "section": "Rehabilitation services",
+   "sort_order": 13,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no occupational therapy service",
+   "dhis2_uid": null
+  },
+  {
+   "code": "711R-14",
+   "label": "Orthopaedic technology",
+   "section": "Rehabilitation services",
+   "sort_order": 14,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no orthopaedic technology service",
+   "dhis2_uid": null
+  }
+ ]
+}

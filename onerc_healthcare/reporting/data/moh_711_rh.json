@@ -1,0 +1,12 @@
+{
+ "name": "MOH 711 RH-MCH",
+ "title": "Integrated Summary: Reproductive Health and Maternal and Child Health",
+ "status": "Blocked",
+ "version": "provisional-2026-11",
+ "period_type": "Monthly",
+ "note": "PROVISIONAL — HIS Officer to confirm (OI-5)",
+ "blocked_reason": "OI-5: the official MOH 711 layout and data element inventory are not available, and the MCH / maternity capture it needs is Wave 2. OI-24 covers its remaining sections.",
+ "age_bands": [],
+ "dimensions": [],
+ "elements": []
+}

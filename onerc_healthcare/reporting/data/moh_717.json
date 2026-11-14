@@ -1,0 +1,1244 @@
+{
+ "name": "MOH 717",
+ "title": "Service Workload Summary (Hospitals and Health Centres)",
+ "status": "Active - Provisional",
+ "version": "provisional-2026-11",
+ "period_type": "Monthly",
+ "note": "PROVISIONAL — HIS Officer to confirm (OI-5)",
+ "blocked_reason": null,
+ "age_bands": [
+  {
+   "label": "<5",
+   "min_months": 0,
+   "max_months": 60
+  },
+  {
+   "label": "5+",
+   "min_months": 60,
+   "max_months": null
+  }
+ ],
+ "dimensions": [],
+ "elements": [
+  {
+   "code": "717-A01",
+   "label": "General outpatient: new attendances",
+   "section": "A. General outpatient (filter clinic)",
+   "sort_order": 1,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "New",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "departments": [
+     "Outpatient"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-A02",
+   "label": "General outpatient: re-attendances",
+   "section": "A. General outpatient (filter clinic)",
+   "sort_order": 2,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "Re-attendance",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "departments": [
+     "Outpatient"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-A03",
+   "label": "Casualty / emergency attendances",
+   "section": "A. General outpatient (filter clinic)",
+   "sort_order": 3,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "Age Band and Sex",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: casualty is not a separate department; emergency triage level only",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B01",
+   "label": "Mental health clinic: new attendances",
+   "section": "B. Special clinics",
+   "sort_order": 4,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "New",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "departments": [
+     "Mental Health"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B02",
+   "label": "Mental health clinic: re-attendances",
+   "section": "B. Special clinics",
+   "sort_order": 5,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "Re-attendance",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "departments": [
+     "Mental Health"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B03",
+   "label": "Nutrition clinic: new attendances",
+   "section": "B. Special clinics",
+   "sort_order": 6,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "New",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "departments": [
+     "Nutrition"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B04",
+   "label": "Nutrition clinic: re-attendances",
+   "section": "B. Special clinics",
+   "sort_order": 7,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "Re-attendance",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "departments": [
+     "Nutrition"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B05",
+   "label": "MCH clinic (all MCH services): new attendances",
+   "section": "B. Special clinics",
+   "sort_order": 8,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "New",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "departments": [
+     "Maternal and Child Health"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B06",
+   "label": "MCH clinic (all MCH services): re-attendances",
+   "section": "B. Special clinics",
+   "sort_order": 9,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "Re-attendance",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "departments": [
+     "Maternal and Child Health"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B07",
+   "label": "Child welfare clinic (CWC) attendances",
+   "section": "B. Special clinics",
+   "sort_order": 10,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: MCH visit types are not captured (MCH module, Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B08",
+   "label": "Antenatal clinic (ANC) attendances",
+   "section": "B. Special clinics",
+   "sort_order": 11,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: MCH visit types are not captured (MCH module, Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B09",
+   "label": "Postnatal clinic (PNC) attendances",
+   "section": "B. Special clinics",
+   "sort_order": 12,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: MCH visit types are not captured (MCH module, Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B10",
+   "label": "Family planning attendances",
+   "section": "B. Special clinics",
+   "sort_order": 13,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: MCH visit types are not captured (MCH module, Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B11",
+   "label": "Eye clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 14,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B12",
+   "label": "ENT clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 15,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B13",
+   "label": "Dental clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 16,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B14",
+   "label": "Orthopaedic clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 17,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B15",
+   "label": "TB and leprosy clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 18,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B16",
+   "label": "Comprehensive care / HIV clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 19,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B17",
+   "label": "Diabetes and hypertension clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 20,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B18",
+   "label": "Physiotherapy clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 21,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-B19",
+   "label": "Occupational therapy clinic attendances",
+   "section": "B. Special clinics",
+   "sort_order": 22,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no such department in the EMR yet",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-C01",
+   "label": "Outreach attendances: new",
+   "section": "C. Totals and outreach",
+   "sort_order": 23,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "New",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "outreach": "only"
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-C02",
+   "label": "Outreach attendances: re-attendances",
+   "section": "C. Totals and outreach",
+   "sort_order": 24,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "Re-attendance",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "outreach": "only"
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-C03",
+   "label": "Total facility attendances: new (excluding outreach)",
+   "section": "C. Totals and outreach",
+   "sort_order": 25,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "New",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "internal_referrals": "exclude"
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-C04",
+   "label": "Total facility attendances: re-attendances (excluding outreach)",
+   "section": "C. Totals and outreach",
+   "sort_order": 26,
+   "source_type": "Visit Attendance",
+   "rule": {
+    "attendance_type": "Re-attendance",
+    "exclude_closure_reasons": [
+     "Left before being seen"
+    ],
+    "internal_referrals": "exclude"
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-D01",
+   "label": "Referrals in from other facilities",
+   "section": "D. Referrals",
+   "sort_order": 27,
+   "source_type": "Referrals",
+   "rule": {
+    "direction": "in"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-D02",
+   "label": "Referrals out to other facilities",
+   "section": "D. Referrals",
+   "sort_order": 28,
+   "source_type": "Referrals",
+   "rule": {
+    "direction": "out",
+    "referral_type": "External"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-D03",
+   "label": "Internal referrals between departments",
+   "section": "D. Referrals",
+   "sort_order": 29,
+   "source_type": "Referrals",
+   "rule": {
+    "direction": "out",
+    "referral_type": "Internal"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-E01",
+   "label": "Outpatient deaths",
+   "section": "E. Outpatient outcomes",
+   "sort_order": 30,
+   "source_type": "Visit Outcome",
+   "rule": {
+    "outcomes": [
+     "Died"
+    ]
+   },
+   "disaggregation": "Age Band and Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-E02",
+   "label": "Patients sent for admission",
+   "section": "E. Outpatient outcomes",
+   "sort_order": 31,
+   "source_type": "Visit Outcome",
+   "rule": {
+    "outcomes": [
+     "Admitted"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-E03",
+   "label": "Patients who left without completing the visit",
+   "section": "E. Outpatient outcomes",
+   "sort_order": 32,
+   "source_type": "Visit Outcome",
+   "rule": {
+    "outcomes": [
+     "Left without completing"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-E04",
+   "label": "Dead on arrival / brought in dead",
+   "section": "E. Outpatient outcomes",
+   "sort_order": 33,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: not captured; brought-in-dead is not a visit outcome",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F01",
+   "label": "Total laboratory tests done",
+   "section": "F. Laboratory",
+   "sort_order": 34,
+   "source_type": "Laboratory Tests",
+   "rule": {},
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F02",
+   "label": "Tests done: Haematology",
+   "section": "F. Laboratory",
+   "sort_order": 35,
+   "source_type": "Laboratory Tests",
+   "rule": {
+    "templates": [
+     "Haemoglobin",
+     "Full Haemogram (CBC)",
+     "Erythrocyte Sedimentation Rate",
+     "Blood Group and Rhesus"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F03",
+   "label": "Tests done: Malaria (RDT and blood slide)",
+   "section": "F. Laboratory",
+   "sort_order": 36,
+   "source_type": "Laboratory Tests",
+   "rule": {
+    "templates": [
+     "Malaria Rapid Diagnostic Test",
+     "Malaria Blood Slide"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F04",
+   "label": "Tests done: Parasitology (stool)",
+   "section": "F. Laboratory",
+   "sort_order": 37,
+   "source_type": "Laboratory Tests",
+   "rule": {
+    "templates": [
+     "Stool Microscopy"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F05",
+   "label": "Tests done: Bacteriology and TB",
+   "section": "F. Laboratory",
+   "sort_order": 38,
+   "source_type": "Laboratory Tests",
+   "rule": {
+    "templates": [
+     "GeneXpert MTB/RIF",
+     "Sputum AFB Smear"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F06",
+   "label": "Tests done: Clinical chemistry",
+   "section": "F. Laboratory",
+   "sort_order": 39,
+   "source_type": "Laboratory Tests",
+   "rule": {
+    "templates": [
+     "Random Blood Sugar",
+     "Fasting Blood Sugar"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F07",
+   "label": "Tests done: Serology and immunology",
+   "section": "F. Laboratory",
+   "sort_order": 40,
+   "source_type": "Laboratory Tests",
+   "rule": {
+    "templates": [
+     "HIV 1/2 Rapid Test",
+     "Syphilis RPR",
+     "Hepatitis B Surface Antigen",
+     "H. pylori Stool Antigen",
+     "Urine Pregnancy Test"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F08",
+   "label": "Tests done: Urinalysis",
+   "section": "F. Laboratory",
+   "sort_order": 41,
+   "source_type": "Laboratory Tests",
+   "rule": {
+    "templates": [
+     "Urinalysis"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F09",
+   "label": "Histology and cytology",
+   "section": "F. Laboratory",
+   "sort_order": 42,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no histology or cytology tests in the catalogue (OI-9)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-F10",
+   "label": "Blood transfusion / units issued",
+   "section": "F. Laboratory",
+   "sort_order": 43,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no blood bank",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-G01",
+   "label": "Outpatient prescriptions written",
+   "section": "G. Pharmacy",
+   "sort_order": 44,
+   "source_type": "Prescriptions",
+   "rule": {
+    "unit": "prescriptions"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-G02",
+   "label": "Outpatient prescription items written",
+   "section": "G. Pharmacy",
+   "sort_order": 45,
+   "source_type": "Prescriptions",
+   "rule": {
+    "unit": "items"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-G03",
+   "label": "Outpatient prescriptions dispensed",
+   "section": "G. Pharmacy",
+   "sort_order": 46,
+   "source_type": "Dispensing",
+   "rule": {
+    "unit": "prescriptions"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-G04",
+   "label": "Outpatient prescription items dispensed",
+   "section": "G. Pharmacy",
+   "sort_order": 47,
+   "source_type": "Dispensing",
+   "rule": {
+    "unit": "items"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-G05",
+   "label": "Prescription items not dispensed",
+   "section": "G. Pharmacy",
+   "sort_order": 48,
+   "source_type": "Dispensing",
+   "rule": {
+    "outcome": "Not Dispensed",
+    "unit": "items"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-G06",
+   "label": "Inpatient prescriptions",
+   "section": "G. Pharmacy",
+   "sort_order": 49,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-H01",
+   "label": "Patients seen by medical social work",
+   "section": "H. Medical social work and rehabilitation",
+   "sort_order": 50,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Psycho-social counselling",
+     "Alcohol and drug abuse",
+     "Mental illness",
+     "Adolescent issues",
+     "Psycho-social assessments",
+     "Social investigations",
+     "Social rehabilitation",
+     "Outreach services and health talks",
+     "Referrals"
+    ],
+    "unit": "patients"
+   },
+   "disaggregation": "Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-H02",
+   "label": "Medical social work services delivered",
+   "section": "H. Medical social work and rehabilitation",
+   "sort_order": 51,
+   "source_type": "Service Delivered",
+   "rule": {
+    "moh_lines": [
+     "Psycho-social counselling",
+     "Alcohol and drug abuse",
+     "Mental illness",
+     "Adolescent issues",
+     "Psycho-social assessments",
+     "Social investigations",
+     "Social rehabilitation",
+     "Outreach services and health talks",
+     "Referrals"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-H03",
+   "label": "Rehabilitation services delivered",
+   "section": "H. Medical social work and rehabilitation",
+   "sort_order": 52,
+   "source_type": "Service Delivered",
+   "rule": {
+    "categories": [
+     "Rehabilitation"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-H04",
+   "label": "Physiotherapy treatments",
+   "section": "H. Medical social work and rehabilitation",
+   "sort_order": 53,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no physiotherapy service; an HIS Officer can add a Visit Service Type and make this element Available",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-H05",
+   "label": "Occupational therapy treatments",
+   "section": "H. Medical social work and rehabilitation",
+   "sort_order": 54,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no occupational therapy service",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-H06",
+   "label": "Orthopaedic technology appliances",
+   "section": "H. Medical social work and rehabilitation",
+   "sort_order": 55,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no orthopaedic technology service",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-I01",
+   "label": "Health talks: sessions",
+   "section": "I. Health promotion and community",
+   "sort_order": 56,
+   "source_type": "Community Activity",
+   "rule": {
+    "categories": [
+     "Health Talk"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-I02",
+   "label": "Health talks: participants",
+   "section": "I. Health promotion and community",
+   "sort_order": 57,
+   "source_type": "Community Activity",
+   "rule": {
+    "categories": [
+     "Health Talk"
+    ],
+    "measure": "participants"
+   },
+   "disaggregation": "Sex",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-I03",
+   "label": "Home visits",
+   "section": "I. Health promotion and community",
+   "sort_order": 58,
+   "source_type": "Community Activity",
+   "rule": {
+    "categories": [
+     "Home Visit"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-I04",
+   "label": "Outreach sessions",
+   "section": "I. Health promotion and community",
+   "sort_order": 59,
+   "source_type": "Community Activity",
+   "rule": {
+    "categories": [
+     "Outreach"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-I05",
+   "label": "Community mobilisation sessions",
+   "section": "I. Health promotion and community",
+   "sort_order": 60,
+   "source_type": "Community Activity",
+   "rule": {
+    "categories": [
+     "Community Mobilisation"
+    ]
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-I06",
+   "label": "Community mobilisation: participants",
+   "section": "I. Health promotion and community",
+   "sort_order": 61,
+   "source_type": "Community Activity",
+   "rule": {
+    "categories": [
+     "Community Mobilisation"
+    ],
+    "measure": "participants"
+   },
+   "disaggregation": "None",
+   "availability": "Available",
+   "gap_note": null,
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-J01",
+   "label": "Admissions",
+   "section": "J. Inpatient services",
+   "sort_order": 62,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-J02",
+   "label": "Discharges",
+   "section": "J. Inpatient services",
+   "sort_order": 63,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-J03",
+   "label": "Inpatient deaths",
+   "section": "J. Inpatient services",
+   "sort_order": 64,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-J04",
+   "label": "Inpatient bed days",
+   "section": "J. Inpatient services",
+   "sort_order": 65,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-J05",
+   "label": "Average length of stay",
+   "section": "J. Inpatient services",
+   "sort_order": 66,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-J06",
+   "label": "Bed occupancy",
+   "section": "J. Inpatient services",
+   "sort_order": 67,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-K01",
+   "label": "Normal deliveries",
+   "section": "K. Maternity",
+   "sort_order": 68,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-K02",
+   "label": "Caesarean sections",
+   "section": "K. Maternity",
+   "sort_order": 69,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-K03",
+   "label": "Assisted vaginal deliveries",
+   "section": "K. Maternity",
+   "sort_order": 70,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-K04",
+   "label": "Born before arrival",
+   "section": "K. Maternity",
+   "sort_order": 71,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-K05",
+   "label": "Live births",
+   "section": "K. Maternity",
+   "sort_order": 72,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-K06",
+   "label": "Fresh stillbirths",
+   "section": "K. Maternity",
+   "sort_order": 73,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-K07",
+   "label": "Macerated stillbirths",
+   "section": "K. Maternity",
+   "sort_order": 74,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-K08",
+   "label": "Maternal deaths",
+   "section": "K. Maternity",
+   "sort_order": 75,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-L01",
+   "label": "Major operations",
+   "section": "L. Theatre",
+   "sort_order": 76,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: theatre is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-L02",
+   "label": "Minor operations / procedures",
+   "section": "L. Theatre",
+   "sort_order": 77,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: theatre is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-M01",
+   "label": "X-ray examinations",
+   "section": "M. Imaging",
+   "sort_order": 78,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: imaging is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-M02",
+   "label": "Ultrasound examinations",
+   "section": "M. Imaging",
+   "sort_order": 79,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: imaging is not in the EMR yet (Wave 2)",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-N01",
+   "label": "Tooth extractions",
+   "section": "N. Dental",
+   "sort_order": 80,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no dental service in the EMR",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-N02",
+   "label": "Fillings",
+   "section": "N. Dental",
+   "sort_order": 81,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no dental service in the EMR",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-N03",
+   "label": "Other dental procedures",
+   "section": "N. Dental",
+   "sort_order": 82,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no dental service in the EMR",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-O01",
+   "label": "Bodies received",
+   "section": "O. Mortuary",
+   "sort_order": 83,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no mortuary in the EMR",
+   "dhis2_uid": null
+  },
+  {
+   "code": "717-O02",
+   "label": "Post-mortems",
+   "section": "O. Mortuary",
+   "sort_order": 84,
+   "source_type": null,
+   "rule": null,
+   "disaggregation": "None",
+   "availability": "Gap",
+   "gap_note": "Gap — Wave 2 / OI-5: no mortuary in the EMR",
+   "dhis2_uid": null
+  }
+ ]
+}

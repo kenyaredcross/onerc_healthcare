@@ -1,0 +1,12 @@
+{
+ "name": "MOH 643B",
+ "title": "FCDRR Version 2",
+ "status": "Blocked",
+ "version": "provisional-2026-11",
+ "period_type": "Monthly",
+ "note": "PROVISIONAL — HIS Officer to confirm (OI-5)",
+ "blocked_reason": "OI-5: the official MOH 643B layout is not available. It is a commodity stock report (FCDRR) and needs a stock ledger, which conflicts with C-5 / the non-stock pharmacy.",
+ "age_bands": [],
+ "dimensions": [],
+ "elements": []
+}

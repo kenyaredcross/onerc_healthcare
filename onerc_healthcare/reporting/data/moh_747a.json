@@ -1,0 +1,12 @@
+{
+ "name": "MOH 747A",
+ "title": "Family Planning and FCDRR",
+ "status": "Blocked",
+ "version": "provisional-2026-11",
+ "period_type": "Monthly",
+ "note": "PROVISIONAL — HIS Officer to confirm (OI-5)",
+ "blocked_reason": "OI-5: the official MOH 747A layout is not available. Its FCDRR part needs commodity stock (opening balance, received, dispensed, losses, closing balance), which conflicts with C-5 / the non-stock pharmacy (D-pharmacy, OI-9).",
+ "age_bands": [],
+ "dimensions": [],
+ "elements": []
+}

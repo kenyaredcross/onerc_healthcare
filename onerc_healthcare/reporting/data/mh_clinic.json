@@ -1,0 +1,88 @@
+{
+ "name": "Mental Health Clinic Report",
+ "title": "Mental Health Clinic Reporting Template",
+ "status": "Blocked",
+ "version": "provisional-2026-11",
+ "period_type": "Monthly",
+ "note": "PROVISIONAL — HIS Officer to confirm (OI-5)",
+ "blocked_reason": "OI-24: whether the mental health clinic report is required, and its eight condition categories, are not confirmed by the HIS Officers. Age bands and the population-group dimension are seeded.",
+ "age_bands": [
+  {
+   "label": "<18",
+   "min_months": 0,
+   "max_months": 216
+  },
+  {
+   "label": "18-59",
+   "min_months": 216,
+   "max_months": 720
+  },
+  {
+   "label": "60+",
+   "min_months": 720,
+   "max_months": null
+  }
+ ],
+ "dimensions": [
+  {
+   "dimension": "Population group",
+   "doctype": "Patient",
+   "field": "krcs_population_group",
+   "values": [
+    {
+     "value": "Refugee",
+     "age_bands": [
+      "<18",
+      "18-59",
+      "60+"
+     ]
+    },
+    {
+     "value": "National",
+     "age_bands": [
+      "<18",
+      "18+"
+     ],
+     "merge": {
+      "18+": [
+       "18-59",
+       "60+"
+      ]
+     }
+    },
+    {
+     "value": "Other",
+     "age_bands": [
+      "<18",
+      "18+"
+     ],
+     "merge": {
+      "18+": [
+       "18-59",
+       "60+"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "dimension": "Sex",
+   "values": [
+    "Male",
+    "Female"
+   ]
+  },
+  {
+   "dimension": "Planned sections (SDD §5.12.7)",
+   "values": [
+    "Eight condition categories by sex and population group",
+    "New diagnosed cases (diagnosis case type New)",
+    "New cases and grand total",
+    "Inter-agency referrals (Referral)",
+    "Home visits and health talks (Community Activity)",
+    "Narrative and photographs (MOH Report Run)"
+   ]
+  }
+ ],
+ "elements": []
+}
