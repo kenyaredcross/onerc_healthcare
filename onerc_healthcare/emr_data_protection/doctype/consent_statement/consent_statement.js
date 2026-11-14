@@ -5,6 +5,18 @@
 frappe.ui.form.on("Consent Statement", {
 	refresh(frm) {
 		const onload = frm.doc.__onload || {};
+		if (onload.can_archive) {
+			const archived = !!frm.doc.krcs_archived;
+			frm.add_custom_button(archived ? __("Unarchive") : __("Archive"), () =>
+				frappe
+					.xcall("onerc_healthcare.privacy.archive.archive_record", {
+						doctype: frm.doctype,
+						name: frm.doc.name,
+						archived: archived ? 0 : 1,
+					})
+					.then(() => frm.reload_doc())
+			);
+		}
 		if (onload.is_used) {
 			frm.set_df_property("text", "read_only", 1);
 			frm.set_df_property("language", "read_only", 1);

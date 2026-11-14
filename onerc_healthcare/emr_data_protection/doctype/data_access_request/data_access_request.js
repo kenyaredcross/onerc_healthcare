@@ -6,6 +6,20 @@ frappe.provide("krcs.privacy");
 
 krcs.privacy.DAR_API = "onerc_healthcare.privacy.dar";
 
+krcs.privacy.add_archive_button = function (frm) {
+	if (!(frm.doc.__onload || {}).can_archive) return;
+	const archived = !!frm.doc.krcs_archived;
+	frm.add_custom_button(archived ? __("Unarchive") : __("Archive"), () =>
+		frappe
+			.xcall("onerc_healthcare.privacy.archive.archive_record", {
+				doctype: frm.doctype,
+				name: frm.doc.name,
+				archived: archived ? 0 : 1,
+			})
+			.then(() => frm.reload_doc())
+	);
+};
+
 frappe.ui.form.on("Data Access Request", {
 	refresh(frm) {
 		const onload = frm.doc.__onload || {};
@@ -19,6 +33,15 @@ frappe.ui.form.on("Data Access Request", {
 		(onload.available_actions || []).forEach((a) => {
 			frm.add_custom_button(__(a.label), () => krcs.privacy.dar_action(frm, a), __("Actions"));
 		});
+		if (onload.can_download_extract) {
+			// Served by privacy.extract.download_extract, which logs each download (H1).
+			frm.add_custom_button(__("Download Extract"), () =>
+				open_url_post("/api/method/onerc_healthcare.privacy.extract.download_extract", {
+					request: frm.doc.name,
+				})
+			);
+		}
+		krcs.privacy.add_archive_button(frm);
 	},
 });
 
@@ -87,12 +110,17 @@ krcs.privacy.dar_action = function (frm, a) {
 		const refresh_versions = () => {
 			const v = dialog.get_values(true);
 			if (!v.corrected_doctype || !v.corrected_record) return;
+			// GET-only endpoint: xcall defaults to POST, so the verb is passed explicitly.
 			frappe
-				.xcall(`${krcs.privacy.DAR_API}.get_correction_versions`, {
-					request: frm.doc.name,
-					corrected_doctype: v.corrected_doctype,
-					corrected_record: v.corrected_record,
-				})
+				.xcall(
+					`${krcs.privacy.DAR_API}.get_correction_versions`,
+					{
+						request: frm.doc.name,
+						corrected_doctype: v.corrected_doctype,
+						corrected_record: v.corrected_record,
+					},
+					"GET"
+				)
 				.then((rows) => {
 					const field = dialog.get_field("correction_version");
 					field.df.options = [""].concat((rows || []).map((r) => r.name)).join("\n");

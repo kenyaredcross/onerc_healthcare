@@ -7,6 +7,7 @@ from frappe import _
 from frappe.model.document import Document
 
 from onerc_healthcare.constants import CONSENT_STATEMENT_DOCTYPE
+from onerc_healthcare.privacy.archive import ARCHIVED_FIELD, can_archive
 from onerc_healthcare.privacy.lifecycle import guard_fields, guard_log
 from onerc_healthcare.privacy.statements import (
 	LOCKED_WHEN_USED,
@@ -23,6 +24,7 @@ class ConsentStatement(Document):
 	def onload(self):
 		self.set_onload("available_actions", get_available_actions(self))
 		self.set_onload("is_used", is_statement_used(self.name))
+		self.set_onload("can_archive", can_archive(self))
 
 	def validate(self):
 		self.version = (self.version or "").strip()
@@ -32,10 +34,11 @@ class ConsentStatement(Document):
 				self.status = STATUS_DRAFT
 				self.activated_at = self.retired_at = None
 				self.set("log", [])
+				self.set(ARCHIVED_FIELD, 0)
 		else:
 			before = self.get_doc_before_save()
 			if before:
-				guard_fields(self, before, PROTECTED_FIELDS)
+				guard_fields(self, before, (*PROTECTED_FIELDS, ARCHIVED_FIELD))
 				guard_log(self, before)
 				self.guard_used_wording(before)
 		self.validate_single_active()

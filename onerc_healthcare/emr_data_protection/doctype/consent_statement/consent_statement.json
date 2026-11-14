@@ -21,7 +21,9 @@
   "text_section",
   "text",
   "history_section",
-  "log"
+  "log",
+  "krcs_archive_section",
+  "krcs_archived"
  ],
  "fields": [
   {
@@ -117,10 +119,26 @@
    "label": "Status History",
    "options": "Consent Statement Log",
    "read_only": 1
+  },
+  {
+   "fieldname": "krcs_archive_section",
+   "fieldtype": "Section Break",
+   "label": "Archive",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "krcs_archived",
+   "fieldtype": "Check",
+   "label": "Archived",
+   "default": "0",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_standard_filter": 1,
+   "description": "Set by the Medical In-Charge (Archive action) once the statement is no longer in Draft. Records are never deleted (NFR-9)."
   }
  ],
  "links": [],
- "modified": "2026-11-13 18:00:00.000000",
+ "modified": "2026-11-14 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Data Protection",
  "name": "Consent Statement",

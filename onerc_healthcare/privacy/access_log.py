@@ -23,24 +23,56 @@ Logging never raises: a failure is written to the app logger and the record stil
 
 from __future__ import annotations
 
+from typing import Any
+
 import frappe
+from frappe import _
 from frappe.database.utils import commit_after_response
+from frappe.rate_limiter import rate_limit
 from frappe.utils import cstr, now_datetime
 
 from onerc_healthcare.constants import (
 	ACCESS_LOG_DOCTYPE,
+	ACCESS_LOGGED_DOCTYPES,
+	DATA_ACCESS_REQUEST_DOCTYPE,
 	DEPT_MENTAL_HEALTH,
 	ENCOUNTER_DOCTYPE,
 	ENCOUNTER_VISIT_FIELD,
+	REPORT_ACCESS_AUDIT,
+	REPORT_CONSENT_EXCEPTIONS,
+	REPORT_DAILY_ENTRY,
+	REPORT_LAB_WORKLIST,
+	REPORT_PHARMACY_WORKLIST,
 	VISIT_DOCTYPE,
 )
 
 ACTION_OPEN = "Open"
+ACTION_OPEN_API = "Open (API)"
+ACTION_READ_API = "Read (API)"
+ACTION_LIST = "List"
 ACTION_PRINT = "Print"
 ACTION_EXPORT = "Export"
 ACTION_REPORT = "Report"
 ACTION_DOWNLOAD = "Download"
-ACTIONS = (ACTION_OPEN, ACTION_PRINT, ACTION_EXPORT, ACTION_REPORT, ACTION_DOWNLOAD)
+ACTIONS = (
+	ACTION_OPEN,
+	ACTION_OPEN_API,
+	ACTION_READ_API,
+	ACTION_LIST,
+	ACTION_PRINT,
+	ACTION_EXPORT,
+	ACTION_REPORT,
+	ACTION_DOWNLOAD,
+)
+
+# Our own reports (exact names from constants); their runs and exports are logged.
+APP_REPORTS = (
+	REPORT_LAB_WORKLIST,
+	REPORT_PHARMACY_WORKLIST,
+	REPORT_DAILY_ENTRY,
+	REPORT_CONSENT_EXCEPTIONS,
+	REPORT_ACCESS_AUDIT,
+)
 
 SKIPPED_USERS = ("Administrator", "Guest")
 SAVE_METHODS = ("frappe.desk.form.save.savedocs",)
@@ -65,15 +97,37 @@ def _is_save_request() -> bool:
 	return any(m in path or m == cmd for m in SAVE_METHODS)
 
 
+def is_logged_doctype(doctype: str | None) -> bool:
+	return bool(doctype) and doctype in ACCESS_LOGGED_DOCTYPES
+
+
+def is_logged_report(report_name: str | None) -> bool:
+	"""One of our reports, or a report on a logged DocType."""
+	if not report_name:
+		return False
+	if report_name in APP_REPORTS:
+		return True
+	return is_logged_doctype(frappe.db.get_value("Report", report_name, "ref_doctype", cache=True))
+
+
 def resolve_patient(doctype: str | None, name: str | None, _depth: int = 0) -> str | None:
-	"""Patient ID behind a record: the Patient itself, its `patient` field, or a File's attachment."""
+	"""Patient ID behind a record: the Patient itself, its `patient` field, or a File's attachment (or
+	the Data Access Request whose extract it is)."""
 	if not doctype or not name or _depth > 1:
 		return None
 	if doctype == "Patient":
 		return name
 	if doctype == "File":
-		row = frappe.db.get_value("File", name, ["attached_to_doctype", "attached_to_name"], as_dict=True)
-		return resolve_patient(row.attached_to_doctype, row.attached_to_name, _depth + 1) if row else None
+		row = frappe.db.get_value(
+			"File", name, ["attached_to_doctype", "attached_to_name", "file_url"], as_dict=True
+		)
+		if not row:
+			return None
+		if row.attached_to_doctype and row.attached_to_name:
+			return resolve_patient(row.attached_to_doctype, row.attached_to_name, _depth + 1)
+		if row.file_url:
+			return frappe.db.get_value(DATA_ACCESS_REQUEST_DOCTYPE, {"extract_file": row.file_url}, "patient")
+		return None
 	if not frappe.db.exists("DocType", doctype):
 		return None
 	meta = frappe.get_meta(doctype)
@@ -162,23 +216,52 @@ def _safe_insert(entry) -> None:
 		logger.exception("Access Log Entry insert failed")
 
 
-def log_open(doc, method=None) -> None:
-	"""doc_events onload for every DocType in constants.ACCESS_LOGGED_DOCTYPES (desk form open)."""
+def log_access(
+	action: str,
+	reference_doctype: str | None,
+	reference_name: str | None,
+	patient: str | None = None,
+	sensitive: bool = False,
+	detail: str | None = None,
+) -> None:
+	"""Public helper: log a read of patient data as the current user (e.g. B1's history panel).
+
+	Same persistence as a desk open (`commit_after_response`, so it survives a GET request's rollback).
+	Administrator, Guest and install/migrate are skipped. Never raises. `detail` is metadata only
+	(field or filter names, row counts), never values.
+	"""
 	try:
 		user = frappe.session.user
-		if _skip_user(user) or _in_maintenance() or doc.is_new() or _is_save_request():
+		if _skip_user(user) or _in_maintenance():
 			return
-		patient = doc.name if doc.doctype == "Patient" else (doc.get("patient") or None)
 		entry = build_entry(
-			ACTION_OPEN,
-			reference_doctype=doc.doctype,
-			reference_name=doc.name,
+			action,
+			reference_doctype=reference_doctype,
+			reference_name=reference_name,
 			patient=patient,
-			sensitive=is_sensitive(doc.doctype, doc),
+			sensitive=sensitive,
+			details=detail,
 			user=user,
 		)
 		# GET requests are rolled back: write after the response and commit (see module docstring).
 		commit_after_response(lambda: _safe_insert(entry))
+	except Exception:
+		logger.exception("log_access failed")
+
+
+def log_open(doc, method=None) -> None:
+	"""doc_events onload for every DocType in constants.ACCESS_LOGGED_DOCTYPES (desk form open)."""
+	try:
+		if doc.is_new() or _is_save_request():
+			return
+		patient = doc.name if doc.doctype == "Patient" else (doc.get("patient") or None)
+		log_access(
+			ACTION_OPEN,
+			doc.doctype,
+			doc.name,
+			patient=patient,
+			sensitive=is_sensitive(doc.doctype, doc),
+		)
 	except Exception:
 		logger.exception("log_open failed")
 
@@ -211,11 +294,28 @@ def _core_details(doc) -> str:
 	return "; ".join(parts)
 
 
+def logged_by_wrapper(doc) -> bool:
+	"""The core Access Log row describes an export that `privacy.read_log` already logged (with its row
+	count), so mirroring it would log the same export twice."""
+	method = cstr(doc.get("method"))
+	# Query report export: the report page calls make_access_log("Export", ...) after exporting.
+	if method == "Export" and doc.get("report_name") and is_logged_report(doc.report_name):
+		return True
+	# Report view / list export (frappe.desk.reportview.export_query): no method, no document, no columns.
+	return bool(
+		not method
+		and not doc.get("reference_document")
+		and not doc.get("columns")
+		and doc.get("file_type")
+		and is_logged_doctype(doc.get("export_from"))
+	)
+
+
 def mirror_core_access_log(doc, method=None) -> None:
 	"""doc_events after_insert on Frappe's core Access Log (prints, exports, reports, downloads)."""
 	try:
 		user = doc.get("user")
-		if not user or user == "Guest":
+		if not user or user == "Guest" or logged_by_wrapper(doc):
 			return
 		reference_doctype = doc.get("export_from") or None
 		reference_name = doc.get("reference_document") or None
@@ -239,21 +339,65 @@ def mirror_core_access_log(doc, method=None) -> None:
 
 
 def log_report_run(report_name: str, patient: str | None = None, filters: dict | None = None) -> None:
-	"""Log a run of one of our patient-level reports as action Report (filter names only, no values)."""
-	try:
-		user = frappe.session.user
-		if _skip_user(user):
-			return
-		used = sorted(k for k, v in (filters or {}).items() if v not in (None, "", 0))
-		entry = build_entry(
-			ACTION_REPORT,
-			reference_doctype="Report",
-			reference_name=report_name,
-			patient=patient,
-			details=("Filters: " + ", ".join(used)) if used else None,
-			user=user,
-		)
-		# Report runs may be GET requests, which are rolled back: same mechanism as log_open.
-		commit_after_response(lambda: _safe_insert(entry))
-	except Exception:
-		logger.exception("log_report_run failed")
+	"""Log a run of one of our patient-level reports as action Report (filter names only, no values).
+
+	Skipped while `privacy.read_log` exports the report: the export is logged once, as Export."""
+	if frappe.flags.krcs_report_export:
+		return
+	used = sorted(k for k, v in (filters or {}).items() if v not in (None, "", 0))
+	log_access(
+		ACTION_REPORT,
+		"Report",
+		report_name,
+		patient=patient,
+		detail=("Filters: " + ", ".join(used)) if used else None,
+	)
+
+
+def _check_make_access_log(doctype: str | None, document, report_name: str | None) -> None:
+	if report_name and frappe.db.exists("Report", report_name):
+		if not frappe.get_doc("Report", report_name).is_permitted():
+			frappe.throw(_("Not permitted"), frappe.PermissionError)
+		return
+	if not doctype or not frappe.db.exists("DocType", doctype):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if document not in (None, ""):
+		if not frappe.db.exists(doctype, document) or not frappe.has_permission(
+			doctype, "read", doc=document
+		):
+			frappe.throw(_("Not permitted"), frappe.PermissionError)
+	elif not frappe.has_permission(doctype, "read"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+
+@frappe.whitelist()
+@rate_limit(limit=60, seconds=60)
+def make_access_log(
+	doctype: str | None = None,
+	document: str | int | None = None,
+	method: str | None = None,
+	file_type: str | None = None,
+	report_name: str | None = None,
+	filters: str | list | dict[str, Any] | None = None,
+	page: str | None = None,
+	columns: str | None = None,
+):
+	"""HTTP override of frappe.core.doctype.access_log.access_log.make_access_log (L6).
+
+	Over HTTP anyone could write an Access Log row (and so an Access Log Entry) for any record. This
+	override requires read on the document / DocType, or permission on the report, and rate-limits the
+	call. Server-side callers import the core function directly and are unaffected.
+	"""
+	from frappe.core.doctype.access_log.access_log import make_access_log as core_make_access_log
+
+	_check_make_access_log(doctype, document, report_name)
+	return core_make_access_log(
+		doctype=doctype,
+		document=document,
+		method=method,
+		file_type=file_type,
+		report_name=report_name,
+		filters=filters,
+		page=page,
+		columns=columns,
+	)

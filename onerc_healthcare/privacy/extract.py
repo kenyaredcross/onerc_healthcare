@@ -3,8 +3,8 @@
 """Patient record extract for a Data Access Request (FR-38, SDD §5.10).
 
 `create_extract_file(request)` builds a simple HTML summary of the patient's record on the server and
-saves it as a **private** File attached to the request; the generation is written to the Access Log
-Entry as "Export". Sections are read with `frappe.get_all` (no user permission filter: the action is
+saves it as a **private** File (not attached; see `create_extract_file`); the generation is written to
+the Access Log Entry as "Export", and each download through `download_extract` as "Download". Sections are read with `frappe.get_all` (no user permission filter: the action is
 limited to the HIS Officer after Medical In-Charge approval) and skipped when the DocType or a column
 does not exist on the site. Draft and cancelled clinical records are left out.
 """
@@ -22,9 +22,13 @@ from onerc_healthcare.constants import (
 	DATA_ACCESS_REQUEST_DOCTYPE,
 	ENCOUNTER_DOCTYPE,
 	PATIENT_IDENTIFIER_DOCTYPE,
+	ROLE_HIS,
+	ROLE_MIC,
 	VISIT_DOCTYPE,
 )
+from onerc_healthcare.privacy.lifecycle import has_any_role
 
+EXTRACT_DOWNLOAD_ROLES = (ROLE_HIS, ROLE_MIC)
 PATIENT_FIELDS = ("patient_name", "sex", "dob", "blood_group", "mobile", "email", "status")
 
 # (title, doctype, columns, order_by, submitted_only)
@@ -221,7 +225,13 @@ def build_patient_extract_html(patient: str, request: str | None = None) -> str:
 
 
 def create_extract_file(request_doc):
-	"""Generate the extract for `request_doc`, save it as a private File, and log it as an Export."""
+	"""Generate the extract for `request_doc`, save it as a private File, and log it as an Export.
+
+	The File is deliberately **not attached** to the request and is owned by Administrator: Frappe's
+	`/private/files` check (`File.is_downloadable`) lets the owner and anyone who reads the attached
+	document download it, and the Nurse Receptionist reads requests (H1). It is reachable only through
+	`download_extract`; `privacy.permissions.file_has_permission` closes the other File routes.
+	"""
 	from onerc_healthcare.privacy.access_log import ACTION_EXPORT, write_entry
 
 	html = build_patient_extract_html(request_doc.patient, request_doc.name)
@@ -229,14 +239,12 @@ def create_extract_file(request_doc):
 		{
 			"doctype": "File",
 			"file_name": f"{request_doc.name}-record-extract.html",
-			"attached_to_doctype": DATA_ACCESS_REQUEST_DOCTYPE,
-			"attached_to_name": request_doc.name,
-			"attached_to_field": "extract_file",
 			"is_private": 1,
 			"content": html,
 		}
 	)
 	file_doc.insert(ignore_permissions=True)
+	frappe.db.set_value("File", file_doc.name, "owner", "Administrator", update_modified=False)
 	write_entry(
 		ACTION_EXPORT,
 		reference_doctype=DATA_ACCESS_REQUEST_DOCTYPE,
@@ -245,3 +253,39 @@ def create_extract_file(request_doc):
 		details=f"Patient record extract (HTML), file {file_doc.name}",
 	)
 	return file_doc
+
+
+def can_download_extract(user: str | None = None) -> bool:
+	return has_any_role(EXTRACT_DOWNLOAD_ROLES, user)
+
+
+@frappe.whitelist(methods=["POST"])
+def download_extract(request: str) -> None:
+	"""Stream a request's record extract (HIS Officer, Medical In-Charge). Each download is written to the
+	Access Log Entry as "Download" in this (POST, committed) request, before the file is sent."""
+	from onerc_healthcare.privacy.access_log import ACTION_DOWNLOAD, write_entry
+
+	if not can_download_extract():
+		frappe.throw(
+			_("Only the HIS Officer or the Medical In-Charge can download a record extract."),
+			frappe.PermissionError,
+		)
+	doc = frappe.get_doc(DATA_ACCESS_REQUEST_DOCTYPE, request)
+	doc.check_permission("read")
+	if not doc.extract_file:
+		frappe.throw(_("Request {0} has no record extract.").format(doc.name), frappe.DoesNotExistError)
+	file_name = frappe.db.get_value("File", {"file_url": doc.extract_file}, "name")
+	if not file_name:
+		frappe.throw(_("The record extract of {0} was not found.").format(doc.name), frappe.DoesNotExistError)
+	file_doc = frappe.get_doc("File", file_name)
+	content = file_doc.get_content()
+	write_entry(
+		ACTION_DOWNLOAD,
+		reference_doctype=DATA_ACCESS_REQUEST_DOCTYPE,
+		reference_name=doc.name,
+		patient=doc.patient,
+		details=f"Patient record extract, file {file_doc.name}",
+	)
+	frappe.local.response.filename = file_doc.file_name
+	frappe.local.response.filecontent = content
+	frappe.local.response.type = "download"

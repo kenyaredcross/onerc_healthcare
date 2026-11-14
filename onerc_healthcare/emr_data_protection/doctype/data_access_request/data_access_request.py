@@ -13,6 +13,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_days, getdate, today
 
+from onerc_healthcare.privacy.archive import ARCHIVED_FIELD, can_archive
 from onerc_healthcare.privacy.dar import (
 	ACTION_CREATE,
 	INTAKE_FIELDS,
@@ -39,6 +40,8 @@ from onerc_healthcare.visit.patients import assert_patient_active
 class DataAccessRequest(Document):
 	def onload(self):
 		self.set_onload("available_actions", get_available_actions(self))
+		self.set_onload("can_archive", can_archive(self))
+		self.set_onload("can_download_extract", bool(self.extract_file) and self.has_extract_access())
 		self.set_onload("is_overdue", is_overdue(self))
 		self.set_onload("identity_methods", option_values("identity_method"))
 		self.set_onload("response_methods", option_values("response_method"))
@@ -57,15 +60,24 @@ class DataAccessRequest(Document):
 		if not before:
 			return
 		guard_fields(self, before, PROTECTED_FIELDS)
+		if self.meta.has_field(ARCHIVED_FIELD):
+			guard_fields(self, before, (ARCHIVED_FIELD,))  # only privacy.archive (Medical In-Charge)
 		guard_log(self, before)
 		if before.status != STATUS_RECEIVED:
 			guard_fields(self, before, INTAKE_FIELDS)
 		if self.patient != before.patient:
 			assert_patient_active(self.patient)
 
+	def has_extract_access(self) -> bool:
+		from onerc_healthcare.privacy.extract import can_download_extract
+
+		return can_download_extract()
+
 	def set_received_values(self):
 		for f in PROTECTED_FIELDS:
 			self.set(f, None)
+		if self.meta.has_field(ARCHIVED_FIELD):
+			self.set(ARCHIVED_FIELD, 0)
 		self.status = STATUS_RECEIVED
 		self.received_date = getdate(today())
 		self.due_date = add_days(self.received_date, get_response_days())
