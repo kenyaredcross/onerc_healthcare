@@ -9,7 +9,9 @@ can be delivered. Clinical records cannot be deleted (NFR-9), so what this creat
         --kwargs '{"site": "kalobeyei.localhost"}'
 
 Re-running is safe: users and patients that already exist (by email / identifier) are reused, and a
-patient that already has an open visit gets no new one. Every step runs as the role user who would do it
+patient that already has an open visit gets no new one. Phase 3 adds COMPLETED patients: their visit runs
+through a full consultation with ICD-11 diagnoses (Complete Consultation, outcome recorded), so MOH 705
+and MOH 717 runs on the demo site are not empty; a patient that has any visit already is skipped. Every step runs as the role user who would do it
 in real life, through the normal permission checks and the visit engine.
 """
 
@@ -173,6 +175,91 @@ PATIENTS = (
 )
 
 
+# Phase 3: visits taken through a completed consultation. diagnoses: (ICD-11 code, primary).
+COMPLETED = (
+	{
+		"first": "Nyabol",
+		"last": "Ruot",
+		"sex": "Female",
+		"age": 2,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-25D01733")],
+		"facility": 0,
+		"department": "Maternal and Child Health",
+		"complaint": "Watery diarrhoea for two days",
+		"level": "Urgent",
+		"vitals": ("37.8", "130", "34", "", ""),
+		"diagnoses": (("1A03.Z", 1),),
+	},
+	{
+		"first": "Kiden",
+		"last": "Lado",
+		"sex": "Female",
+		"age": 4,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-24E00418")],
+		"facility": 0,
+		"department": "Maternal and Child Health",
+		"complaint": "Fast breathing and cough",
+		"level": "Urgent",
+		"vitals": ("38.4", "136", "44", "", ""),
+		"diagnoses": (("CA40.Z", 1), ("CA02.Z", 0)),
+	},
+	{
+		"first": "Manyang",
+		"last": "Akech",
+		"sex": "Male",
+		"age": 29,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-23B06120")],
+		"facility": 0,
+		"department": "Outpatient",
+		"complaint": "Fever, chills and headache",
+		"level": "Urgent",
+		"vitals": ("38.9", "108", "22", "118", "74"),
+		"diagnoses": (("1F40.Z", 1),),
+	},
+	{
+		"first": "Riziki",
+		"last": "Furaha",
+		"sex": "Female",
+		"age": 47,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-22C03391")],
+		"facility": 0,
+		"department": "Outpatient",
+		"complaint": "Headache, review of blood pressure",
+		"level": "Non-urgent",
+		"vitals": ("36.8", "84", "18", "168", "102"),
+		"diagnoses": (("BA00.Z", 1),),
+	},
+	{
+		"first": "Nadia",
+		"last": "Uwase",
+		"sex": "Female",
+		"age": 31,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-24F02275")],
+		"facility": 0,
+		"department": "Mental Health",
+		"complaint": "Low mood and poor sleep since losing her husband",
+		"level": "Non-urgent",
+		"vitals": ("36.6", "78", "16", "116", "72"),
+		"diagnoses": (("6A70.Z", 1),),
+		"service": "Psycho-social counselling",
+	},
+	{
+		"first": "Ekwam",
+		"last": "Lotiir",
+		"sex": "Male",
+		"age": 6,
+		"ids": [(IDENTIFIER_ALIEN, "AL-0051207")],
+		"facility": 1,
+		"department": "Outpatient",
+		"complaint": "Runny nose and sore throat",
+		"level": "Non-urgent",
+		"vitals": ("37.6", "98", "22", "", ""),
+		"diagnoses": (("CA00", 1),),
+	},
+)
+HIS_DESIGNATION = "HIS Officer"
+
+
 def seed_demo(site: str) -> dict:
 	"""Create the demo staff and patients on `site` (must equal the current site, as a safety check)."""
 	if site != frappe.local.site:
@@ -194,6 +281,19 @@ def seed_demo(site: str) -> dict:
 				"stage": spec["stage"],
 			}
 		)
+	for spec in COMPLETED:
+		patient = _ensure_patient(spec, users["reception"], facilities[spec["facility"]])
+		visit = _complete_visit(spec, patient, users, facilities[spec["facility"]])
+		created.append(
+			{
+				"patient": patient,
+				"name": f"{spec['first']} {spec['last']}",
+				"visit": visit,
+				"stage": "completed",
+			}
+		)
+	_seed_community_activity(users, facilities[0])
+	frappe.db.set_value("User", users["his"], "krcs_designation", HIS_DESIGNATION)
 	frappe.set_user("Administrator")
 	frappe.db.commit()
 	return {
@@ -315,3 +415,57 @@ def _run_visit(spec: dict, patient: str, users: dict, facility: str) -> str | No
 		transition(visit, "request_lab", system=True, comment="Malaria RDT and full haemogram requested")
 	frappe.set_user("Administrator")
 	return visit
+
+
+def _complete_visit(spec: dict, patient: str, users: dict, facility: str) -> str | None:
+	"""Register, triage, route, consult with diagnoses and complete (Phase 3). Skipped when the patient
+	already has a visit, so a re-run adds nothing."""
+	from onerc_healthcare.clinical.consultation import complete_consultation, start_consultation
+
+	if frappe.db.exists("Patient Visit", {"patient": patient}):
+		return frappe.db.get_value("Patient Visit", {"patient": patient}, "name")
+	department = spec["department"]
+	visit = _run_visit({**spec, "stage": f"routed:{department}"}, patient, users, facility)
+	clinician = users["mho"] if department == "Mental Health" else users["clinician"]
+	frappe.set_user(clinician)
+	encounter = start_consultation(visit)["encounter"]
+	doc = frappe.get_doc("Patient Encounter", encounter)
+	for code, primary in spec["diagnoses"]:
+		doc.append("krcs_diagnoses", {"code": f"{code}-ICD-11", "is_primary": primary, "case_type": "New"})
+	doc.save()
+	complete_consultation(encounter)
+	if spec.get("service"):
+		frappe.get_doc(
+			{
+				"doctype": "Service Delivered",
+				"visit": visit,
+				"service_type": spec["service"],
+				"service_date": nowdate(),
+				"notes": "Demo: first counselling session (fictional).",
+			}
+		).insert()
+	frappe.set_user("Administrator")
+	return visit
+
+
+def _seed_community_activity(users: dict, facility: str) -> None:
+	"""One submitted health talk (MOH 717 community lines); skipped if a demo one exists."""
+	topic = "Demo: hand washing and safe water storage (fictional)"
+	if frappe.db.exists("Community Activity Record", {"topic": topic}):
+		return
+	frappe.set_user(users["clinician"])
+	frappe.get_doc(
+		{
+			"doctype": "Community Activity Record",
+			"activity_type": "Health Talk",
+			"activity_date": nowdate(),
+			"facility": facility,
+			"location": "Village 3 community hall",
+			"topic": topic,
+			"participants_male": 14,
+			"participants_female": 23,
+			"participants_total": 37,
+			"lead_staff": users["clinician"],
+		}
+	).insert().submit()
+	frappe.set_user("Administrator")
