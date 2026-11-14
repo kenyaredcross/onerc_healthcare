@@ -1,0 +1,288 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 15:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "EMR Outreach",
+ "name": "Outreach Sync Record",
+ "owner": "Administrator",
+ "modified": "2026-11-14 15:00:00.000000",
+ "modified_by": "Administrator",
+ "field_order": [
+  "client_uuid",
+  "record_type",
+  "status",
+  "captured_at",
+  "column_break_header",
+  "session",
+  "user",
+  "device_id",
+  "batch",
+  "result_section",
+  "target_doctype",
+  "target_name",
+  "patient",
+  "conflict",
+  "column_break_result",
+  "error",
+  "attempts",
+  "first_received_at",
+  "last_received_at",
+  "applied_at",
+  "acknowledged_result",
+  "payload_section",
+  "depends_on",
+  "payload"
+ ],
+ "fields": [
+  {
+   "fieldname": "client_uuid",
+   "fieldtype": "Data",
+   "label": "Client UUID",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "Idempotency key: created on the device when the record was finished.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "record_type",
+   "fieldtype": "Select",
+   "label": "Record Type",
+   "options": "patient.register\npatient.update\nvisit.capture\ncommunity.activity",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Accepted\nFailed\nHeld\nConflict\nDiscarded",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "captured_at",
+   "fieldtype": "Datetime",
+   "label": "Captured At",
+   "description": "Clinical time on the device (site timezone).",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "session",
+   "fieldtype": "Link",
+   "label": "Outreach Session",
+   "options": "Outreach Session",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "device_id",
+   "fieldtype": "Data",
+   "label": "Device ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch",
+   "fieldtype": "Link",
+   "label": "Last Batch",
+   "options": "Outreach Sync Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "label": "Record DocType",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Record",
+   "options": "target_doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "conflict",
+   "fieldtype": "Link",
+   "label": "Sync Conflict",
+   "options": "Sync Conflict",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_received_at",
+   "fieldtype": "Datetime",
+   "label": "First Received At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_received_at",
+   "fieldtype": "Datetime",
+   "label": "Last Received At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "applied_at",
+   "fieldtype": "Datetime",
+   "label": "Applied At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "acknowledged_result",
+   "fieldtype": "Small Text",
+   "label": "Acknowledged Result",
+   "description": "The result last returned to the device (JSON).",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payload_section",
+   "fieldtype": "Section Break",
+   "label": "Payload",
+   "collapsible": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "depends_on",
+   "fieldtype": "Small Text",
+   "label": "Depends On",
+   "description": "Client UUIDs this record needs (JSON list).",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "JSON",
+   "label": "Payload",
+   "description": "The offline record as received. Kept even when discarded (nothing is deleted).",
+   "permlevel": 1,
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 1,
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 0,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 1,
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 0,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  }
+ ],
+ "links": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:client_uuid",
+ "naming_rule": "By fieldname",
+ "in_create": 1,
+ "track_changes": 1,
+ "title_field": "client_uuid",
+ "description": "One offline record received from an outreach device (OUT-14..16): idempotency key and store of held data."
+}

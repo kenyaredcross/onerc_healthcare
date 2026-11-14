@@ -1,0 +1,189 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 15:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "EMR Outreach",
+ "name": "Outreach Sync Batch",
+ "owner": "Administrator",
+ "modified": "2026-11-14 15:00:00.000000",
+ "modified_by": "Administrator",
+ "field_order": [
+  "batch_id",
+  "session",
+  "device_id",
+  "user",
+  "column_break_times",
+  "started_at",
+  "finished_at",
+  "calls",
+  "counts_section",
+  "received",
+  "accepted",
+  "duplicate",
+  "column_break_counts",
+  "failed",
+  "held",
+  "conflict"
+ ],
+ "fields": [
+  {
+   "fieldname": "batch_id",
+   "fieldtype": "Data",
+   "label": "Batch ID",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Client UUID of the sync call; a re-sent call reuses it.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "session",
+   "fieldtype": "Link",
+   "label": "Outreach Session",
+   "options": "Outreach Session",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "device_id",
+   "fieldtype": "Data",
+   "label": "Device ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_times",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "finished_at",
+   "fieldtype": "Datetime",
+   "label": "Finished At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calls",
+   "fieldtype": "Int",
+   "label": "Calls Received",
+   "default": "0",
+   "description": "How many times this batch was sent (re-sends reuse the batch).",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counts_section",
+   "fieldtype": "Section Break",
+   "label": "Records (last call)"
+  },
+  {
+   "fieldname": "received",
+   "fieldtype": "Int",
+   "label": "Received",
+   "default": "0",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "accepted",
+   "fieldtype": "Int",
+   "label": "Accepted",
+   "default": "0",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "duplicate",
+   "fieldtype": "Int",
+   "label": "Duplicate",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_counts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "failed",
+   "fieldtype": "Int",
+   "label": "Failed",
+   "default": "0",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "held",
+   "fieldtype": "Int",
+   "label": "Held",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "conflict",
+   "fieldtype": "Int",
+   "label": "Conflict",
+   "default": "0",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  }
+ ],
+ "links": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "hash",
+ "in_create": 1,
+ "track_changes": 0,
+ "title_field": "session",
+ "description": "One call of outreach.sync.push (OUT-17). Written by the server only; read-only log."
+}

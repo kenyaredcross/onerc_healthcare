@@ -1,0 +1,331 @@
+{
+ "actions": [],
+ "creation": "2026-11-14 15:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "EMR Outreach",
+ "name": "Sync Conflict",
+ "owner": "Administrator",
+ "modified": "2026-11-14 15:00:00.000000",
+ "modified_by": "Administrator",
+ "field_order": [
+  "naming_series",
+  "conflict_type",
+  "status",
+  "review_only",
+  "summary",
+  "column_break_header",
+  "patient",
+  "patient_name",
+  "session",
+  "sync_record",
+  "raised_by",
+  "raised_at",
+  "versions_section",
+  "comparison_html",
+  "facility_version",
+  "outreach_version",
+  "candidates",
+  "resolution_section",
+  "decision",
+  "chosen_patient",
+  "resolved_by",
+  "resolved_at",
+  "column_break_resolution",
+  "reason",
+  "result_note",
+  "chosen_fields",
+  "log_section",
+  "log"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "SCF-.YYYY.-",
+   "default": "SCF-.YYYY.-",
+   "reqd": 1,
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
+  {
+   "fieldname": "conflict_type",
+   "fieldtype": "Select",
+   "label": "Conflict Type",
+   "options": "Duplicate registration\nDemographic change\nOverlapping visit",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nResolved",
+   "default": "Open",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "review_only",
+   "fieldtype": "Check",
+   "label": "Review Only",
+   "default": "0",
+   "description": "The outreach record was applied; the reviewer only confirms both visits stand.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "session",
+   "fieldtype": "Link",
+   "label": "Outreach Session",
+   "options": "Outreach Session",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sync_record",
+   "fieldtype": "Link",
+   "label": "Sync Record",
+   "options": "Outreach Sync Record",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raised_by",
+   "fieldtype": "Link",
+   "label": "Captured By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raised_at",
+   "fieldtype": "Datetime",
+   "label": "Raised At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "versions_section",
+   "fieldtype": "Section Break",
+   "label": "Facility and Outreach Versions",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "comparison_html",
+   "fieldtype": "HTML",
+   "label": "Comparison",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "facility_version",
+   "fieldtype": "JSON",
+   "label": "Facility Version",
+   "hidden": 1,
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "outreach_version",
+   "fieldtype": "JSON",
+   "label": "Outreach Version",
+   "hidden": 1,
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "candidates",
+   "fieldtype": "JSON",
+   "label": "Candidates",
+   "hidden": 1,
+   "permlevel": 1,
+   "description": "Matched existing patients with their similarity score (duplicate registration).",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolution_section",
+   "fieldtype": "Section Break",
+   "label": "Resolution"
+  },
+  {
+   "fieldname": "decision",
+   "fieldtype": "Select",
+   "label": "Decision",
+   "options": "\nKeep facility version\nKeep outreach version\nMerge field by field\nLink as the same patient\nReviewed - keep both",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "chosen_patient",
+   "fieldtype": "Link",
+   "label": "Existing Patient Chosen",
+   "options": "Patient",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_by",
+   "fieldtype": "Link",
+   "label": "Resolved By",
+   "options": "User",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_at",
+   "fieldtype": "Datetime",
+   "label": "Resolved At",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_resolution",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "result_note",
+   "fieldtype": "Small Text",
+   "label": "Result",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "chosen_fields",
+   "fieldtype": "JSON",
+   "label": "Fields Chosen (Merge)",
+   "hidden": 1,
+   "no_copy": 1,
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "log_section",
+   "fieldtype": "Section Break",
+   "label": "History",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "log",
+   "fieldtype": "Table",
+   "label": "Log",
+   "options": "Sync Conflict Log",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "HIS Officer",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 0,
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 1,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "HIS Officer",
+   "permlevel": 1,
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 0,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  },
+  {
+   "role": "Medical In-Charge",
+   "permlevel": 1,
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 0,
+   "export": 0,
+   "print": 0,
+   "email": 0,
+   "share": 0
+  }
+ ],
+ "links": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "naming_series:",
+ "naming_rule": "By \"Naming Series\" field",
+ "in_create": 1,
+ "track_changes": 1,
+ "title_field": "summary",
+ "description": "A synced outreach record that clashes with the facility record (FR-26, OUT-19..23). Resolved by the HIS Officer, the Medical In-Charge as backup."
+}
