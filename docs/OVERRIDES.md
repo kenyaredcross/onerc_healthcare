@@ -109,6 +109,7 @@ Events on our own DocTypes live in their controllers and are not listed here.
 | `has_permission` | **File** (Frappe) | `privacy.permissions.file_has_permission` | Denies every user except Administrator access to the private record **extract** of a Data Access Request. Other request attachments, such as an authorisation scan, follow Frappe's normal rules. Frappe would otherwise let anyone who can read the request download the full clinical-record extract (H1). The extract is served only by `privacy.extract.download_extract` (HIS Officer, Medical In-Charge; logged). |
 | `has_permission`, `permission_query_conditions` | **Patient Encounter** (Marley) | `clinical.permissions.encounter_*` | Refuses `cancel` and `amend` before Marley's `before_cancel` runs (D29). Mental Health visibility is a pass-through until OI-7. |
 | `has_permission`, `permission_query_conditions` | Patient Visit, Access Log Entry (ours) | `visit.permissions.*`, `privacy.permissions.*` | Listed for completeness. These are our own DocTypes. |
+| `has_permission`, `permission_query_conditions` | Outreach Session (ours, Phase 4) | `outreach.permissions.*` | An Outreach Team Member reads only the sessions they are on; managers see all (D58). |
 
 ---
 
@@ -120,6 +121,8 @@ Events on our own DocTypes live in their controllers and are not listed here.
 | `boot_session` | `boot.boot_session` | Narrows each Marley sidebar's `workspaces` list to the workspaces it links to. All eight Marley sidebars share one module, so the desk opened the Healthcare page under the Diagnostics sidebar (D26). Only the boot payload changes; nothing is stored. |
 | `scheduler_events` (every 10 minutes) | `visit.tasks.reconcile_open_tasks` | Catches lab or pharmacy completion events that a race or a skipped event missed (D36). |
 | `company_data_to_be_ignored` | `CLINICAL_DOCTYPES` | ERPNext's "Delete Company Transactions" skips these DocTypes (NFR-9, D17). |
+| `auth_hooks` (Phase 4) | `outreach.auth.authenticate_device` | Runs inside Frappe's `validate_auth` on every request. It does nothing unless the `Authorization` scheme is `krcs-outreach`. With that scheme, it accepts the device grant only on `sync.push`, `sync.status`, `package.get_reference` and `package.get_patients`, and sets the grant's user. Any other path with that scheme gets 401. The outreach tablet then syncs without a desk session or CSRF cookie (D58, `docs/OUTREACH_PROTOCOL.md`). |
+| `website_route_rules` (Phase 4) | `/outreach/<path:app_path>` → `www/outreach.py` | Serves the React offline app, and its service worker at `/outreach/sw.js` with `Service-Worker-Allowed: /outreach/`. |
 
 ---
 
@@ -129,7 +132,7 @@ Our JavaScript is loaded **in addition to** Marley's.
 
 | DocType | Script | What it changes in the form |
 |---|---|---|
-| Patient | `registration/patient.js`, `privacy/patient.js` | Search-first dialog, possible-duplicates dialog, Link Identifier and Merge menu, consent status and Record Consent. |
+| Patient | `registration/patient.js`, `privacy/patient.js`, `outreach/patient.js` | Search-first dialog, possible-duplicates dialog, Link Identifier and Merge menu, consent status and Record Consent. Phase 4: a banner when outreach records for the patient wait on a Sync Conflict (FR-26). |
 | Vital Signs | `visit/vital_signs.js` | Links the patient's open visit automatically. Adds the Route to Department dialog. |
 | Patient Encounter | `clinical/patient_encounter.js` | Consultation buttons (Send Lab Orders, Complete, Refer, Addendum), the lab results and history panels, and the drug query on our non-stock catalogue. Hides Marley's Refer, create-order and delete-note buttons and the Submit, Cancel and Amend buttons. |
 | Service Request | `lab/service_request.js` | Lab order view. |
@@ -191,6 +194,16 @@ JSON gets them back.
 
 ---
 
+### Phase 4 role-gate exception (not a Marley override)
+
+`clinical.utils.has_any_role` accepts the user of an active `outreach.context.outreach_actor`. Only `outreach.sync` and the conflict replay enter that context, after checking the device grant and session membership. It lets a synced record pass the same consultation role gates as the desk, without the Outreach Team Member holding any clinical DocPerm (D58). `outreach/apply.py` lists every DocPerm skip it makes (`# DocPerm:` comments). Validations and controller hooks all still run.
+
+### Medication dose interval (DEFECT-RX-1)
+
+Marley's `DrugPrescription.get_quantity()` multiplies the daily dose by the course length only when the prescription has an interval. Our seeded Medications now have `default_interval = 1 Day` (`pharmacy/catalogue.py`, patch `medication_default_interval`). Without it, the prescribed quantity was one day's dose, and dispensing a full course was refused.
+
+---
+
 ## 8. Marley internals we call directly
 
 These Marley functions are imported by our code instead of going through their HTTP endpoint. A Marley
@@ -202,6 +215,7 @@ upgrade that changes their signature or behaviour breaks us.
 | `lab/api.py::get_encounter_results` | `observation.ensure_result_flag`, `observation.get_child_observations` |
 | `clinical/consultation.py` | `PatientEncounter.make_service_request()` and its submit path (`on_submit` creates the Medication Requests) |
 | `clinical/guards.py`, `lab/guards.py` | the original endpoint functions they wrap or delegate to |
+| `outreach/apply.py` (Phase 4) | `observation.new_observation`, `sample_collection.update_collection_status`, `PatientEncounter.make_service_request()`, and `DrugPrescription.get_quantity()` (via the encounter submit). A point-of-care result is recorded the way Marley's `collect_sample` / `create_observation` do it, without their Sample Collection DocPerm check (D58). |
 
 ---
 
