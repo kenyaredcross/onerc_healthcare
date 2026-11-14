@@ -227,3 +227,90 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 - **Not logged:** Administrator.
 - **Refused:** bulk Data Import export of clinical records, except for System Manager.
 - **Extracts:** Data Access Request extracts are never served as files, only through the logged `download_extract` (HIS, MIC). Other request attachments, such as authorisation scans, follow normal rules; the MIC has write on the request so it can attach them.
+
+## Phase 3: MOH reporting and data-capture gaps, 2026-11-14
+
+**D45. Everything MOH is provisional (OI-5).**
+- The 705A/705B category lists, their ICD-11 mappings, MOH 717 and the MOH 711 rehabilitation and social work section are seeded as "Active - Provisional". Exports carry a PROVISIONAL banner.
+- MOH 711 RH-MCH, 747A, 643B and the Mental Health Clinic Report exist as **Blocked** definitions with no elements:
+  - 711 RH-MCH waits for OI-5.
+  - 747A and 643B wait for OI-5; their FCDRR forms also need stock, which conflicts with C-5.
+  - The Mental Health Clinic Report waits for OI-24.
+- Elements the EMR cannot capture yet are "Gap" elements: shown blank with a note, never computed.
+
+**D46. Seeds never overwrite HIS edits.**
+- Report definitions carry a `seed_hash`. Categories and mappings carry a "Seed v1" marker plus a hash.
+- A seed updates a row only while the row still matches the last seed. Rows created in the desk are never touched.
+- A seed that fails validation is skipped and logged; it never breaks a migrate.
+
+**D47. MOH 705 counting rule** (user decision 2026-11-13, R2):
+- **What counts:** New diagnoses only, primary and secondary.
+- **Once per episode:** each category counts once per encounter, and an internal-referral chain counts as one episode. This applies at the earliest encounter in the chain that has the category, and a category already counted in an earlier period is not counted again.
+- **Group priority:** confirmed malaria needs an approved positive RDT or slide on the same encounter, otherwise the case is clinical malaria. A specific injury beats "Other injuries".
+- **Unmapped codes** go to "All other diseases" and appear on the exceptions list.
+- **Age** is age at the encounter date: under 60 months goes to 705A, 60 months and over to 705B.
+- **Missing date of birth:** the diagnosis is counted on neither form and listed as an exception.
+- **Wrong form:** a category not on the patient's form (e.g. Hypertension for a child under 5) goes to "All other diseases".
+- **Monthly totals:** no day-of-month columns.
+
+**D48. Mapping precedence:** Exact code > longest Prefix > deepest ICD-11 Block > catch-all.
+- Blocks come from the WHO 2025-01 Grouping1–5 columns.
+- The primary tabulation is stored for information only.
+- Categories with no ICD-11 equivalent are Gap elements and remain OI-5 questions: diarrhoea dehydration grade, severe pneumonia, dog vs other bites, snake bites.
+
+**D49. Base filters for every MOH count** (`reporting/filters.py`):
+- **Excluded:**
+  - visits closed as "Registered in error" or "Superseded by a new visit";
+  - archived visits and encounters;
+  - patients merged into another record;
+  - draft and cancelled encounters;
+  - anything the reserved `krcs_report_exclusions` hook excludes (migrated SmartCare history, FR-43, waits for OI-4).
+- **Not excluded:** archived *patients*, because the care was given.
+- **Ages:** in completed months, computed identically in SQL and in Python (29 February: 11 months on 28 Feb of the next year).
+
+**D50. Attendance.**
+- **Rule:** a visit is "New" when it is the patient's first visit to this facility in the calendar year. Otherwise it is a "Re-attendance".
+- **Reception override:** "Seen here before (SmartCare)", ticked at registration, makes a would-be New visit a re-attendance. Settings can switch this off.
+- **Corrections:** the receptionist may correct attendance while the visit is Registered, and the HIS Officer at any time, with a reason, through `engine.annotate`. The Medical In-Charge cannot correct attendance.
+- **Internal referrals:** a visit created by an internal referral is a re-attendance.
+- **Department attribution (MOH 717):** a visit counts for the department it was last routed to. Internal-referral visits count for the receiving clinic but not again in the facility totals. "Left before being seen" is excluded from attendance, as a rule setting the HIS Officer can change.
+
+**D51. Visit outcome.**
+- **Values:** Discharged home, Admitted, Referred out, Referred internally, Died, Left without completing, Not applicable.
+- **Recorded by the closing action:**
+  - Complete Consultation: Discharged home by default, Admitted or Died.
+  - Refer: Referred out or Referred internally, from the referral type.
+  - Close Visit: implied by the closure reason; with "Other" the user chooses.
+- **Close Visit after completion:** a later Close Visit keeps the consultation's outcome unless the reason is Died.
+- **Death:** "Died" (outcome or closure reason) needs Clinical Officer, Mental Health Officer or Medical In-Charge.
+- **Closed visits before Phase 3:** outcomes are back-filled from their history by a patch.
+
+**D52. Estimated date of birth.**
+- New patients need an exact DOB or an estimated age.
+- With an estimated age, DOB = estimate date minus the age (same day of month, clamped at month end), and the record is flagged "DOB estimated".
+- An exact DOB entered later clears the flag. Existing patients without a DOB are asked for one only when the DOB fields are changed.
+- The duplicate check widens to ±2 years when either DOB is estimated.
+
+**D53. Service Delivered and Community Activity Record.**
+- **Service Delivered:**
+  - It is a separate DocType, not a child table of Patient Visit, which would show social-work details to every visit reader. It is access-logged.
+  - The Clinical Officer or Mental Health Officer records it. The Medical In-Charge edits and voids. It is voided with a reason, never deleted.
+- **Community Activity Record:**
+  - It is submittable. Cancelling needs a reason.
+  - Sessions and participants feed MOH 717.
+
+**D54. MOH Report Run.**
+- **Lifecycle:** a status lifecycle (D8 pattern): Draft → Generated → Submitted → Superseded, plus Void from Draft or Generated with a reason. Revise needs a reason and creates a new Draft that supersedes the submitted run.
+- **One active run** per report, facility and period.
+- **Snapshot:** a generated run stores a snapshot (aggregates and fingerprints of the definition and mapping). Exports and the API read only the snapshot. A Submitted run is immutable.
+- **Generation:** synchronous, or on the long queue for ranges over 92 days.
+- **Periods:** calendar months and quarters (Q1 = January to March, as in DHIS2), ending no later than today.
+- **Who sees what:**
+  - Exceptions hold record IDs only and sit at permlevel 1 (HIS Officer, Medical In-Charge).
+  - The Head of Operations reads runs (aggregates) only.
+  - `track_changes` is off, for the same reason as D43.
+
+**D55. Aggregate API and the MOH Data Reader role.**
+- `reporting.api` has three methods, all GET only: `list_reports`, `list_runs` and `get_report_values`.
+- Allowed roles: HIS Officer, Medical In-Charge and the API-only role "MOH Data Reader". The role has no desk access and no users until the DHIS2 link exists.
+- Calls are rate-limited and access-logged. The Head of Operations is refused.
