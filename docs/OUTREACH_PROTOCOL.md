@@ -247,3 +247,46 @@ The server creates and submits a Community Activity Record with `facility` = the
 - **Wrong PINs.** After `max_pin_attempts` wrong PINs, the wrapped key is deleted. Recovery is an online sign-in followed by `recover_key`.
 - **Expiry.** After `expires_at`, unlock is refused until an online sign-in, which runs `enrol` again (a new secret and new expiry, same data key).
 - **Retention.** A record stays in the outbox until it has a final result. It is then purged `purge_after_days` later. Records that are failed, held or in conflict are never purged.
+
+## 6. Fix round 1 (review findings M1–M4, L1–L3, L5; 2026-11-14). These rules override earlier sections.
+
+**F1. Closed sessions still sync their records (M1, NFR-11).**
+- **Closed** means "no new work":
+  - `enrol` is refused for a new device;
+  - the package endpoints are refused.
+- **What still works on a Closed session:**
+  - The grant keeps working for `sync.push` and `sync.status` until `expires_at`. Records captured during the session are still accepted, so nothing on a tablet is lost.
+  - `enrol` is still allowed to **renew** an existing grant for the same user and device. It gives a new secret and a new expiry, so a device whose grant expired after the session closed can still deliver its records.
+- **Cancelled** sessions refuse everything.
+- **Closing** is also refused while the session has **Failed** records, as well as Held or Conflict ones.
+
+**F2. Correcting a failed record (M2).**
+- The device may edit a record whose result is `failed` and send it again **with the same `client_uuid`**. The server stores the new payload, re-applies it, and records the attempt.
+- Accepted, Held, Conflict and Discarded records are never re-applied, whatever payload is sent.
+
+**F3. Dispensing in the field (M2, D58).**
+- `get_reference` adds:
+  - `dosage_units`: `{"<Prescription Dosage>": <doses per day>}`;
+  - `period_days`: `{"<Prescription Duration>": <days>}`.
+- The prescribed quantity of a line is `dosage_units[dosage] × period_days[period]`, at least 1. That matches the server (daily interval, DEFECT-RX-1). The app shows it and does not allow more to be dispensed.
+- A field dispense closes the line (`final`), so the facility pharmacy does not dispense it again. A partial dispense is recorded as given.
+
+**F4. `patient.update` without false conflicts (M3).**
+- **New payload key `base_values`:** `{field: value as downloaded}` for each key in `changes`.
+- **When the server raises a conflict:** only for a changed field whose server value now differs from its `base_values` value (the facility changed it) **and** differs from the device's value.
+- **Without `base_values`,** the old `base_modified` rule applies.
+- **Refused as `failed`:** a `base_modified` later than the patient's current `modified`.
+- **The `accepted` result** of a `patient.update` carries `"modified"`, the patient's new `modified`. The device updates its local base, so a second edit on the same device chains correctly.
+
+**F5. Patients a session may touch (M4).**
+- `patient.update` and `visit.capture` (with `patient`) are accepted only for a patient who either:
+  - lives in the session's catchment area; or
+  - was registered or linked through this session's sync records.
+- Any other patient gets `failed`: "This patient is not in the session's catchment area."
+
+**F6. Robustness (L1–L3).**
+- **Deadlocks:** a database deadlock or lock timeout while storing a record gives that record `failed` ("busy, try again"), not a failed call.
+- **Held records:** records still Held on a **Resolved** conflict are replayed on the next `sync.push` or `sync.status` of the session.
+- **Role check:** the grant is refused (401), and `push` is refused, once the user no longer holds the Outreach Team Member role.
+
+**F7. App shell (L5).** The cached `/outreach` page carries **no** CSRF token or user. The app gets them from `www.outreach.get_boot` when it is online.
