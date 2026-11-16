@@ -89,27 +89,6 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"link_type": "Report",
 				"link_to": "MOH Mapping Coverage",
 			},
-			# Phase 4: medical outreach (sessions, devices, sync and conflicts)
-			{"key": "krcs-outreach-section", "type": "Section Break", "label": "Outreach"},
-			{"key": "krcs-outreach-session", "label": "Outreach Session", "link_to": "Outreach Session"},
-			{"key": "krcs-sync-conflict", "label": "Sync Conflict", "link_to": "Sync Conflict"},
-			{
-				"key": "krcs-outreach-sync-record",
-				"label": "Outreach Sync Record",
-				"link_to": "Outreach Sync Record",
-			},
-			{
-				"key": "krcs-outreach-sync-batch",
-				"label": "Outreach Sync Batch",
-				"link_to": "Outreach Sync Batch",
-			},
-			{"key": "krcs-catchment-area", "label": "Catchment Area", "link_to": "Catchment Area"},
-			{"key": "krcs-outreach-device", "label": "Outreach Device", "link_to": "Outreach Device"},
-			{
-				"key": "krcs-outreach-device-grant",
-				"label": "Outreach Device Grant",
-				"link_to": "Outreach Device Grant",
-			},
 		],
 	),
 	"Diagnostics": (
@@ -164,12 +143,6 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"label": "Community Activity Type",
 				"link_to": "Community Activity Type",
 			},
-			# Phase 4
-			{
-				"key": "krcs-outreach-settings",
-				"label": "EMR Outreach Settings",
-				"link_to": "EMR Outreach Settings",
-			},
 		],
 	),
 }
@@ -208,12 +181,23 @@ def _desired_rows(sidebar: str) -> list[dict]:
 	]
 
 
+# Phase 4: Outreach has its own sidebar and workspace (`emr_outreach/sidebar/outreach`,
+# `emr_outreach/workspace/outreach`), placed in Marley's dock next to Outpatient, Inpatient and Rehabilitation.
+# The dock row is written directly, like the sidebar rows: Marley's Dock document is never saved.
+MARLEY_DOCK = "healthcare"
+DOCK_ROWS = (
+	# (title, sidebar it opens, icon, insert after this sidebar)
+	("Outreach", "Outreach", "route", "Rehabilitation"),
+)
+
+
 def install() -> bool:
-	"""Apply SIDEBAR_ROWS. Returns True when anything changed."""
+	"""Apply SIDEBAR_ROWS and DOCK_ROWS. Returns True when anything changed."""
 	changed = False
 	for sidebar, (anchor, _rows) in SIDEBAR_ROWS.items():
 		if frappe.db.exists("Sidebar", sidebar):
 			changed |= _apply(sidebar, anchor, _desired_rows(sidebar))
+	changed |= apply_dock()
 	if changed:
 		frappe.clear_cache()
 	return changed
@@ -269,3 +253,57 @@ def _apply(sidebar: str, anchor: str | None, desired: list[dict]) -> bool:
 
 def _matches(row, values: dict) -> bool:
 	return all((row.get(k) or None) == (v or None) for k, v in values.items() if k in row)
+
+
+def apply_dock() -> bool:
+	"""Put each DOCK_ROWS entry in Marley's dock after its anchor (idempotent). Returns True when changed."""
+	if not frappe.db.exists("Dock", MARLEY_DOCK):
+		return False
+	changed = False
+	for title, sidebar, icon, after in DOCK_ROWS:
+		if not frappe.db.exists("Sidebar", sidebar):
+			continue
+		rows = frappe.get_all(
+			"Dock Item",
+			filters={"parent": MARLEY_DOCK, "parenttype": "Dock", "parentfield": "items"},
+			fields=["name", "idx", "link_type", "link_to", "title", "icon"],
+			order_by="idx asc",
+		)
+		mine = [r for r in rows if r.link_type == "Sidebar" and r.link_to == sidebar]
+		others = [r for r in rows if r not in mine]
+		position = next((i + 1 for i, r in enumerate(others) if r.link_to == after), len(others))
+		order = [r.name for r in others[:position]] + ["__mine__"] + [r.name for r in others[position:]]
+		current = [("__mine__" if r in mine else r.name) for r in rows]
+		if len(mine) == 1 and current == order and (mine[0].title, mine[0].icon) == (title, icon):
+			continue
+		for r in mine[1:]:
+			frappe.db.delete("Dock Item", {"name": r.name})
+		if mine:
+			name = mine[0].name
+			frappe.db.set_value(
+				"Dock Item", name, {"title": title, "icon": icon, "hidden": 0}, update_modified=False
+			)
+		else:
+			doc = frappe.get_doc(
+				{
+					"doctype": "Dock Item",
+					"name": frappe.generate_hash(length=10),
+					"parent": MARLEY_DOCK,
+					"parenttype": "Dock",
+					"parentfield": "items",
+					"title": title,
+					"link_type": "Sidebar",
+					"link_to": sidebar,
+					"icon": icon,
+					"added": 0,
+					"hidden": 0,
+				}
+			)
+			doc.db_insert()
+			name = doc.name
+		for idx, row_name in enumerate(order, start=1):
+			frappe.db.set_value(
+				"Dock Item", name if row_name == "__mine__" else row_name, "idx", idx, update_modified=False
+			)
+		changed = True
+	return changed

@@ -177,6 +177,7 @@ JSON gets them back.
 |---|---|---|
 | Workspaces Healthcare, Outpatient, Diagnostics | `visit/workspaces.py` | Department queue blocks, worklists and Visit Overview cards. Billing shortcuts and cards are removed by rule (D24). |
 | Sidebars Healthcare, Diagnostics, Healthcare Setup | `desk_sidebar.py` | Rows claiming our DocTypes and reports (`key` starts with `krcs-`), so they open under Marley's sidebars (D25). |
+| Marley's Dock (`healthcare`) | `desk_sidebar.apply_dock` | Phase 4: one **Outreach** row after Rehabilitation, opening our own Outreach sidebar (`emr_outreach/sidebar/outreach`) and workspace (`emr_outreach/workspace/outreach`), so Outreach is an area like Outpatient or Inpatient. |
 | Billing Workspaces (Accounting, Invoicing, Payments, Financial Reports, Selling, Buying, Stock, Insurance) | `security/setup.py` | A roles table limited to native ERPNext/Marley roles, so EMR users don't see them (C-5). |
 
 ### Permissions, settings and records

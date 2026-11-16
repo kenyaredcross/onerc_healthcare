@@ -3,7 +3,7 @@
 This guide is for outreach team members, the HIS Officer and the Medical In-Charge.
 
 ## Before the session (HIS Officer or Medical In-Charge, on the desk)
-1. **Catchment Area** (Healthcare → Outreach): name the area, choose the facility, and list the residence locations it covers. Each location includes everything under it.
+1. **Catchment Area** (the **Outreach** area in Marley's dock, beside Outpatient, Inpatient and Rehabilitation): name the area, choose the facility, and list the residence locations it covers. Each location includes everything under it.
 2. **Outreach Session**:
    - title, facility, catchment area and dates;
    - the **team members**, each holding the Outreach Team Member role (tick the team lead);
@@ -45,7 +45,7 @@ This guide is for outreach team members, the HIS Officer and the Medical In-Char
 - When back at the facility, the team lead marks the session **Returned** from the app's home screen.
 
 ## Sync conflicts (HIS Officer, or Medical In-Charge as backup)
-Desk → Healthcare → **Open Sync Conflicts** (also a shortcut on the HIS block). A patient with an open conflict shows an orange banner on their record. Open a conflict to see both versions side by side, then choose:
+Desk → **Outreach** → **Open Sync Conflicts** (also a shortcut on the HIS block of the Healthcare page). A patient with an open conflict shows an orange banner on their record. Open a conflict to see both versions side by side, then choose:
 
 | Conflict | Choices |
 |---|---|

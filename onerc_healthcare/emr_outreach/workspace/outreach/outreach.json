@@ -1,0 +1,110 @@
+{
+ "app": "onerc_healthcare",
+ "charts": [],
+ "content": "[{\"id\":\"krcs-out-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Outreach</span>\",\"col\":12}},{\"id\":\"krcs-out-s0\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Open Sync Conflicts\",\"col\":4}},{\"id\":\"krcs-out-s1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outreach Session\",\"col\":4}},{\"id\":\"krcs-out-s2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Catchment Area\",\"col\":4}},{\"id\":\"krcs-out-s3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outreach Device\",\"col\":4}},{\"id\":\"krcs-out-s4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outreach Sync Batch\",\"col\":4}},{\"id\":\"krcs-out-s5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outreach Sync Record\",\"col\":4}},{\"id\":\"krcs-out-s6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Open the outreach app\",\"col\":4}},{\"id\":\"krcs-out-ql\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Waiting for the HIS Officer</span>\",\"col\":12}},{\"id\":\"krcs-out-q1\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Open Sync Conflicts\",\"col\":6}},{\"id\":\"krcs-out-q2\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Sessions in the Field\",\"col\":6}}]",
+ "creation": "2026-11-16 09:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "route",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Outreach",
+ "link_type": "DocType",
+ "links": [],
+ "modified": "2026-11-16 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Outreach",
+ "name": "Outreach",
+ "number_cards": [],
+ "owner": "Administrator",
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "Sync Conflict",
+   "label": "Open Sync Conflicts",
+   "quick_list_filter": "[[\"Sync Conflict\", \"status\", \"=\", \"Open\"]]"
+  },
+  {
+   "document_type": "Outreach Session",
+   "label": "Sessions in the Field",
+   "quick_list_filter": "[[\"Outreach Session\", \"status\", \"in\", [\"Active\", \"Returned\"]]]"
+  }
+ ],
+ "roles": [
+  {
+   "role": "HIS Officer"
+  },
+  {
+   "role": "Medical In-Charge"
+  },
+  {
+   "role": "EMR System Administrator"
+  }
+ ],
+ "sequence_id": 17.0,
+ "shortcuts": [
+  {
+   "color": "Red",
+   "doc_view": "List",
+   "label": "Open Sync Conflicts",
+   "link_to": "Sync Conflict",
+   "type": "DocType",
+   "format": "{} open",
+   "stats_filter": "[[\"Sync Conflict\", \"status\", \"=\", \"Open\"]]"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Outreach Session",
+   "link_to": "Outreach Session",
+   "type": "DocType",
+   "format": "{} planned or active",
+   "stats_filter": "[[\"Outreach Session\", \"status\", \"in\", [\"Planned\", \"Active\", \"Returned\"]]]"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Catchment Area",
+   "link_to": "Catchment Area",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Outreach Device",
+   "link_to": "Outreach Device",
+   "type": "DocType",
+   "format": "{} active",
+   "stats_filter": "[[\"Outreach Device\", \"status\", \"=\", \"Active\"]]"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Outreach Sync Batch",
+   "link_to": "Outreach Sync Batch",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Outreach Sync Record",
+   "link_to": "Outreach Sync Record",
+   "type": "DocType",
+   "format": "{} failed or waiting",
+   "stats_filter": "[[\"Outreach Sync Record\", \"status\", \"in\", [\"Failed\", \"Held\", \"Conflict\"]]]"
+  },
+  {
+   "color": "Cyan",
+   "doc_view": "",
+   "label": "Open the outreach app",
+   "type": "URL",
+   "url": "/outreach"
+  }
+ ],
+ "title": "Outreach",
+ "type": "Workspace"
+}

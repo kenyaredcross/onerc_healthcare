@@ -20,7 +20,7 @@ The tablet can't be wiped remotely while it is offline. The protections are:
 ## Steps
 1. **Report (team lead, same day).** Call or message the HIS Officer, giving the tablet label and the outreach session.
 2. **Revoke the device (HIS Officer, Medical In-Charge or EMR System Administrator).**
-   - Desk → Healthcare → Outreach → **Outreach Device**.
+   - Desk → **Outreach** → **Outreach Device**.
    - Open the device by its label and choose **Revoke**, with the reason, e.g. "Lost on 2026-11-20, Village 3".
    - Every grant on that device stops working at once. The tablet can no longer sync or download a package, even with the PIN.
 3. **Change the password (HIS Officer / System Administrator).** Reset the password of every user who signed in on that tablet. Any session cookie still on the tablet then stops working.
