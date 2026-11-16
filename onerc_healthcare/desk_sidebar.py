@@ -40,14 +40,6 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"link_type": "Report",
 				"link_to": "Daily Facility Entry",
 			},
-			{"key": "krcs-pharmacy-section", "type": "Section Break", "label": "Pharmacy"},
-			{
-				"key": "krcs-pharmacy-worklist",
-				"label": "Pharmacy Worklist",
-				"link_type": "Report",
-				"link_to": "Pharmacy Worklist",
-			},
-			{"key": "krcs-dispensing-record", "label": "Dispensing Record", "link_to": "Dispensing Record"},
 			{"key": "krcs-privacy-section", "type": "Section Break", "label": "Data Protection"},
 			{"key": "krcs-patient-consent", "label": "Patient Consent", "link_to": "Patient Consent"},
 			{
@@ -74,20 +66,6 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 				"key": "krcs-community-activity",
 				"label": "Community Activity Record",
 				"link_to": "Community Activity Record",
-			},
-			{"key": "krcs-moh-section", "type": "Section Break", "label": "MOH Reporting"},
-			{"key": "krcs-moh-report-run", "label": "MOH Report Run", "link_to": "MOH Report Run"},
-			{
-				"key": "krcs-moh-unmapped",
-				"label": "MOH Unmapped Diagnoses",
-				"link_type": "Report",
-				"link_to": "MOH Unmapped Diagnoses",
-			},
-			{
-				"key": "krcs-moh-coverage",
-				"label": "MOH Mapping Coverage",
-				"link_type": "Report",
-				"link_to": "MOH Mapping Coverage",
 			},
 		],
 	),
@@ -132,11 +110,11 @@ SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
 			{"key": "krcs-consent-statement", "label": "Consent Statement", "link_to": "Consent Statement"},
 			{"key": "krcs-access-log-entry", "label": "Access Log Entry", "link_to": "Access Log Entry"},
 			# Phase 3 masters
-			{"key": "krcs-moh-setup-section", "type": "Section Break", "label": "MOH Reporting Setup"},
-			{"key": "krcs-moh-report", "label": "MOH Report", "link_to": "MOH Report"},
-			{"key": "krcs-moh-category", "label": "MOH Disease Category", "link_to": "MOH Disease Category"},
-			{"key": "krcs-moh-mapping", "label": "MOH Diagnosis Mapping", "link_to": "MOH Diagnosis Mapping"},
-			{"key": "krcs-icd11-block", "label": "ICD-11 Block", "link_to": "ICD-11 Block"},
+			{
+				"key": "krcs-services-setup-section",
+				"type": "Section Break",
+				"label": "Services and Community",
+			},
 			{"key": "krcs-service-type", "label": "Visit Service Type", "link_to": "Visit Service Type"},
 			{
 				"key": "krcs-community-activity-type",
@@ -181,15 +159,18 @@ def _desired_rows(sidebar: str) -> list[dict]:
 	]
 
 
-# Phase 4: Outreach has its own sidebar and workspace (`emr_outreach/sidebar/outreach`,
-# `emr_outreach/workspace/outreach`). Our app ships a companion Dock (`dock/onerc_healthcare`, mount_on
-# "healthcare"), so the desk keeps Marley's rail on screen in Outreach. Companion rows are appended at the end
-# of the host's rail; this row in Marley's dock places Outreach after Rehabilitation (the duplicate companion
-# row is dropped by Frappe's dedupe). Written directly, like the sidebar rows: Marley's Dock is never saved.
+# Areas of their own, like Marley's Outpatient or Rehabilitation: Pharmacy (`emr_pharmacy/sidebar|workspace/pharmacy`),
+# Outreach (`emr_outreach/...`) and MOH Reporting (`emr_reporting/.../moh_reporting`). Our app ships a companion Dock
+# (`dock/onerc_healthcare`, mount_on "healthcare"), so the desk keeps Marley's rail on screen in them. Companion
+# rows are appended at the end of the host's rail; these rows in Marley's dock place each area next to its
+# neighbours (Frappe's dedupe drops the companion duplicate). Written directly, like the sidebar rows: Marley's
+# Dock is never saved.
 MARLEY_DOCK = "healthcare"
 DOCK_ROWS = (
 	# (title, sidebar it opens, icon, insert after this sidebar)
+	("Pharmacy", "Pharmacy", "pill", "Diagnostics"),
 	("Outreach", "Outreach", "route", "Rehabilitation"),
+	("MOH Reporting", "MOH Reporting", "file-chart-column", "Outreach"),
 )
 
 

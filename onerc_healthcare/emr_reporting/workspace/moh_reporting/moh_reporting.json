@@ -1,0 +1,96 @@
+{
+ "app": "onerc_healthcare",
+ "charts": [],
+ "content": "[{\"id\":\"krcs-moh_reporting-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">MOH Reporting</span>\",\"col\":12}},{\"id\":\"krcs-moh_reporting-s0\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"MOH Runs to Submit\",\"col\":4}},{\"id\":\"krcs-moh_reporting-s1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"MOH Report Run\",\"col\":4}},{\"id\":\"krcs-moh_reporting-s2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Unmapped Diagnoses\",\"col\":4}},{\"id\":\"krcs-moh_reporting-s3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Mapping Coverage\",\"col\":4}},{\"id\":\"krcs-moh_reporting-s4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"MOH Report\",\"col\":4}},{\"id\":\"krcs-moh_reporting-s5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"MOH Disease Category\",\"col\":4}},{\"id\":\"krcs-moh_reporting-qh\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Waiting</span>\",\"col\":12}},{\"id\":\"krcs-moh_reporting-q0\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Open MOH Runs\",\"col\":6}}]",
+ "creation": "2026-11-16 11:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "file-chart-column",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "MOH Reporting",
+ "link_type": "DocType",
+ "links": [],
+ "modified": "2026-11-16 11:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Reporting",
+ "name": "MOH Reporting",
+ "number_cards": [],
+ "owner": "Administrator",
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "MOH Report Run",
+   "label": "Open MOH Runs",
+   "quick_list_filter": "[[\"MOH Report Run\", \"status\", \"in\", [\"Draft\", \"Generated\"]]]"
+  }
+ ],
+ "roles": [
+  {
+   "role": "HIS Officer"
+  },
+  {
+   "role": "Medical In-Charge"
+  },
+  {
+   "role": "Head of Operations"
+  }
+ ],
+ "sequence_id": 17.5,
+ "shortcuts": [
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "MOH Runs to Submit",
+   "link_to": "MOH Report Run",
+   "type": "DocType",
+   "format": "{} to submit",
+   "stats_filter": "[[\"MOH Report Run\", \"status\", \"=\", \"Generated\"]]"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "MOH Report Run",
+   "link_to": "MOH Report Run",
+   "type": "DocType",
+   "format": "{} open",
+   "stats_filter": "[[\"MOH Report Run\", \"status\", \"in\", [\"Draft\", \"Generated\"]]]"
+  },
+  {
+   "color": "Red",
+   "doc_view": "",
+   "label": "Unmapped Diagnoses",
+   "link_to": "MOH Unmapped Diagnoses",
+   "type": "Report",
+   "report_ref_doctype": "MOH Diagnosis Mapping"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "Mapping Coverage",
+   "link_to": "MOH Mapping Coverage",
+   "type": "Report",
+   "report_ref_doctype": "MOH Diagnosis Mapping"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "MOH Report",
+   "link_to": "MOH Report",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "MOH Disease Category",
+   "link_to": "MOH Disease Category",
+   "type": "DocType"
+  }
+ ],
+ "title": "MOH Reporting",
+ "type": "Workspace"
+}

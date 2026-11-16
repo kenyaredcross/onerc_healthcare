@@ -8,13 +8,29 @@
   {
    "added": 0,
    "hidden": 0,
+   "icon": "pill",
+   "link_to": "Pharmacy",
+   "link_type": "Sidebar",
+   "title": "Pharmacy"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
    "icon": "route",
    "link_to": "Outreach",
    "link_type": "Sidebar",
    "title": "Outreach"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "file-chart-column",
+   "link_to": "MOH Reporting",
+   "link_type": "Sidebar",
+   "title": "MOH Reporting"
   }
  ],
- "modified": "2026-11-16 10:00:00.000000",
+ "modified": "2026-11-16 11:00:00.000000",
  "modified_by": "Administrator",
  "mount_on": "healthcare",
  "name": "onerc_healthcare",

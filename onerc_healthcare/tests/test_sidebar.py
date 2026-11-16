@@ -130,3 +130,44 @@ class TestOutreachArea(EMRTestCase):
 		base = [r.get("link_to") for r in get_app_base(desk_sidebar.MARLEY_DOCK)]
 		self.assertEqual(base.count("Outreach"), 1)
 		self.assertEqual(base.index("Outreach"), base.index("Rehabilitation") + 1)
+
+
+# area -> (dock neighbour it follows, pages that open under it)
+OWN_AREAS = {
+	"Pharmacy": ("Diagnostics", ("Dispensing Record", "Medication Request")),
+	"MOH Reporting": (
+		"Outreach",
+		("MOH Report Run", "MOH Report", "MOH Disease Category", "MOH Diagnosis Mapping", "ICD-11 Block"),
+	),
+}
+
+
+class TestPharmacyAndMOHAreas(EMRTestCase):
+	"""Pharmacy and MOH Reporting are areas of their own on Marley's rail, like Outreach."""
+
+	def setUp(self):
+		super().setUp()
+		self.addCleanup(frappe.clear_cache)
+
+	def test_areas_in_dock_after_their_neighbours(self):
+		from frappe.desk.doctype.dock.dock import get_app_base
+
+		frappe.local.dock_cache = {"app_dock": {}, "mounts": None}
+		base = [r.get("link_to") for r in get_app_base(desk_sidebar.MARLEY_DOCK)]
+		for area, (after, _pages) in OWN_AREAS.items():
+			self.assertEqual(base.count(area), 1, area)
+			self.assertEqual(base.index(area), base.index(after) + 1, area)
+
+	def test_pages_open_under_their_area(self):
+		mapping = entity_map()
+		for area, (_after, pages) in OWN_AREAS.items():
+			self.assertTrue(frappe.db.exists("Workspace", area), area)
+			for page in pages:
+				self.assertEqual(mapping.get(page), area, page)
+
+	def test_moved_rows_gone_from_healthcare(self):
+		moved = {page for _after, pages in OWN_AREAS.values() for page in pages} | {"Pharmacy Worklist"}
+		links = frappe.get_all(
+			"Sidebar Item", filters={"parent": ["in", ["Healthcare", "Healthcare Setup"]]}, pluck="link_to"
+		)
+		self.assertFalse(set(links) & moved)
