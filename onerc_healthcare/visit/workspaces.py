@@ -35,6 +35,7 @@ from onerc_healthcare.constants import (
 	DATA_ACCESS_REQUEST_DOCTYPE,
 	DEPT_HIS,
 	DEPT_LABORATORY,
+	DEPT_MATERNITY,
 	DEPT_MCH,
 	DEPT_MENTAL_HEALTH,
 	DEPT_NUTRITION,
@@ -69,6 +70,8 @@ from onerc_healthcare.security.matrix import BILLING_DOCTYPES
 WS_HEALTHCARE = "Healthcare"
 WS_OUTPATIENT = "Outpatient"
 WS_DIAGNOSTICS = "Diagnostics"
+WS_INPATIENT = "Inpatient"  # Phase 5M: the labour ward (Maternity Admission) lives here
+MATERNITY_ADMISSION = "Maternity Admission"
 
 # Department -> Marley workspace that carries its queue block.
 DEPARTMENT_WORKSPACE = {
@@ -82,6 +85,23 @@ DEPARTMENT_WORKSPACE = {
 	DEPT_MENTAL_HEALTH: WS_OUTPATIENT,
 	DEPT_NUTRITION: WS_OUTPATIENT,
 	DEPT_LABORATORY: WS_DIAGNOSTICS,
+	# Phase 5M: mothers routed to Maternity wait on the Outpatient page; the ward block is on Inpatient.
+	DEPT_MATERNITY: WS_OUTPATIENT,
+}
+
+# Marley rows removed from a workspace (and their blocks), re-applied every migrate. Inpatient: everything built
+# on Marley's Inpatient Record, which KRCS does not use (D60: it needs selling price lists and carries billing).
+RETIRED_MARLEY_ROWS = {
+	WS_INPATIENT: {
+		"shortcuts": {"Inpatient Record", "Medication Order", "Medication Entry"},
+		"number_cards": {
+			"Total IP Records",
+			"In-Process IP Orders",
+			"Admitted Patients",
+			"Pending IP Medications",
+		},
+		"charts": {"Admission Status", "Inpatient Occupancy"},
+	},
 }
 
 # Labels of every shortcut / quick list we have ever written ("Triage: Waiting for Triage", "Triage Queue",
@@ -214,6 +234,10 @@ def department_block(dept: str) -> dict:
 			_quick_list(f"{dept}: Waiting for Triage", [_f("status", "=", VISIT_STATUS_REGISTERED)]),
 			_quick_list(f"{dept}: In Triage", [_f("status", "=", VISIT_STATUS_IN_TRIAGE)]),
 		]
+	elif dept == DEPT_MATERNITY:
+		waiting = [_f("current_department", "=", dept), _f("status", "=", VISIT_STATUS_ROUTED)]
+		shortcuts = [_shortcut(f"{dept}: Waiting for Admission", waiting, "Orange")]
+		quick_lists = [_quick_list(f"{dept}: Waiting for Admission", waiting)]
 	elif dept == DEPT_LABORATORY:
 		# B2 (FR-16): worklist, samples and results to approve.
 		shortcuts = [
@@ -366,6 +390,28 @@ def workspace_definition(workspace: str) -> dict:
 			blocks.append(_block("shortcut", sc["label"], 3))
 		shortcuts += overview
 		blocks.append(_spacer("overview"))
+	if workspace == WS_INPATIENT:
+		ma = MATERNITY_ADMISSION
+
+		def status_filter(status):
+			return [[ma, "status", "=", status], [ma, "krcs_archived", "=", 0]]
+
+		ward = [
+			_doc_shortcut("Maternity: Admitted", ma, status_filter("Admitted"), "Blue", "{} admitted"),
+			_doc_shortcut("Maternity: In Labour", ma, status_filter("In Labour"), "Red", "{} in labour"),
+			_doc_shortcut("Maternity: Delivered", ma, status_filter("Delivered"), "Green", "{} to discharge"),
+			_doc_shortcut("Maternity: Partograph", "Partograph"),
+			_doc_shortcut("Maternity: Delivery Record", "Delivery Record"),
+		]
+		ward_lists = [_doc_quick_list("Maternity: In Labour", ma, status_filter("In Labour"))]
+		blocks.append(_header("maternity-ward", "Maternity Ward"))
+		for sc in ward:
+			blocks.append(_block("shortcut", sc["label"], 4))
+		for ql in ward_lists:
+			blocks.append(_block("quick_list", ql["label"], 6))
+		blocks.append(_spacer("maternity-ward"))
+		shortcuts += ward
+		quick_lists += ward_lists
 	for dept, ws in DEPARTMENT_WORKSPACE.items():
 		if ws != workspace:
 			continue
@@ -422,7 +468,7 @@ CHILD_TABLES = {
 def install() -> None:
 	"""Put the department queues on Marley's workspaces and strip billing items. Idempotent."""
 	changed = remove_retired_workspaces()
-	for workspace in (WS_HEALTHCARE, WS_OUTPATIENT, WS_DIAGNOSTICS):
+	for workspace in (WS_HEALTHCARE, WS_OUTPATIENT, WS_DIAGNOSTICS, WS_INPATIENT):
 		if frappe.db.exists("Workspace", workspace):
 			changed |= apply_workspace(workspace)
 	if changed:
@@ -453,6 +499,9 @@ def apply_workspace(workspace: str) -> bool:
 	billing = remove_billing_rows(workspace)
 	for parentfield, labels in billing.items():
 		removed_labels[parentfield] = labels
+		changed |= bool(labels)
+	for parentfield, labels in remove_retired_marley_rows(workspace).items():
+		removed_labels.setdefault(parentfield, set()).update(labels)
 		changed |= bool(labels)
 	changed |= _sync_content(workspace, definition["blocks"], removed_labels)
 	if changed:
@@ -492,6 +541,28 @@ def _sync_rows(workspace: str, parentfield: str, child_doctype: str, fields: tup
 		)
 		doc.db_insert()
 	return True
+
+
+def remove_retired_marley_rows(workspace: str) -> dict[str, set[str]]:
+	"""Delete RETIRED_MARLEY_ROWS of `workspace`. Returns the removed labels per table."""
+	removed: dict[str, set[str]] = {}
+	for parentfield, labels in RETIRED_MARLEY_ROWS.get(workspace, {}).items():
+		child = CHILD_TABLES[parentfield][0] if parentfield in CHILD_TABLES else None
+		child = child or {"number_cards": "Workspace Number Card", "charts": "Workspace Chart"}[parentfield]
+		names = frappe.get_all(
+			child,
+			filters={
+				"parenttype": "Workspace",
+				"parent": workspace,
+				"parentfield": parentfield,
+				"label": ["in", list(labels)],
+			},
+			fields=["name", "label"],
+		)
+		if names:
+			frappe.db.delete(child, {"name": ["in", [r.name for r in names]]})
+			removed[parentfield] = {r.label for r in names}
+	return removed
 
 
 def is_billing_filter(filters_json: str | None) -> bool:

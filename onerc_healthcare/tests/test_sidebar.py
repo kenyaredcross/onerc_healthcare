@@ -135,7 +135,6 @@ class TestOutreachArea(EMRTestCase):
 # area -> (dock neighbour it follows, pages that open under it)
 OWN_AREAS = {
 	"Pharmacy": ("Diagnostics", ("Dispensing Record", "Medication Request")),
-	"Maternity": ("Outpatient", ("Maternity Admission", "Partograph", "Delivery Record")),
 	"MOH Reporting": (
 		"Outreach",
 		("MOH Report Run", "MOH Report", "MOH Disease Category", "MOH Diagnosis Mapping", "ICD-11 Block"),
@@ -276,14 +275,57 @@ class TestConsultationInOutpatient(EMRTestCase):
 		self.assertEqual(rows[labels.index("Consultation")].keep_closed, 0)
 
 
-class TestInpatientHidden(EMRTestCase):
-	"""Marley's Inpatient area is hidden from the dock: Inpatient Record saves need selling price lists (D18) and
-	carry billing (C-5); the labour ward uses Maternity Admission."""
+class TestMaternityInInpatientAndOutpatient(EMRTestCase):
+	"""The labour ward lives in Marley's Inpatient area (with the Inpatient Record parts hidden: they need selling
+	price lists, D18, and carry billing, C-5); mothers waiting for admission and newborns are under Outpatient.
+	There is no separate Maternity area (user, 2026-11-16)."""
 
-	def test_inpatient_dock_row_hidden(self):
-		self.assertEqual(
-			frappe.db.get_value(
-				"Dock Item", {"parent": desk_sidebar.MARLEY_DOCK, "link_to": "Inpatient"}, "hidden"
-			),
-			1,
+	def setUp(self):
+		super().setUp()
+		self.addCleanup(frappe.clear_cache)
+
+	def test_dock_has_inpatient_not_maternity(self):
+		rows = frappe.get_all(
+			"Dock Item",
+			filters={"parent": desk_sidebar.MARLEY_DOCK, "parenttype": "Dock"},
+			fields=["link_to", "hidden"],
 		)
+		by_link = {r.link_to: r.hidden for r in rows}
+		self.assertEqual(by_link.get("Inpatient"), 0)
+		self.assertNotIn("Maternity", by_link)
+		self.assertFalse(frappe.db.exists("Sidebar", "Maternity"))
+		self.assertFalse(frappe.db.exists("Workspace", "Maternity"))
+
+	def test_maternity_records_open_under_inpatient(self):
+		mapping = entity_map()
+		for doctype in ("Maternity Admission", "Partograph", "Delivery Record"):
+			self.assertEqual(mapping.get(doctype), "Inpatient", doctype)
+
+	def test_inpatient_record_parts_hidden(self):
+		hidden = dict(
+			frappe.get_all(
+				"Sidebar Item", filters={"parent": "Inpatient"}, fields=["link_to", "hidden"], as_list=True
+			)
+		)
+		for doctype in ("Inpatient Record", "Inpatient Medication Order", "Sales Invoice", "Payment Entry"):
+			self.assertEqual(hidden.get(doctype), 1, doctype)
+		self.assertFalse(
+			frappe.db.exists("Workspace Shortcut", {"parent": "Inpatient", "link_to": "Inpatient Record"})
+		)
+
+	def test_outpatient_has_maternity_arrivals(self):
+		labels = frappe.get_all("Sidebar Item", filters={"parent": "Outpatient"}, pluck="label")
+		self.assertIn("Waiting for Admission", labels)
+		self.assertIn("Newborns", labels)
+		from onerc_healthcare.visit.workspaces import workspace_definition
+
+		self.assertIn(
+			"Maternity: Waiting for Admission",
+			{r["label"] for r in workspace_definition("Outpatient")["shortcuts"]},
+		)
+		self.assertIn(
+			"Maternity: In Labour", {r["label"] for r in workspace_definition("Inpatient")["shortcuts"]}
+		)
+
+	def test_install_is_idempotent(self):
+		self.assertFalse(desk_sidebar.install())

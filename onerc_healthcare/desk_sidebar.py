@@ -154,6 +154,95 @@ SIDEBAR_ROWS: dict[str, list[tuple[str | None, list[dict]]]] = {
 					"filters": [["Patient Visit", "status", "=", "Awaiting Laboratory", False]],
 					"default": False,
 				},
+				# Maternity arrivals (the ward itself is under Inpatient)
+				{
+					"key": "krcs-op-maternity-section",
+					"type": "Section Break",
+					"label": "Maternity",
+					"icon": "baby",
+					"open": True,
+				},
+				{
+					"key": "krcs-op-maternity-waiting",
+					"label": "Waiting for Admission",
+					"link_to": "Patient Visit",
+					"filters": [
+						["Patient Visit", "status", "=", "Routed to Department", False],
+						["Patient Visit", "current_department", "=", "Maternity", False],
+					],
+					"default": False,
+				},
+				{
+					"key": "krcs-op-newborns",
+					"label": "Newborns",
+					"link_to": "Patient",
+					"filters": [["Patient", "krcs_mother", "is", "set", False]],
+					"default": False,
+				},
+			],
+		),
+	],
+	"Inpatient": [
+		# Phase 5M: the labour ward (Maternity Admission replaces Marley's Inpatient Record, which is hidden).
+		(
+			"Healthcare Service Unit",
+			[
+				{
+					"key": "krcs-ip-maternity-admission",
+					"label": "Maternity Admission",
+					"link_to": "Maternity Admission",
+					"icon": "bed",
+				},
+				{
+					"key": "krcs-ip-admitted",
+					"label": "Admitted",
+					"link_to": "Maternity Admission",
+					"filters": [["Maternity Admission", "status", "=", "Admitted", False]],
+					"default": False,
+				},
+				{
+					"key": "krcs-ip-in-labour",
+					"label": "In Labour",
+					"link_to": "Maternity Admission",
+					"filters": [["Maternity Admission", "status", "=", "In Labour", False]],
+					"default": False,
+				},
+				{
+					"key": "krcs-ip-delivered",
+					"label": "Delivered",
+					"link_to": "Maternity Admission",
+					"filters": [["Maternity Admission", "status", "=", "Delivered", False]],
+					"default": False,
+				},
+				{
+					"key": "krcs-ip-labour-section",
+					"type": "Section Break",
+					"label": "Labour and Delivery",
+					"icon": "activity",
+					"open": True,
+				},
+				{"key": "krcs-ip-partograph", "label": "Partograph", "link_to": "Partograph"},
+				{"key": "krcs-ip-delivery-record", "label": "Delivery Record", "link_to": "Delivery Record"},
+				{
+					"key": "krcs-ip-records-section",
+					"type": "Section Break",
+					"label": "Maternity Records",
+					"icon": "archive",
+				},
+				{
+					"key": "krcs-ip-discharged",
+					"label": "Discharged",
+					"link_to": "Maternity Admission",
+					"filters": [["Maternity Admission", "status", "=", "Discharged", False]],
+					"default": False,
+				},
+				{
+					"key": "krcs-ip-wards",
+					"label": "Maternity Wards and Beds",
+					"link_to": "Healthcare Service Unit",
+					"filters": [["Healthcare Service Unit", "name", "like", "%Maternity Ward%", False]],
+					"default": False,
+				},
 			],
 		),
 	],
@@ -294,18 +383,35 @@ MARLEY_DOCK = "healthcare"
 DOCK_ROWS = (
 	# (title, sidebar it opens, icon, insert after this sidebar)
 	("Pharmacy", "Pharmacy", "pill", "Diagnostics"),
-	("Maternity", "Maternity", "baby", "Outpatient"),  # Phase 5M: labour ward
 	("Outreach", "Outreach", "route", "Rehabilitation"),
 	("MOH Reporting", "MOH Reporting", "file-chart-column", "Outreach"),
 )
 
-# Marley areas taken off the rail (D60, Phase 5M): Marley's Inpatient Record crashes on every save without an
-# enabled selling price list (`set_item_rate`, D18) and carries bed-rent billing and stock (C-5); the labour
-# ward uses our Maternity Admission instead. The row in Marley's dock gets ``hidden = 1`` (direct write, like the
-# rows above, so Marley's Dock is never saved): off the rail, still reachable by route, and a Workspace Manager
-# can bring it back in Manage Dock. Re-applied on every migrate, so a Marley upgrade that reloads its dock does
-# not bring it back. (link_type, link_to)
-HIDDEN_DOCK_ROWS = (("Sidebar", "Inpatient"),)
+# Marley dock rows we hide (link_type, link_to). None today: the labour ward lives in Marley's Inpatient area, with
+# the Inpatient Record parts hidden inside it (HIDDEN_SIDEBAR_ITEMS). UNHIDDEN_DOCK_ROWS puts back a row an
+# earlier release hid. RETIRED_DOCK_SIDEBARS are our own rows removed from the rail (the Maternity area, which
+# the user split into Inpatient and Outpatient on 2026-11-16).
+HIDDEN_DOCK_ROWS: tuple = ()
+UNHIDDEN_DOCK_ROWS = (("Sidebar", "Inpatient"),)
+RETIRED_DOCK_SIDEBARS = ("Maternity",)
+RETIRED_AREAS = ("Maternity",)  # our Sidebar + Workspace of that name (module EMR Maternity) are deleted
+
+# Marley sidebar items hidden (hidden = 1, direct write, re-applied every migrate). Inpatient: Marley's Inpatient
+# Record crashes on every save without an enabled selling price list (D18) and carries bed-rent billing and stock
+# (C-5); its medication order/entry, treatment counselling and discharge summary hang off it; billing links go.
+HIDDEN_SIDEBAR_ITEMS = {
+	"Inpatient": (
+		"Inpatient Record",
+		"Inpatient Medication Order",
+		"Inpatient Medication Entry",
+		"Clinical Procedure",
+		"Treatment Counselling",
+		"Discharge Summary",
+		"Sales Invoice",
+		"Payment Entry",
+		"Billing & Payments",  # the section break (by label)
+	),
+}
 
 
 def install() -> bool:
@@ -316,6 +422,8 @@ def install() -> bool:
 			changed |= _apply(sidebar, _desired_blocks(sidebar))
 	changed |= apply_dock()
 	changed |= hide_dock_rows()
+	changed |= retire_areas()
+	changed |= hide_sidebar_items()
 	if changed:
 		frappe.clear_cache()
 	return changed
@@ -468,4 +576,64 @@ def hide_dock_rows() -> bool:
 			changed = True
 	if changed:
 		frappe.clear_document_cache("Dock", MARLEY_DOCK)
+	return changed
+
+
+def retire_areas() -> bool:
+	"""Remove our retired areas: their dock rows, Sidebar and Workspace; put back Marley rows we used to hide."""
+	changed = False
+	if frappe.db.exists("Dock", MARLEY_DOCK):
+		for link_to in RETIRED_DOCK_SIDEBARS:
+			rows = frappe.get_all(
+				"Dock Item",
+				filters={
+					"parent": MARLEY_DOCK,
+					"parenttype": "Dock",
+					"link_type": "Sidebar",
+					"link_to": link_to,
+				},
+				pluck="name",
+			)
+			for name in rows:
+				frappe.db.delete("Dock Item", {"name": name})
+				changed = True
+		for link_type, link_to in UNHIDDEN_DOCK_ROWS:
+			rows = frappe.get_all(
+				"Dock Item",
+				filters={"parent": MARLEY_DOCK, "link_type": link_type, "link_to": link_to, "hidden": 1},
+				pluck="name",
+			)
+			for name in rows:
+				frappe.db.set_value("Dock Item", name, "hidden", 0, update_modified=False)
+				changed = True
+		if changed:
+			frappe.clear_document_cache("Dock", MARLEY_DOCK)
+	for name in RETIRED_AREAS:
+		for doctype in ("Workspace", "Sidebar"):
+			if (
+				frappe.db.exists(doctype, name)
+				and frappe.db.get_value(doctype, name, "module") == "EMR Maternity"
+			):
+				frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)
+				changed = True
+	return changed
+
+
+def hide_sidebar_items() -> bool:
+	"""Set ``hidden = 1`` on Marley's HIDDEN_SIDEBAR_ITEMS (matched by link_to, or label for a section)."""
+	changed = False
+	for sidebar, targets in HIDDEN_SIDEBAR_ITEMS.items():
+		if not frappe.db.exists("Sidebar", sidebar):
+			continue
+		rows = frappe.get_all(
+			"Sidebar Item",
+			filters={"parent": sidebar, "parenttype": "Sidebar", "hidden": 0},
+			fields=["name", "link_to", "label", "key"],
+		)
+		for row in rows:
+			if (row.key or "").startswith(KEY_PREFIX):
+				continue
+			if row.link_to in targets or row.label in targets:
+				frappe.db.set_value("Sidebar Item", row.name, "hidden", 1, update_modified=False)
+				changed = True
 	return changed
