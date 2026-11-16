@@ -171,3 +171,39 @@ class TestPharmacyAndMOHAreas(EMRTestCase):
 			"Sidebar Item", filters={"parent": ["in", ["Healthcare", "Healthcare Setup"]]}, pluck="link_to"
 		)
 		self.assertFalse(set(links) & moved)
+
+
+class TestDropdowns(EMRTestCase):
+	"""Our remaining Healthcare, Setup and Diagnostics rows are Marley-style dropdowns, clustered with Marley's."""
+
+	def items(self, sidebar: str) -> list:
+		return frappe.get_all(
+			"Sidebar Item",
+			filters={"parent": sidebar, "parenttype": "Sidebar"},
+			fields=["type", "label", "link_to", "child", "indent", "keep_closed", "key"],
+			order_by="idx asc",
+		)
+
+	def test_our_sections_fold_their_links(self):
+		for sidebar in desk_sidebar.SIDEBAR_ROWS:
+			rows = self.items(sidebar)
+			section = None
+			for row in rows:
+				if row.type == "Section Break":
+					section = row
+					if (row.key or "").startswith(desk_sidebar.KEY_PREFIX):
+						self.assertEqual((row.indent, row.keep_closed), (1, 1), row.label)
+				elif (row.key or "").startswith(desk_sidebar.KEY_PREFIX) and section and section.key:
+					self.assertEqual(row.child, 1, row.label)
+
+	def test_healthcare_dropdowns_sit_with_marleys(self):
+		rows = self.items("Healthcare")
+		labels = [r.label for r in rows]
+		self.assertEqual(labels.index("Patient Visit"), labels.index("Patient") + 1)
+		first_section = next(i for i, r in enumerate(rows) if r.type == "Section Break")
+		# No loose (non-child) link after the first dropdown: every link below it folds into a section.
+		self.assertFalse([r.label for r in rows[first_section:] if r.type == "Link" and not r.child])
+		self.assertEqual(rows[first_section].label, "Front Desk")
+
+	def test_install_is_idempotent(self):
+		self.assertFalse(desk_sidebar.install())

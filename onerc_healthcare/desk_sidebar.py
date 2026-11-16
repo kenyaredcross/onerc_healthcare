@@ -19,115 +19,167 @@ import frappe
 KEY_PREFIX = "krcs-"
 
 # sidebar -> (anchor link_to to insert after, or None for the end, [rows])
-SIDEBAR_ROWS: dict[str, tuple[str | None, list[dict]]] = {
-	"Healthcare": (
-		"Patient",
-		[
-			{
-				"key": "krcs-patient-visit",
-				"label": "Patient Visit",
-				"link_to": "Patient Visit",
-				"icon": "clipboard-list",
-			},
-			{"key": "krcs-referral", "label": "Referral", "link_to": "Referral", "icon": "send"},
-			# Phase 2 front desk, pharmacy and data protection
-			{"key": "krcs-frontdesk-section", "type": "Section Break", "label": "Front Desk"},
-			{"key": "krcs-visitor-record", "label": "Visitor Record", "link_to": "Visitor Record"},
-			{"key": "krcs-screening-record", "label": "Screening Record", "link_to": "Screening Record"},
-			{
-				"key": "krcs-daily-entry",
-				"label": "Daily Facility Entry",
-				"link_type": "Report",
-				"link_to": "Daily Facility Entry",
-			},
-			{"key": "krcs-privacy-section", "type": "Section Break", "label": "Data Protection"},
-			{"key": "krcs-patient-consent", "label": "Patient Consent", "link_to": "Patient Consent"},
-			{
-				"key": "krcs-consent-exceptions",
-				"label": "Consent Exceptions",
-				"link_type": "Report",
-				"link_to": "Consent Exceptions",
-			},
-			{
-				"key": "krcs-data-access-request",
-				"label": "Data Access Request",
-				"link_to": "Data Access Request",
-			},
-			{
-				"key": "krcs-access-audit",
-				"label": "Access Audit",
-				"link_type": "Report",
-				"link_to": "Access Audit",
-			},
-			# Phase 3: services, community work and MOH reporting
-			{"key": "krcs-services-section", "type": "Section Break", "label": "Services and Community"},
-			{"key": "krcs-service-delivered", "label": "Service Delivered", "link_to": "Service Delivered"},
-			{
-				"key": "krcs-community-activity",
-				"label": "Community Activity Record",
-				"link_to": "Community Activity Record",
-			},
-		],
-	),
-	"Diagnostics": (
-		None,
-		[
-			{"key": "krcs-lab-section", "type": "Section Break", "label": "KRCS Laboratory"},
-			{
-				"key": "krcs-lab-worklist",
-				"label": "Laboratory Worklist",
-				"link_type": "Report",
-				"link_to": "Laboratory Worklist",
-			},
-		],
-	),
-	"Healthcare Setup": (
-		None,
-		[
-			{"key": "krcs-section", "type": "Section Break", "label": "KRCS EMR"},
-			{
-				"key": "krcs-registration-settings",
-				"label": "EMR Registration Settings",
-				"link_to": "EMR Registration Settings",
-			},
-			{"key": "krcs-naming-settings", "label": "EMR Naming Settings", "link_to": "EMR Naming Settings"},
-			{
-				"key": "krcs-identifier-type",
-				"label": "Patient Identifier Type",
-				"link_to": "Patient Identifier Type",
-			},
-			{
-				"key": "krcs-residence-location",
-				"label": "Residence Location",
-				"link_to": "Residence Location",
-			},
-			{"key": "krcs-referral-facility", "label": "Referral Facility", "link_to": "Referral Facility"},
-			{
-				"key": "krcs-screening-parameter",
-				"label": "Screening Parameter",
-				"link_to": "Screening Parameter",
-			},
-			{"key": "krcs-consent-statement", "label": "Consent Statement", "link_to": "Consent Statement"},
-			{"key": "krcs-access-log-entry", "label": "Access Log Entry", "link_to": "Access Log Entry"},
-			# Phase 3 masters
-			{
-				"key": "krcs-services-setup-section",
-				"type": "Section Break",
-				"label": "Services and Community",
-			},
-			{"key": "krcs-service-type", "label": "Visit Service Type", "link_to": "Visit Service Type"},
-			{
-				"key": "krcs-community-activity-type",
-				"label": "Community Activity Type",
-				"link_to": "Community Activity Type",
-			},
-		],
-	),
+# sidebar -> blocks of (anchor link_to to insert after, or None for the end, [rows]). A Section Break row is a
+# Marley-style dropdown (icon, indented, starts closed); the links after it fold inside it (`child`).
+SIDEBAR_ROWS: dict[str, list[tuple[str | None, list[dict]]]] = {
+	"Healthcare": [
+		(
+			"Patient",
+			[
+				{
+					"key": "krcs-patient-visit",
+					"label": "Patient Visit",
+					"link_to": "Patient Visit",
+					"icon": "clipboard-list",
+				},
+				{"key": "krcs-referral", "label": "Referral", "link_to": "Referral", "icon": "send"},
+			],
+		),
+		# Dropdowns sit with Marley's own (Masters, Records & History, ...), after its loose links.
+		(
+			"Practitioner Availability",
+			[
+				{
+					"key": "krcs-frontdesk-section",
+					"type": "Section Break",
+					"label": "Front Desk",
+					"icon": "door-open",
+				},
+				{"key": "krcs-visitor-record", "label": "Visitor Record", "link_to": "Visitor Record"},
+				{"key": "krcs-screening-record", "label": "Screening Record", "link_to": "Screening Record"},
+				{
+					"key": "krcs-daily-entry",
+					"label": "Daily Facility Entry",
+					"link_type": "Report",
+					"link_to": "Daily Facility Entry",
+				},
+				{
+					"key": "krcs-privacy-section",
+					"type": "Section Break",
+					"label": "Data Protection",
+					"icon": "lock",
+				},
+				{"key": "krcs-patient-consent", "label": "Patient Consent", "link_to": "Patient Consent"},
+				{
+					"key": "krcs-consent-exceptions",
+					"label": "Consent Exceptions",
+					"link_type": "Report",
+					"link_to": "Consent Exceptions",
+				},
+				{
+					"key": "krcs-data-access-request",
+					"label": "Data Access Request",
+					"link_to": "Data Access Request",
+				},
+				{
+					"key": "krcs-access-audit",
+					"label": "Access Audit",
+					"link_type": "Report",
+					"link_to": "Access Audit",
+				},
+				# Phase 3: services, community work and MOH reporting
+				{
+					"key": "krcs-services-section",
+					"type": "Section Break",
+					"label": "Services and Community",
+					"icon": "handshake",
+				},
+				{
+					"key": "krcs-service-delivered",
+					"label": "Service Delivered",
+					"link_to": "Service Delivered",
+				},
+				{
+					"key": "krcs-community-activity",
+					"label": "Community Activity Record",
+					"link_to": "Community Activity Record",
+				},
+			],
+		),
+	],
+	"Diagnostics": [
+		(
+			None,
+			[
+				{
+					"key": "krcs-lab-section",
+					"type": "Section Break",
+					"label": "KRCS Laboratory",
+					"icon": "test-tubes",
+				},
+				{
+					"key": "krcs-lab-worklist",
+					"label": "Laboratory Worklist",
+					"link_type": "Report",
+					"link_to": "Laboratory Worklist",
+				},
+			],
+		),
+	],
+	"Healthcare Setup": [
+		(
+			None,
+			[
+				{"key": "krcs-section", "type": "Section Break", "label": "KRCS EMR", "icon": "hospital"},
+				{
+					"key": "krcs-registration-settings",
+					"label": "EMR Registration Settings",
+					"link_to": "EMR Registration Settings",
+				},
+				{
+					"key": "krcs-naming-settings",
+					"label": "EMR Naming Settings",
+					"link_to": "EMR Naming Settings",
+				},
+				{
+					"key": "krcs-identifier-type",
+					"label": "Patient Identifier Type",
+					"link_to": "Patient Identifier Type",
+				},
+				{
+					"key": "krcs-residence-location",
+					"label": "Residence Location",
+					"link_to": "Residence Location",
+				},
+				{
+					"key": "krcs-referral-facility",
+					"label": "Referral Facility",
+					"link_to": "Referral Facility",
+				},
+				{
+					"key": "krcs-screening-parameter",
+					"label": "Screening Parameter",
+					"link_to": "Screening Parameter",
+				},
+				{
+					"key": "krcs-consent-statement",
+					"label": "Consent Statement",
+					"link_to": "Consent Statement",
+				},
+				{"key": "krcs-access-log-entry", "label": "Access Log Entry", "link_to": "Access Log Entry"},
+				# Phase 3 masters
+				{
+					"key": "krcs-services-setup-section",
+					"type": "Section Break",
+					"label": "Services and Community",
+					"icon": "handshake",
+				},
+				{"key": "krcs-service-type", "label": "Visit Service Type", "link_to": "Visit Service Type"},
+				{
+					"key": "krcs-community-activity-type",
+					"label": "Community Activity Type",
+					"link_to": "Community Activity Type",
+				},
+			],
+		),
+	],
 }
 
 
 def _row_values(row: dict) -> dict:
+	"""Stored values of one of our rows. `row["_child"]` is set by `_desired_blocks` on links under a section."""
 	is_link = row.get("type", "Link") == "Link"
+	is_section = row.get("type") == "Section Break"
 	return {
 		"type": row.get("type", "Link"),
 		"label": row["label"],
@@ -136,27 +188,38 @@ def _row_values(row: dict) -> dict:
 		"icon": row.get("icon"),
 		"is_default_module": 1 if is_link else 0,
 		"collapsible": 1,
+		"keep_closed": 1 if is_section else 0,
+		"indent": 1 if is_section else 0,
+		"child": 1 if row.get("_child") else 0,
 		"open_in_new_tab": 0,
 		"key": row["key"],
 	}
 
 
-def _desired_rows(sidebar: str) -> list[dict]:
-	"""Our rows for `sidebar`, skipping links to DocTypes/Reports that do not exist on this site, and
-	section breaks left with nothing under them."""
-	_anchor, rows = SIDEBAR_ROWS[sidebar]
+def _desired_rows(rows: list[dict]) -> list[dict]:
+	"""`rows` without links to DocTypes/Reports missing on this site, without section breaks left with
+	nothing under them, and with `_child` set on links that follow a section."""
 	kept = [
 		r
 		for r in rows
 		if r.get("type") == "Section Break" or frappe.db.exists(r.get("link_type", "DocType"), r["link_to"])
 	]
 	# Drop a section break followed by another section break or by nothing (its links do not exist yet).
-	return [
+	kept = [
 		r
 		for i, r in enumerate(kept)
 		if r.get("type") != "Section Break"
 		or (i + 1 < len(kept) and kept[i + 1].get("type") != "Section Break")
 	]
+	in_section, out = False, []
+	for r in kept:
+		in_section = r.get("type") == "Section Break" or in_section
+		out.append({**r, "_child": in_section and r.get("type") != "Section Break"})
+	return out
+
+
+def _desired_blocks(sidebar: str) -> list[tuple[str | None, list[dict]]]:
+	return [(anchor, _desired_rows(rows)) for anchor, rows in SIDEBAR_ROWS[sidebar]]
 
 
 # Areas of their own, like Marley's Outpatient or Rehabilitation: Pharmacy (`emr_pharmacy/sidebar|workspace/pharmacy`),
@@ -177,34 +240,51 @@ DOCK_ROWS = (
 def install() -> bool:
 	"""Apply SIDEBAR_ROWS and DOCK_ROWS. Returns True when anything changed."""
 	changed = False
-	for sidebar, (anchor, _rows) in SIDEBAR_ROWS.items():
+	for sidebar in SIDEBAR_ROWS:
 		if frappe.db.exists("Sidebar", sidebar):
-			changed |= _apply(sidebar, anchor, _desired_rows(sidebar))
+			changed |= _apply(sidebar, _desired_blocks(sidebar))
 	changed |= apply_dock()
 	if changed:
 		frappe.clear_cache()
 	return changed
 
 
-def _apply(sidebar: str, anchor: str | None, desired: list[dict]) -> bool:
+def _apply(sidebar: str, blocks: list[tuple[str | None, list[dict]]]) -> bool:
 	current = frappe.get_all(
 		"Sidebar Item",
 		filters={"parent": sidebar, "parenttype": "Sidebar", "parentfield": "items"},
-		fields=["name", "idx", "key", "link_to", "type", "label", "icon", "is_default_module"],
+		fields=[
+			"name",
+			"idx",
+			"key",
+			"link_to",
+			"type",
+			"label",
+			"icon",
+			"is_default_module",
+			"child",
+			"indent",
+			"keep_closed",
+		],
 		order_by="idx asc",
 	)
 	ours = {r.key: r for r in current if (r.key or "").startswith(KEY_PREFIX)}
 	theirs = [r for r in current if r.key not in ours]
+	desired = [d for _anchor, rows in blocks for d in rows]
 
-	position = len(theirs)
-	if anchor:
-		position = next((i + 1 for i, r in enumerate(theirs) if r.link_to == anchor), position)
+	# Each block goes after its anchor (one of Marley's rows), or at the end; blocks keep their order.
+	after: dict[int, list[dict]] = {}
+	for anchor, rows in blocks:
+		position = len(theirs)
+		if anchor:
+			position = next((i + 1 for i, r in enumerate(theirs) if r.link_to == anchor), position)
+		after.setdefault(position, []).extend(rows)
 	# Target order as ("ours", definition) / ("theirs", existing row).
-	target = (
-		[("theirs", r) for r in theirs[:position]]
-		+ [("ours", d) for d in desired]
-		+ [("theirs", r) for r in theirs[position:]]
-	)
+	target = []
+	for i in range(len(theirs) + 1):
+		target += [("ours", d) for d in after.get(i, [])]
+		if i < len(theirs):
+			target.append(("theirs", theirs[i]))
 
 	in_place = [r.key if r.key in ours else r.name for r in current] == [
 		item["key"] if kind == "ours" else item.name for kind, item in target
