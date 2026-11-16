@@ -267,11 +267,14 @@ class TestDemographicChange(ConflictCase):
 		patient = self.existing(**kw)
 		return patient, str(frappe.db.get_value("Patient", patient.name, "modified"))
 
-	def update_env(self, patient, base, changes):
-		return self.env(
-			RECORD_PATIENT_UPDATE,
-			{"patient": patient, "base_modified": base, "changes": changes, "add_identifiers": []},
-		)
+	def update_env(self, patient, base, changes, base_values=None):
+		payload = {"patient": patient, "base_modified": base, "changes": changes, "add_identifiers": []}
+		if base_values is not None:
+			payload["base_values"] = base_values
+		return self.env(RECORD_PATIENT_UPDATE, payload)
+
+	def modified(self, patient) -> str:
+		return str(frappe.db.get_value("Patient", patient, "modified"))
 
 	def server_change(self, patient, **values):
 		doc = frappe.get_doc("Patient", patient)
@@ -281,8 +284,12 @@ class TestDemographicChange(ConflictCase):
 	def test_overlapping_edit_conflicts_and_resolutions(self):
 		"""TST-09: after the package the facility changed the mobile to 0711. The device changes the mobile to 0722
 		(differs: conflict), and in another record to 0711 (same as the server: applied, nothing differs).
-		Keep outreach version -> 0722. A second conflicting change (mobile 0733) resolved Keep facility -> stays
-		0722, record Discarded. A third (mobile 0744 + allergies) merged with only allergies from the outreach."""
+		Keep outreach version -> 0722; `status` then returns the patient's new `modified` (§6 F4).
+		Fix round 1 (§6 F4): the device's own second edit (0733), chained on that `modified` with base_values
+		{mobile: 0722}, is applied without a conflict (before fix round 1 this test showed it conflicting). The
+		facility then changes the mobile to 0755; a device edit (0766) on the older base conflicts and Keep
+		facility keeps 0755 (record Discarded). A third edit on the package base (mobile 0744 + allergies, no
+		base_values: the older rule) conflicts and is merged with only allergies from the outreach."""
 		patient, base = self.package()
 		self.server_change(patient.name, mobile="0711000000")
 		conflicting = self.update_env(patient.name, base, {"mobile": "0722000000"})
@@ -299,17 +306,191 @@ class TestDemographicChange(ConflictCase):
 		self.assertEqual(frappe.db.get_value("Patient", patient.name, "mobile"), "0722000000")
 		self.assertEqual(self.count(patient.name), 0)
 
-		second = self.update_env(patient.name, base, {"mobile": "0733000000"})
-		name2 = self.push([second])["results"][0]["conflict"]
+		with as_user(self.users["member"]):
+			first = sync.status(self.session, [conflicting["client_uuid"]])["results"][0]
+		self.assertEqual((first["result"], first["modified"]), ("accepted", self.modified(patient.name)))
+
+		second = self.update_env(
+			patient.name, first["modified"], {"mobile": "0733000000"}, {"mobile": "0722000000"}
+		)
+		result = self.push([second])["results"][0]
+		self.assertEqual(result["result"], "accepted", result)
+		self.assertEqual(frappe.db.get_value("Patient", patient.name, "mobile"), "0733000000")
+		self.assertEqual(result["modified"], self.modified(patient.name))
+
+		self.server_change(patient.name, mobile="0755000000")
+		stale = self.update_env(
+			patient.name, result["modified"], {"mobile": "0766000000"}, {"mobile": "0733000000"}
+		)
+		name2 = self.push([stale])["results"][0]["conflict"]
+		self.assertTrue(name2)
 		self.resolve(name2, DECISION_KEEP_FACILITY)
-		self.assertEqual(frappe.db.get_value("Patient", patient.name, "mobile"), "0722000000")
-		self.assertEqual(self.record(second["client_uuid"]).status, RECORD_STATUS_DISCARDED)
+		self.assertEqual(frappe.db.get_value("Patient", patient.name, "mobile"), "0755000000")
+		self.assertEqual(self.record(stale["client_uuid"]).status, RECORD_STATUS_DISCARDED)
 
 		third = self.update_env(patient.name, base, {"mobile": "0744000000", "allergies": "T- penicillin"})
 		name3 = self.push([third])["results"][0]["conflict"]
 		self.resolve(name3, DECISION_MERGE, chosen_fields={"allergies": "outreach", "mobile": "facility"})
 		row = frappe.db.get_value("Patient", patient.name, ["mobile", "allergies"], as_dict=True)
-		self.assertEqual((row.mobile, row.allergies), ("0722000000", "T- penicillin"))
+		self.assertEqual((row.mobile, row.allergies), ("0755000000", "T- penicillin"))
+
+	def test_base_values_rule(self):
+		"""§6 F4 by hand. Package: mobile M0, allergies None. The facility then changes the mobile to M1.
+		- device changes allergies only (base allergies None), sent first without base_values -> conflict (older
+		  rule: server None != device); the same edit with base_values -> accepted (the facility did not touch
+		  allergies);
+		- device changes the mobile to M2 (base M0): conflict (facility changed it, M1 != M0 and != M2);
+		- device changes the mobile to M1 (base M0): accepted (the same value as the facility);
+		- device changes the mobile with base_values naming the facility's own value M1 as base: accepted."""
+		patient, base = self.package(mobile="0700000001")
+		self.server_change(patient.name, mobile="0700000002")
+		new_rule = self.update_env(patient.name, base, {"allergies": "T- sulfa"}, {"allergies": None})
+		old_rule = self.update_env(patient.name, base, {"allergies": "T- sulfa"})
+		clash = self.update_env(patient.name, base, {"mobile": "0700000003"}, {"mobile": "0700000001"})
+		same = self.update_env(patient.name, base, {"mobile": "0700000002"}, {"mobile": "0700000001"})
+		out = self.push([old_rule, new_rule, clash, same])
+		self.assertEqual(self.results(out), ["conflict", "accepted", "conflict", "accepted"], out)
+		self.assertEqual(frappe.db.get_value("Patient", patient.name, "allergies"), "T- sulfa")
+		summary = frappe.db.get_value(SYNC_CONFLICT_DOCTYPE, out["results"][2]["conflict"], "summary")
+		self.assertIn("mobile", summary)
+		on_new_value = self.update_env(patient.name, base, {"mobile": "0700000004"}, {"mobile": "0700000002"})
+		self.assertEqual(self.results(self.push([on_new_value])), ["accepted"])
+		self.assertEqual(frappe.db.get_value("Patient", patient.name, "mobile"), "0700000004")
+
+	def test_modified_returned_and_future_base_refused(self):
+		"""The accepted result carries the patient's new `modified`; a re-send (duplicate) and `status` return the
+		same value. A base_modified later than the patient's current `modified` is failed (never applied); a
+		base_values that is not an object is failed."""
+		patient, base = self.package()
+		env = self.update_env(patient.name, base, {"mobile": "0700000011"}, {"mobile": None})
+		result = self.push([env])["results"][0]
+		self.assertEqual((result["result"], result["modified"]), ("accepted", self.modified(patient.name)))
+		self.assertIsNotNone(self.record(env["client_uuid"]).target_modified)
+		dup = self.push([env])["results"][0]
+		with as_user(self.users["member"]):
+			status = sync.status(self.session, [env["client_uuid"]])["results"][0]
+		self.assertEqual((dup["result"], dup["modified"]), ("duplicate", result["modified"]))
+		self.assertEqual(status["modified"], result["modified"])
+		future = str(frappe.utils.add_to_date(frappe.utils.get_datetime(result["modified"]), seconds=5))
+		ahead = self.update_env(patient.name, future, {"mobile": "0700000012"})
+		bad = self.update_env(patient.name, result["modified"], {"mobile": "0700000013"}, ["mobile"])
+		out = self.push([ahead, bad])
+		self.assertEqual(self.results(out), ["failed", "failed"])
+		self.assertIn("later than the last change", out["results"][0]["error"])
+		self.assertIn("base_values must be an object", out["results"][1]["error"])
+		self.assertNotIn("modified", out["results"][0])
+		self.assertEqual(frappe.db.get_value("Patient", patient.name, "mobile"), "0700000011")
+
+	def test_key_missing_from_base_values(self):
+		"""Integrator point 2: `base_values` may leave keys out (the package never sends the estimated age). A
+		key missing from it is judged by the older rule alone; the record is never refused for it.
+		- Patient unchanged since the package: estimated_age_years 31 with base_values {} -> accepted.
+		- The facility then changes the mobile to M1 and the allergies to F. Device edit 1: mobile M2 (base M1
+		  given: the facility value is the base, no clash) + allergies D (no base: server F != D) -> conflict on
+		  allergies only. Device edit 2: mobile M3 (base M1) + allergies F (no base, same as the server) ->
+		  accepted."""
+		_env, result = self.register(estimated_age_years=30)
+		patient = result["name"]
+		base = result["modified"]
+		self.assertEqual(base, self.modified(patient))  # integrator point 4: register carries "modified"
+		age = self.update_env(patient, base, {"estimated_age_years": 31}, {})
+		out = self.push([age])["results"][0]
+		self.assertEqual(out["result"], "accepted", out)
+		self.assertEqual(frappe.db.get_value("Patient", patient, "krcs_estimated_age_years"), 31)
+		base = out["modified"]
+		self.server_change(patient, mobile="0700000031", allergies="T- facility")
+		clash = self.update_env(
+			patient, base, {"mobile": "0700000032", "allergies": "T- device"}, {"mobile": "0700000031"}
+		)
+		fine = self.update_env(
+			patient, base, {"mobile": "0700000033", "allergies": "T- facility"}, {"mobile": "0700000031"}
+		)
+		out = self.push([clash, fine])
+		self.assertEqual(self.results(out), ["conflict", "accepted"], out)
+		summary = frappe.db.get_value(SYNC_CONFLICT_DOCTYPE, out["results"][0]["conflict"], "summary")
+		self.assertIn("(allergies)", summary)
+		self.assertEqual(frappe.db.get_value("Patient", patient, "mobile"), "0700000033")
+
+	def test_chained_updates_of_one_patient(self):
+		"""Integrator point 3: two patient.update records of one patient made offline one after the other, the
+		second depending on the first, both on the package base_modified; the second's base_values are the
+		first's new values. Expected: both accepted in one call (mobile M0 -> M1 -> M2, allergies set), no
+		conflict, and again when the second arrives in a later call."""
+		for split in (False, True):
+			with self.subTest(split=split):
+				patient, base = self.package(mobile="0700000040")
+				first = self.update_env(
+					patient.name, base, {"mobile": "0700000041"}, {"mobile": "0700000040"}
+				)
+				second = self.update_env(
+					patient.name,
+					base,
+					{"mobile": "0700000042", "allergies": "T- sulfa"},
+					{"mobile": "0700000041", "allergies": None},
+				)
+				second["depends_on"] = [first["client_uuid"]]
+				if split:
+					out = self.push([first])["results"] + self.push([second])["results"]
+				else:
+					out = self.push([first, second])["results"]
+				self.assertEqual([r["result"] for r in out], ["accepted", "accepted"], out)
+				row = frappe.db.get_value("Patient", patient.name, ["mobile", "allergies"], as_dict=True)
+				self.assertEqual((row.mobile, row.allergies), ("0700000042", "T- sulfa"))
+				self.assertEqual(out[1]["modified"], self.modified(patient.name))
+
+	def test_merge_only_differing_fields(self):
+		"""A Merge on a demographic conflict may decide only the fields that differ (mobile here): allergies
+		(unchanged by the device) and first_name (not in the record) are refused; nothing changes."""
+		patient, base = self.package(allergies="T- none")
+		self.server_change(patient.name, mobile="0700000021")
+		env = self.update_env(patient.name, base, {"mobile": "0700000022", "allergies": "T- none"})
+		name = self.push([env])["results"][0]["conflict"]
+		with as_user(self.users["his"]):
+			ctx = conflicts.form_context(frappe.get_doc(SYNC_CONFLICT_DOCTYPE, name))
+		self.assertEqual(ctx["merge_fields"], ["mobile"])
+		for chosen in ({"allergies": "outreach"}, {"mobile": "outreach", "first_name": "facility"}):
+			with self.subTest(chosen=chosen), self.assertRaises(conflicts.SyncConflictError):
+				self.resolve(name, DECISION_MERGE, chosen_fields=chosen)
+		self.assertEqual(frappe.db.get_value(SYNC_CONFLICT_DOCTYPE, name, "status"), CONFLICT_OPEN)
+		self.resolve(name, DECISION_MERGE, chosen_fields={"mobile": "outreach"})
+		self.assertEqual(frappe.db.get_value("Patient", patient.name, "mobile"), "0700000022")
+
+
+class TestHeldSweep(ConflictCase):
+	def held_on_resolved(self) -> tuple[dict, str]:
+		"""A registration carrying an existing patient's UNHCR ID (conflict) plus a visit held on it; the conflict
+		is then resolved Keep facility version while the replay does not run (as after a crash between the
+		decision and the replay). Returns (visit envelope, existing patient)."""
+		from unittest import mock
+
+		existing = self.existing()
+		unhcr = frappe.get_all(
+			"Patient Identifier", filters={"parent": existing.name}, pluck="identifier_value", limit=1
+		)[0]
+		payload = self.register_payload(
+			identifiers=[{"identifier_type": IDENTIFIER_UNHCR, "identifier_value": unhcr}]
+		)
+		_reg, visit, out = self.duplicate_with_held_visit(payload)
+		self.assertEqual(self.results(out), ["conflict", "held"])
+		with mock.patch.object(conflicts, "replay_held", return_value=[]):
+			self.resolve(out["results"][0]["conflict"], DECISION_KEEP_FACILITY)
+		self.assertEqual(self.record(visit["client_uuid"]).status, RECORD_STATUS_HELD)
+		return visit, existing.name
+
+	def test_replayed_on_next_status_and_push(self):
+		"""Protocol §6 F6: a record still Held on a Resolved conflict is replayed by the session's next
+		`sync.status` (answered accepted, the visit on the existing patient) or `sync.push` (even an empty one)."""
+		visit, existing = self.held_on_resolved()
+		with as_user(self.users["member"]):
+			answer = sync.status(self.session, [visit["client_uuid"]])["results"][0]
+		self.assertEqual(answer["result"], "accepted", answer)
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, answer["name"], "patient"), existing)
+
+		visit2, existing2 = self.held_on_resolved()
+		self.push([])
+		rec = self.record(visit2["client_uuid"])
+		self.assertEqual(rec.status, RECORD_STATUS_ACCEPTED)
+		self.assertEqual(frappe.db.get_value(VISIT_DOCTYPE, rec.target_name, "patient"), existing2)
 
 
 class TestOverlappingVisit(ConflictCase):

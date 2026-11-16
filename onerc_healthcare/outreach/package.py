@@ -18,6 +18,13 @@ the SHA-1 of the canonical JSON of `data`, so an unchanged client copy gets `{"v
 - The other lists are enabled masters (medications, dosages, durations, dosage forms, identifier types, the
   operation's residence tree, triage levels by priority, community activity types, genders) and the outcomes an
   outreach visit may close with (Discharged home, Died).
+- `dosage_units` `{Prescription Dosage: doses per day}` (the sum of its Dosage Strength rows) and `period_days`
+  `{Prescription Duration: days}` (Marley's `get_days`), protocol §6 F3: the app computes a line's prescribed
+  quantity as `dosage_units[dosage] x period_days[period]` (at least 1), as the server does with the daily
+  interval (DEFECT-RX-1), and never dispenses more.
+
+Closed sessions (protocol §6 F1): both endpoints refuse them ("no new work"), with a cookie or a device grant.
+`patient_in_catchment` is also the session-patient check of `outreach.apply` (§6 F5).
 
 **`get_patients(session, page=0, page_size=500)`** (GET): active patients (not Disabled, not merged, not
 archived) whose `krcs_residence` lies in one of the catchment area's residence subtrees (`lft`/`rgt`), ordered by
@@ -139,7 +146,9 @@ def build_reference(session: str) -> dict:
 		"icd11": icd11_rows(),
 		"medications": medications(),
 		"dosages": sorted(frappe.get_all("Prescription Dosage", pluck="name")),
+		"dosage_units": dosage_units(),
 		"periods": durations(),
+		"period_days": period_days(),
 		"dosage_forms": sorted(frappe.get_all("Dosage Form", pluck="name")),
 		"lab_templates": lab_templates(),
 		"departments": session_departments(session),
@@ -196,6 +205,36 @@ def medications() -> list[dict]:
 		}
 		for r in rows
 	]
+
+
+def dosage_units() -> dict[str, float]:
+	"""{Prescription Dosage: doses per day}: the sum of its Dosage Strength `strength` rows (Marley's
+	`DrugPrescription.get_quantity`)."""
+	out = {name: 0.0 for name in frappe.get_all("Prescription Dosage", pluck="name")}
+	for row in frappe.get_all(
+		"Dosage Strength",
+		filters={"parenttype": "Prescription Dosage", "parentfield": "dosage_strength"},
+		fields=["parent", "strength"],
+	):
+		if row.parent in out:
+			out[row.parent] += flt(row.strength)
+	return {name: _number(value) for name, value in sorted(out.items())}
+
+
+def period_days() -> dict[str, float]:
+	"""{Prescription Duration: days} (Marley's `PrescriptionDuration.get_days`: Hour / 24, Week x 7, Month x 30)."""
+	out = {}
+	for row in frappe.get_all("Prescription Duration", fields=["name", "number", "period"], order_by="name"):
+		duration = frappe.get_doc(
+			{"doctype": "Prescription Duration", "number": row.number, "period": row.period}
+		)
+		out[row.name] = _number(flt(duration.get_days()))
+	return out
+
+
+def _number(value: float):
+	"""An int when whole (so the JSON and the version hash stay stable), else the float."""
+	return int(value) if float(value).is_integer() else value
 
 
 def durations() -> list[str]:
@@ -314,6 +353,17 @@ def catchment_bounds(catchment_area: str) -> list[tuple[int, int]]:
 		(catchment_area,),
 	)
 	return [(cint(lft), cint(rgt)) for lft, rgt in rows]
+
+
+def patient_in_catchment(patient: str, catchment_area: str | None) -> bool:
+	"""`patient`'s `krcs_residence` lies in one of the catchment area's residence subtrees (protocol §6 F5)."""
+	if not patient or not catchment_area:
+		return False
+	residence = frappe.db.get_value("Patient", patient, "krcs_residence")
+	lft = frappe.db.get_value(RESIDENCE_DOCTYPE, residence, "lft") if residence else None
+	if lft is None:
+		return False
+	return any(low <= cint(lft) <= high for low, high in catchment_bounds(catchment_area))
 
 
 def _patient_conditions(bounds: list[tuple[int, int]]) -> tuple[str, dict]:

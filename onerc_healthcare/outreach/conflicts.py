@@ -8,7 +8,7 @@ payload, and the records that depend on it are stored Held):
 | Type | When | Outreach record |
 |---|---|---|
 | Duplicate registration | a patient.register whose identifier is already registered, which is a strong duplicate (same name, DOB, sex), or whose similarity score is at least ``conflict_score`` | not applied (Conflict) |
-| Demographic change | a patient.update whose patient changed on the server after the package (``modified`` later than ``base_modified``) and a changed field now differs from the server value | not applied (Conflict) |
+| Demographic change | a patient.update whose patient changed on the server after the package (``modified`` later than ``base_modified``) and a changed field was also changed at the facility (server value differs from its ``base_values`` value and from the device value; without ``base_values``: differs from the device value) | not applied (Conflict) |
 | Overlapping visit | a visit.capture for a patient with an open visit (the one-open-visit rule) | not applied (Conflict, held) |
 | Overlapping visit, review only | a visit.capture for a patient with a closed facility visit on the same date | applied (Accepted) |
 
@@ -24,6 +24,10 @@ conflict's log):
 | raise | (new) | Open | the sync (as the team member) |
 | resolve (a decision valid for the type, `DECISIONS`) | Open | Resolved | HIS Officer, Medical In-Charge |
 | retry (held overlapping visit, after the facility visit was closed) | Open | Resolved, or Open when it still fails (logged) | HIS Officer, Medical In-Charge |
+
+Retry on a conflict that is no longer Open is refused (`SyncConflictError`) before anything is logged
+(DEFECT-P4-3). A Merge takes only fields the conflict compares side by side; for a Demographic change, only the
+changed fields whose facility and outreach values differ (the rows the form offers).
 
 What each decision does (`DECISION_EFFECTS`). Outreach data is always applied as the team member who captured it
 (`apply.acting_as` + `outreach_actor`), so they remain its author; nothing is deleted, and a discarded payload
@@ -42,7 +46,14 @@ stays on its Outreach Sync Record:
 | Overlapping visit | Keep outreach version (Retry) | the visit is applied now; refused while the patient still has an open visit |
 | Overlapping visit (review only) | Reviewed - keep both | nothing changes; both visits stand |
 
-After a decision the records held on the conflict are replayed automatically, in the order received.
+After a decision the records held on the conflict are replayed automatically, in the order received, pass after
+pass until a pass changes nothing (a record held behind another held record is replayed once that one is
+applied; DEFECT-P4-2). `replay_resolved` (called by every `sync.push` / `sync.status` of the session) replays
+records still Held on a Resolved conflict (protocol §6 F6).
+
+A member whose account was disabled after the outreach (staff left) stays the author of the records replayed
+or decided afterwards: inside `outreach_actor`, `clinical.practitioner.get_or_create` creates their Healthcare
+Practitioner too (DEFECT-P4-4).
 """
 
 from __future__ import annotations
@@ -77,6 +88,7 @@ from onerc_healthcare.constants import (
 	RECORD_STATUS_CONFLICT,
 	RECORD_STATUS_DISCARDED,
 	RECORD_STATUS_HELD,
+	RESULT_HELD,
 	SYNC_CONFLICT_DOCTYPE,
 	VISIT_DOCTYPE,
 )
@@ -310,6 +322,8 @@ def raise_update_conflict(rec, doc, changes: dict, differing: list[str]) -> str:
 	outreach = dict(changes)
 	outreach["base_modified"] = rec.payload.get("base_modified")
 	outreach["add_identifiers"] = rec.payload.get("add_identifiers") or []
+	if isinstance(rec.payload.get("base_values"), dict):
+		outreach["base_values"] = rec.payload["base_values"]
 	summary = _("Demographic change: {0} changed on the server after the package ({1}).").format(
 		doc.name, ", ".join(differing)
 	)
@@ -429,6 +443,12 @@ def retry(conflict: str, reason: str | None = None) -> dict:
 	doc = frappe.get_doc(SYNC_CONFLICT_DOCTYPE, conflict)
 	if doc.conflict_type != CONFLICT_OVERLAPPING_VISIT or cint(doc.review_only):
 		frappe.throw(_("Only a held overlapping visit can be retried."), SyncConflictError)
+	if doc.status != CONFLICT_OPEN:  # TRANSITIONS["retry"]: from Open only; nothing logged (DEFECT-P4-3)
+		frappe.throw(
+			_("Sync Conflict {0} was already resolved ({1}).").format(doc.name, _(doc.decision or "")),
+			SyncConflictError,
+			title=_("Already Resolved"),
+		)
 	reason = (reason or "").strip() or _(RETRY_REASON)
 	log_start = len(frappe.local.message_log)
 	frappe.db.savepoint(SAVEPOINT)
@@ -532,7 +552,7 @@ def _apply_decision(doc, record, decision: str, reason: str, chosen: dict, patie
 			return _discarded("Patient", doc.patient)
 		resolution = {"force": True}
 		if decision == DECISION_MERGE:
-			resolution["fields"] = _outreach_fields(chosen)
+			resolution["fields"] = _outreach_fields(chosen, allowed=demographic_merge_fields(doc))
 		return _apply_as_member(record, resolution)
 	# Overlapping visit (held)
 	if decision == DECISION_KEEP_FACILITY:
@@ -567,6 +587,7 @@ def _decide_registration(doc, record, decision: str, reason: str, chosen: dict, 
 				frappe.get_doc("Patient", existing, for_update=True), changes, identifiers
 			)
 	out = apply.accepted("Patient", existing, patient=existing)
+	out.modified = frappe.db.get_value("Patient", existing, "modified")
 	out.chosen_patient = existing
 	notes = []
 	if fields:
@@ -629,11 +650,33 @@ def _new_identifiers(patient: str, identifiers: list) -> tuple[list[dict], list[
 	return add, skipped
 
 
-def _outreach_fields(chosen: dict) -> list[str]:
+def demographic_merge_fields(doc) -> list[str]:
+	"""Fields a Merge may decide on a Demographic change: the changed fields whose facility and outreach values
+	differ (the rows `form_context` offers)."""
+	facility, outreach = _parse_json(doc.facility_version) or {}, _parse_json(doc.outreach_version) or {}
+	return [
+		k
+		for k in outreach
+		if k in apply.UPDATE_KEYS and _row(k, k, facility.get(k), outreach.get(k))["differs"]
+	]
+
+
+def _outreach_fields(chosen: dict, allowed: list[str] | None = None) -> list[str]:
 	fields = [f for f, side in chosen.items() if cstr(side).strip().lower() == "outreach"]
 	unknown = sorted(set(chosen) - set(MERGE_FIELDS) - set(apply.UPDATE_KEYS))
+	if allowed is not None:
+		unknown = sorted(set(unknown) | (set(chosen) - set(allowed)))
 	if unknown:
-		frappe.throw(_("These fields cannot be merged: {0}.").format(", ".join(unknown)), SyncConflictError)
+		frappe.throw(
+			_("These fields cannot be merged: {0}.").format(", ".join(unknown))
+			+ (
+				" "
+				+ _("Only these fields differ in this conflict: {0}.").format(", ".join(allowed) or _("none"))
+				if allowed is not None
+				else ""
+			),
+			SyncConflictError,
+		)
 	if not fields:
 		frappe.throw(
 			_("Choose at least one field from the outreach version, or use Keep facility version."),
@@ -678,6 +721,7 @@ def _store_outcome(record, outcome: apply.Outcome) -> None:
 		record.target_name = outcome.name
 	if outcome.get("patient"):
 		record.patient = outcome.patient
+	record.target_modified = outcome.get("modified") or None
 	record.applied_at = now_datetime()
 	from onerc_healthcare.outreach.sync import stored_result
 
@@ -687,23 +731,33 @@ def _store_outcome(record, outcome: apply.Outcome) -> None:
 
 def replay_held(conflict: str) -> list[dict]:
 	"""Re-apply the records held on `conflict`, in the order received, each as the member who sent it and in
-	its own savepoint (`sync.process`). Returns their results."""
+	its own savepoint (`sync.process`), pass after pass until a pass changes nothing: a record replayed before
+	the held record it depends on is held again, then replayed in the next pass (DEFECT-P4-2). Returns the
+	last result of each record, in the order first replayed."""
 	from onerc_healthcare.outreach.sync import process
 
-	names = frappe.get_all(
-		OUTREACH_RECORD_DOCTYPE,
-		filters={"conflict": conflict, "status": RECORD_STATUS_HELD},
-		order_by="first_received_at asc, creation asc",
-		pluck="name",
-	)
-	results = []
+	final: dict[str, dict] = {}
 	sessions: dict[str, frappe._dict] = {}
-	for name in names:
-		record = frappe.get_doc(OUTREACH_RECORD_DOCTYPE, name)
-		row = sessions.get(record.session) or apply.session_row(record.session)
-		sessions[record.session] = row
-		with apply.acting_as(record.user):
-			results.append(process(record, row))
+	progress = True
+	while progress:
+		progress = False
+		names = frappe.get_all(
+			OUTREACH_RECORD_DOCTYPE,
+			filters={"conflict": conflict, "status": RECORD_STATUS_HELD},
+			order_by="first_received_at asc, creation asc",
+			pluck="name",
+		)
+		for name in names:
+			record = frappe.get_doc(OUTREACH_RECORD_DOCTYPE, name)
+			row = sessions.get(record.session) or apply.session_row(record.session)
+			sessions[record.session] = row
+			with apply.acting_as(record.user):
+				result = process(record, row)
+			final[name] = result
+			# Progress: the record left the set held on this conflict (applied, failed or held elsewhere).
+			if result["result"] != RESULT_HELD or result.get("conflict") != conflict:
+				progress = True
+	results = list(final.values())
 	if results:
 		doc = frappe.get_doc(SYNC_CONFLICT_DOCTYPE, conflict)
 		summary = ", ".join(f"{r['client_uuid']}: {r['result']}" for r in results)
@@ -711,6 +765,23 @@ def replay_held(conflict: str) -> list[dict]:
 			doc, "replay", doc.status, doc.status, None, None, _("Held records replayed: {0}").format(summary)
 		)
 		_save(doc)
+	return results
+
+
+def replay_resolved(session: str) -> list[dict]:
+	"""Replay the records of `session` still Held on a Resolved conflict (protocol §6 F6; called by every
+	`sync.push` and `sync.status` of the session). One indexed query when there is nothing to do."""
+	names = frappe.db.sql_list(
+		f"""SELECT DISTINCT r.conflict
+		FROM `tab{OUTREACH_RECORD_DOCTYPE}` r
+		INNER JOIN `tab{SYNC_CONFLICT_DOCTYPE}` c ON c.name = r.conflict
+		WHERE r.session = %s AND r.status = %s AND c.status = %s
+		ORDER BY r.conflict""",
+		(session, RECORD_STATUS_HELD, CONFLICT_RESOLVED),
+	)
+	results: list[dict] = []
+	for conflict in names:
+		results.extend(replay_held(conflict))
 	return results
 
 
@@ -788,7 +859,7 @@ def form_context(doc) -> dict:
 	if doc.conflict_type == CONFLICT_DEMOGRAPHIC_CHANGE:
 		keys = [k for k in outreach if k in apply.UPDATE_KEYS]
 		out["rows"] = [_row(k, k.replace("_", " ").title(), facility.get(k), outreach.get(k)) for k in keys]
-		out["merge_fields"] = keys
+		out["merge_fields"] = demographic_merge_fields(doc)  # the rows that differ (what a Merge accepts)
 		out["rows"].append(
 			_row("modified", "Last Changed", facility.get("modified"), outreach.get("base_modified"))
 		)

@@ -32,7 +32,11 @@ def get_or_create(user: str | None = None) -> str:
 			frappe.PermissionError,
 		)
 	first_name, last_name = frappe.db.get_value("User", user, ["first_name", "last_name"]) or (None, None)
-	if not frappe.db.get_value("User", user, "enabled"):
+	# Phase 4 DEFECT-P4-4: an outreach record replayed or decided after its author's account was disabled keeps
+	# that member as its author (D58), so inside the outreach context their practitioner is still created.
+	from onerc_healthcare.outreach import context as outreach_context
+
+	if not frappe.db.get_value("User", user, "enabled") and not outreach_context.allows(user):
 		frappe.throw(_("User {0} is disabled.").format(user), frappe.PermissionError)
 	doc = frappe.get_doc(
 		{

@@ -27,10 +27,15 @@ W0 contract kept for O2 (sync): `members`, `is_member`, `assert_member(session, 
 | (insert)   | -        | Planned   | HIS Officer, Medical In-Charge (DocPerm)   | as above |
 | `activate` | Planned  | Active    | system: first package download             | - |
 | `return`   | Active   | Returned  | HIS Officer, Medical In-Charge, team lead  | records may still sync |
-| `close`    | Returned | Closed    | HIS Officer, Medical In-Charge             | refused while an Outreach Sync Record of the session is Held or Conflict |
-| `cancel`   | Planned  | Cancelled | HIS Officer, Medical In-Charge             | reason required |
+| `close`    | Returned | Closed    | HIS Officer, Medical In-Charge             | refused while an Outreach Sync Record of the session is Failed, Held or Conflict (protocol §6 F1) |
+| `cancel`   | Planned  | Cancelled | HIS Officer, Medical In-Charge             | reason required; refused once the session has any Outreach Sync Record |
 
 Planned, Active and Returned are open (`SESSION_OPEN_STATUSES`): devices may enrol, download and sync.
+Closed means "no new work" (protocol §6 F1): the package and a new device's enrolment are refused, but the
+grant keeps working for `sync.push` / `sync.status` until it expires and `enrol` may renew the existing grant of
+the same user and device, so records captured during the session still arrive (`SYNC_STATUSES`). Cancelled
+refuses everything. A session that received records is never cancelled (return and close it instead).
+`allowed_actions` offers an action only when `transition` would accept it (the record checks included).
 Administrator passes every role check; `system=True` (server code) skips it.
 """
 
@@ -55,6 +60,7 @@ from onerc_healthcare.constants import (
 	OUTREACH_SESSION_DOCTYPE,
 	OUTREACH_TEAM_DOCTYPE,
 	RECORD_STATUS_CONFLICT,
+	RECORD_STATUS_FAILED,
 	RECORD_STATUS_HELD,
 	ROLE_OUTREACH,
 	SESSION_ACTIVE,
@@ -81,12 +87,19 @@ PLAN_FIELDS = ("start_date", "end_date")
 SITE_FIELDS = ("facility", "catchment_area")
 LOG_TABLE = "status_log"
 REASON_MAX_LENGTH = 1000
-# Sync Record statuses that keep a session from closing (O2's doctype; checked only when it exists).
-UNRESOLVED_RECORD_STATUSES = (RECORD_STATUS_HELD, RECORD_STATUS_CONFLICT)
+# Sync Record statuses that keep a session from closing (protocol §6 F1; checked only when the doctype exists).
+UNRESOLVED_RECORD_STATUSES = (RECORD_STATUS_FAILED, RECORD_STATUS_HELD, RECORD_STATUS_CONFLICT)
+# Session statuses in which devices may still deliver records (sync.push / sync.status; protocol §6 F1).
+SYNC_STATUSES = (*SESSION_OPEN_STATUSES, SESSION_CLOSED)
 
 
 class IllegalSessionTransitionError(frappe.ValidationError):
 	"""The action is not allowed from the session's current status."""
+
+
+class OutreachSessionClosedError(frappe.ValidationError):
+	"""The session is Closed or Cancelled and refuses this request (push, status, enrol, package). The message
+	names the status in English ("Closed" / "Cancelled"), so the app can tell them apart besides `exc_type`."""
 
 
 class OutreachSessionError(frappe.ValidationError):
@@ -162,9 +175,7 @@ def assert_member(session: str, user: str | None = None) -> None:
 		)
 
 
-def assert_open(session: str) -> frappe._dict:
-	"""The session row ({name, status, facility, company, start_date, end_date, catchment_area}); refuses a
-	Closed or Cancelled session."""
+def _session_row(session: str) -> frappe._dict:
 	row = frappe.db.get_value(
 		OUTREACH_SESSION_DOCTYPE,
 		session,
@@ -173,10 +184,30 @@ def assert_open(session: str) -> frappe._dict:
 	)
 	if not row:
 		frappe.throw(_("Outreach Session {0} not found.").format(session or ""), frappe.DoesNotExistError)
+	return row
+
+
+def assert_open(session: str) -> frappe._dict:
+	"""The session row ({name, status, facility, company, start_date, end_date, catchment_area}); refuses a
+	Closed or Cancelled session."""
+	row = _session_row(session)
 	if row.status not in SESSION_OPEN_STATUSES:
 		frappe.throw(
-			_("Outreach session {0} is {1}; it no longer accepts records.").format(session, _(row.status)),
-			frappe.ValidationError,
+			_("Outreach session {0} is {1}; it no longer accepts records.").format(session, row.status),
+			OutreachSessionClosedError,
+			title=_("Session Closed"),
+		)
+	return row
+
+
+def assert_syncable(session: str) -> frappe._dict:
+	"""The session row when devices may still deliver records (open or Closed, protocol §6 F1); refuses a
+	Cancelled session."""
+	row = _session_row(session)
+	if row.status not in SYNC_STATUSES:
+		frappe.throw(
+			_("Outreach session {0} is {1}; it no longer accepts records.").format(session, row.status),
+			OutreachSessionClosedError,
 			title=_("Session Closed"),
 		)
 	return row
@@ -226,25 +257,58 @@ def may_act(rule: SessionTransition, doc, user: str | None = None) -> bool:
 
 
 def allowed_actions(doc, user: str | None = None) -> list[dict]:
-	"""User actions offered on the form: [{action, label, needs_reason}]."""
+	"""User actions offered on the form: [{action, label, needs_reason}]. An action `transition` would refuse
+	because of the session's sync records (close, cancel) is not offered (DEFECT-P4-1)."""
 	return [
 		{"action": action, "label": rule.label, "needs_reason": rule.needs_reason}
 		for action, rule in TRANSITIONS.items()
-		if not rule.is_system and doc.status in rule.from_statuses and may_act(rule, doc, user)
+		if not rule.is_system
+		and doc.status in rule.from_statuses
+		and may_act(rule, doc, user)
+		and not record_block(doc.name, action)
 	]
 
 
-def unresolved_sync_records(session: str) -> int:
-	"""Outreach Sync Records of `session` still Held or in Conflict (0 while O2's doctype does not exist)."""
-	if not frappe.db.table_exists(OUTREACH_RECORD_DOCTYPE):
+def _record_count(session: str, statuses: tuple[str, ...] | None = None) -> int:
+	if not session or not frappe.db.table_exists(OUTREACH_RECORD_DOCTYPE):
 		return 0
 	meta = frappe.get_meta(OUTREACH_RECORD_DOCTYPE)
 	if not (meta.has_field("session") and meta.has_field("status")):
 		return 0
-	return frappe.db.count(
-		OUTREACH_RECORD_DOCTYPE,
-		{"session": session, "status": ["in", list(UNRESOLVED_RECORD_STATUSES)]},
-	)
+	filters: dict = {"session": session}
+	if statuses:
+		filters["status"] = ["in", list(statuses)]
+	return frappe.db.count(OUTREACH_RECORD_DOCTYPE, filters)
+
+
+def unresolved_sync_records(session: str) -> int:
+	"""Outreach Sync Records of `session` still Failed, Held or in Conflict (0 while the doctype does not exist)."""
+	return _record_count(session, UNRESOLVED_RECORD_STATUSES)
+
+
+def sync_records(session: str) -> int:
+	"""Every Outreach Sync Record of `session`, whatever its status."""
+	return _record_count(session)
+
+
+def record_block(session: str, action: str) -> str | None:
+	"""Why the session's sync records forbid `action` (close, cancel), else None."""
+	if action == ACTION_CLOSE:
+		pending = unresolved_sync_records(session)
+		if pending:
+			return _(
+				"{0} synced record(s) of this session are still failed, held or in conflict. Have the team "
+				"correct and send the failed records again, and resolve the Sync Conflicts, before closing "
+				"the session."
+			).format(pending)
+	elif action == ACTION_CANCEL:
+		received = sync_records(session)
+		if received:
+			return _(
+				"{0} record(s) were received from this session's devices, so it cannot be cancelled. Return "
+				"and close it instead (it becomes Active when the team downloads the package)."
+			).format(received)
+	return None
 
 
 # --------------------------------------------------------------------------------------------- validation
@@ -470,17 +534,13 @@ def transition(session: str, action: str, reason: str | None = None, system: boo
 			_("The reason is {0} characters long; the limit is {1}.").format(len(reason), REASON_MAX_LENGTH),
 			IllegalSessionTransitionError,
 		)
-	if action == ACTION_CLOSE:
-		pending = unresolved_sync_records(doc.name)
-		if pending:
-			frappe.throw(
-				_(
-					"{0} synced record(s) of this session are still held or in conflict. Resolve the Sync "
-					"Conflicts before closing the session."
-				).format(pending),
-				IllegalSessionTransitionError,
-				title=_("Unresolved Records"),
-			)
+	blocked = record_block(doc.name, action)
+	if blocked:
+		frappe.throw(
+			blocked,
+			IllegalSessionTransitionError,
+			title=_("Unresolved Records") if action == ACTION_CLOSE else _("Records Received"),
+		)
 	if action == ACTION_CANCEL:
 		doc.cancellation_reason = reason
 	_append_log(doc, doc.status, rule.to_status, action, reason)

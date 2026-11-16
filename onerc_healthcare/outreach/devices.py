@@ -7,15 +7,20 @@
   user's Outreach Device Grant for that device and session. Each call rotates the sync secret (returned once;
   only its salted SHA-256 is stored), sets `expires_at = now + offline_session_days` and escrows the device
   data key (Password field). A device holds one live grant per user per session; a revoked grant stays as
-  history and a new one is issued next to it. A Revoked device cannot enrol.
+  history and a new one is issued next to it. A Revoked device cannot enrol. The user must hold the Outreach
+  Team Member role. On a **Closed** session (protocol §6 F1) `enrol` only renews the live grant of the same
+  user and device, so a device whose grant expired after the close can still deliver its records; a new device
+  (or a revoked grant) is refused. A Cancelled session refuses every enrolment.
 - `recover_key` (GET, online sign-in only): the escrowed data key, for the grant's own user, unless the grant
   or its device is revoked. Each recovery leaves an Info comment on the grant.
 - `revoke_device` (POST, desk): HIS Officer, Medical In-Charge or EMR System Administrator, with a reason.
   The device becomes Revoked and every grant on it is revoked (lost-device procedure, OUT-25).
 
-`verify_grant(name, secret)` is the auth hook's check (`outreach.auth`). A request authenticated by a device
-grant (`frappe.local.krcs_outreach_grant`) may never call `enrol`, `recover_key` or `my_sessions`; the hook
-already refuses those paths, and the functions check again.
+`verify_grant(name, secret, methods)` is the auth hook's check (`outreach.auth`). It refuses (401) a user who
+no longer holds the Outreach Team Member role (protocol §6 F6), and accepts a Closed session only when every
+method of the request is `sync.push` / `sync.status` (`CLOSED_SESSION_METHODS`, §6 F1). A request authenticated
+by a device grant (`frappe.local.krcs_outreach_grant`) may never call `enrol`, `recover_key` or `my_sessions`;
+the hook already refuses those paths, and the functions check again.
 """
 
 from __future__ import annotations
@@ -42,10 +47,16 @@ from onerc_healthcare.constants import (
 	OUTREACH_TEAM_DOCTYPE,
 	ROLE_OUTREACH,
 	ROLE_SYSADMIN,
+	SESSION_CLOSED,
 	SESSION_OPEN_STATUSES,
 )
 from onerc_healthcare.outreach.auth import GRANT_LOCAL_KEY
-from onerc_healthcare.outreach.session import assert_member, assert_open, session_departments
+from onerc_healthcare.outreach.session import (
+	OutreachSessionClosedError,
+	assert_member,
+	assert_syncable,
+	session_departments,
+)
 
 REVOKE_ROLES = (*OUTREACH_MANAGER_ROLES, ROLE_SYSADMIN)
 # Settings the app needs (protocol §2, enrol response)
@@ -62,6 +73,10 @@ DATA_KEY_BYTES = 32  # AES-256
 SECRET_BYTES = 32
 LABEL_MAX_LENGTH = 140
 REASON_MAX_LENGTH = 1000
+# The only methods a grant may call while its session is Closed (protocol §6 F1: records still arrive).
+CLOSED_SESSION_METHODS = frozenset(
+	("onerc_healthcare.outreach.sync.push", "onerc_healthcare.outreach.sync.status")
+)
 
 
 class DeviceEnrolmentError(frappe.ValidationError):
@@ -98,6 +113,11 @@ def assert_online_sign_in() -> None:
 			_("This action needs an online sign-in; a device grant cannot be used for it."),
 			frappe.PermissionError,
 		)
+
+
+def has_outreach_role(user: str) -> bool:
+	"""The user still holds the Outreach Team Member role (protocol §6 F6)."""
+	return bool(frappe.db.exists("Has Role", {"parent": user, "parenttype": "User", "role": ROLE_OUTREACH}))
 
 
 def hash_secret(secret: str, salt: str) -> str:
@@ -215,12 +235,23 @@ def enrol(session: str, device_id: str, data_key: str, device_label: str | None 
 	assert_online_sign_in()
 	user = frappe.session.user
 	assert_member(session, user)
-	assert_open(session)
+	row = assert_syncable(session)  # Cancelled refused; Closed only renews (below)
 	if ROLE_OUTREACH not in frappe.get_roles(user):
 		frappe.throw(_("Only an {0} can enrol a device.").format(_(ROLE_OUTREACH)), frappe.PermissionError)
 	device_id = (device_id or "").strip()
 	if not DEVICE_ID_PATTERN.match(device_id):
 		frappe.throw(_("Invalid device ID."), DeviceEnrolmentError)
+	if row.status == SESSION_CLOSED and not frappe.db.exists(
+		OUTREACH_GRANT_DOCTYPE, {"device": device_id, "user": user, "session": session, "revoked": 0}
+	):
+		frappe.throw(
+			_(
+				"Outreach session {0} is Closed: it is closed to new devices. Only a device already enrolled "
+				"for it can sign in again, to send the records it still holds."
+			).format(session),
+			OutreachSessionClosedError,
+			title=_("Session Closed"),
+		)
 	data_key = _decode_data_key(data_key)
 	label = ((device_label or "").strip() or device_id)[:LABEL_MAX_LENGTH]
 	now = now_datetime()
@@ -367,8 +398,11 @@ def revoke_device(device: str, reason: str) -> dict:
 # ------------------------------------------------------------------------------------- grant verification
 
 
-def verify_grant(name: str, secret: str) -> frappe._dict:
-	"""The grant row when `secret` matches and the grant, its device and its session are usable now.
+def verify_grant(name: str, secret: str, methods=None) -> frappe._dict:
+	"""The grant row when `secret` matches and the grant, its device and its session are usable now for
+	`methods` (the whitelisted methods of the request): an open session, or a Closed one when every method is
+	in `CLOSED_SESSION_METHODS` (protocol §6 F1). The user must be enabled, on the team and still hold the
+	Outreach Team Member role (§6 F6).
 
 	Raises frappe.AuthenticationError otherwise (HTTP 401; protocol §1). Unknown grant and wrong secret
 	share one message, so the response never tells which grant names exist."""
@@ -405,10 +439,19 @@ def verify_grant(name: str, secret: str) -> frappe._dict:
 		frappe.throw(_("This device was revoked. Sign in online."), frappe.AuthenticationError)
 	if not frappe.db.get_value("User", row.user, "enabled"):
 		frappe.throw(invalid, frappe.AuthenticationError)
-	status = frappe.db.get_value(OUTREACH_SESSION_DOCTYPE, row.session, "status")
-	if status not in SESSION_OPEN_STATUSES:
+	if not has_outreach_role(row.user):
 		frappe.throw(
-			_("Outreach session {0} is closed. Sign in online.").format(row.session),
+			_("You no longer hold the {0} role. Sign in online.").format(_(ROLE_OUTREACH)),
+			frappe.AuthenticationError,
+		)
+	status = frappe.db.get_value(OUTREACH_SESSION_DOCTYPE, row.session, "status")
+	sync_only = bool(methods) and all(m in CLOSED_SESSION_METHODS for m in methods)
+	if status not in SESSION_OPEN_STATUSES and not (status == SESSION_CLOSED and sync_only):
+		frappe.throw(
+			# The status in English ("Closed" / "Cancelled"): the app tells them apart (fix round 1)
+			_("Outreach session {0} is {1}: it is closed to this device. Sign in online.").format(
+				row.session, status
+			),
 			frappe.AuthenticationError,
 		)
 	if not frappe.db.exists(

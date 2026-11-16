@@ -221,13 +221,27 @@ class TestPushAccess(SyncCase):
 		self.assertFalse(frappe.db.exists(OUTREACH_RECORD_DOCTYPE, env["client_uuid"]))
 		self.assertEqual(self.push([env], user="member2")["results"][0]["result"], "accepted")
 
-	def test_closed_or_cancelled_session_refused(self):
+	def test_cancelled_session_refused_closed_session_accepted(self):
+		"""Protocol §6 F1: a Cancelled session refuses push and status; a Closed one still accepts the records
+		captured during the session (and answers status)."""
 		env = self.env(RECORD_PATIENT_REGISTER, self.register_payload())
-		for status in (SESSION_CLOSED, SESSION_CANCELLED):
-			frappe.db.set_value(OUTREACH_SESSION_DOCTYPE, self.session, "status", status)
-			with self.assertRaises(frappe.ValidationError, msg=status):
-				self.push([env])
+		from onerc_healthcare.outreach.session import OutreachSessionClosedError
+
+		frappe.db.set_value(OUTREACH_SESSION_DOCTYPE, self.session, "status", SESSION_CANCELLED)
+		with self.assertRaisesRegex(OutreachSessionClosedError, "is Cancelled"):
+			self.push([env])
+		with (
+			as_user(self.users["member"]),
+			self.assertRaisesRegex(OutreachSessionClosedError, "is Cancelled"),
+		):
+			sync.status(self.session, [env["client_uuid"]])
 		self.assertFalse(frappe.db.exists(OUTREACH_RECORD_DOCTYPE, env["client_uuid"]))
+		frappe.db.set_value(OUTREACH_SESSION_DOCTYPE, self.session, "status", SESSION_CLOSED)
+		self.assertEqual(self.results(self.push([env])), ["accepted"])
+		with as_user(self.users["member"]):
+			self.assertEqual(
+				sync.status(self.session, [env["client_uuid"]])["results"][0]["result"], "accepted"
+			)
 
 	def test_batch_too_large_and_bad_batch_id(self):
 		"""max_batch (default 50): 51 records are refused before anything is stored."""
@@ -753,3 +767,205 @@ class TestOutreachInReports(SyncCase):
 		ctx = registry.SourceContext(report="T-O2", from_date=self.FROM, to_date=self.TO, facility=facility)
 		got = {k: v for k, v in workload.evaluate_attendance(ctx, elements).items() if v}
 		self.assertEqual(got, {("OUT-N", "", ""): 1})
+
+
+class TestFixRound1(SyncCase):
+	"""Protocol §6 fix round 1 (F2, F3, F5, F6): hand-computed expectations in each docstring."""
+
+	def outside_patient(self) -> str:
+		from onerc_healthcare.tests.outreach_factories import make_residence
+
+		return make_patient(krcs_residence=make_residence()).name
+
+	# -- F5: patients a session may touch -----------------------------------------------------------------
+	def test_patient_outside_catchment_refused(self):
+		"""A patient living outside the catchment subtrees, or with no residence: patient.update and visit.capture
+		(with `patient`) are failed with the catchment message; nothing is changed or created."""
+		message = "This patient is not in the session's catchment area."
+		for patient in (self.outside_patient(), make_patient().name):
+			base = str(frappe.db.get_value("Patient", patient, "modified"))
+			update = self.env(
+				RECORD_PATIENT_UPDATE,
+				{"patient": patient, "base_modified": base, "changes": {"allergies": "T- sulfa"}},
+			)
+			visit = self.env(RECORD_VISIT_CAPTURE, self.visit_payload(patient=patient))
+			out = self.push([update, visit])
+			self.assertEqual(self.results(out), ["failed", "failed"])
+			self.assertEqual([r["error"] for r in out["results"]], [message, message])
+			self.assertIsNone(frappe.db.get_value("Patient", patient, "allergies"))
+			self.assertEqual(frappe.db.count(VISIT_DOCTYPE, {"patient": patient}), 0)
+
+	def test_patient_registered_by_the_session_allowed(self):
+		"""A patient this session registered (residence outside the catchment) may be updated and visited by
+		name; the same patient is refused in another session with another catchment that never touched it."""
+		from onerc_healthcare.tests.outreach_factories import make_residence
+
+		_env, result = self.register(residence=make_residence())
+		patient = result["name"]
+		base = str(frappe.db.get_value("Patient", patient, "modified"))
+		update = self.env(
+			RECORD_PATIENT_UPDATE,
+			{"patient": patient, "base_modified": base, "changes": {"allergies": "T- sulfa"}},
+		)
+		visit = self.env(RECORD_VISIT_CAPTURE, self.visit_payload(patient=patient))
+		self.assertEqual(self.results(self.push([update, visit])), ["accepted", "accepted"])
+
+		area, _leaf = make_catchment()
+		other = make_session(
+			members=[self.users["member"]], catchment_area=area, start_date=add_days(today(), -3), days=10
+		).name
+		visit2 = self.env(RECORD_VISIT_CAPTURE, self.visit_payload(patient=patient), session=other)
+		out = self.push([visit2], session=other)["results"][0]
+		self.assertEqual(out["result"], "failed")
+		self.assertIn("catchment", out["error"])
+
+	def test_patient_linked_by_a_decision_allowed(self):
+		"""An existing patient outside the catchment whose UNHCR ID an outreach registration carries: the
+		registration conflicts; once the HIS Officer links it (Link as the same patient) the session may visit
+		that patient by name."""
+		from onerc_healthcare.constants import DECISION_LINK
+		from onerc_healthcare.outreach import conflicts
+
+		patient = self.outside_patient()
+		unhcr = frappe.get_all(
+			"Patient Identifier", filters={"parent": patient}, pluck="identifier_value", limit=1
+		)[0]
+		reg = self.env(
+			RECORD_PATIENT_REGISTER,
+			self.register_payload(
+				identifiers=[{"identifier_type": IDENTIFIER_UNHCR, "identifier_value": unhcr}]
+			),
+		)
+		conflict = self.push([reg])["results"][0]["conflict"]
+		visit = self.env(RECORD_VISIT_CAPTURE, self.visit_payload(patient=patient))
+		self.assertEqual(self.results(self.push([visit])), ["failed"])
+		with as_user(self.users["his"]):
+			conflicts.resolve(conflict, DECISION_LINK, "T- same person", patient=patient)
+		self.assertEqual(self.results(self.push([visit])), ["accepted"])
+
+	# -- F3: field dispensing -----------------------------------------------------------------------------
+	def test_partial_field_dispense_closes_the_line(self):
+		"""Paracetamol BID x 5 Day = 2 x 5 = 10 prescribed (DEFECT-RX-1); 6 given in the field. The Dispensing
+		Record is final, so the line is Closed (Marley completed), the visit's pharmacy task is closed
+		(Discharged) and the facility pharmacy can record nothing more on it. 11 of 10 is failed with the
+		readable over-dispensing message and creates nothing."""
+		from onerc_healthcare.pharmacy import dispensing as line
+
+		patient = make_patient(krcs_residence=self.leaf).name
+		at = stamp(self.captured + timedelta(minutes=10))
+		env = self.env(
+			RECORD_VISIT_CAPTURE,
+			self.visit_payload(
+				patient=patient, drugs=(self.drug(dispensed={"quantity": 6, "dispensed_at": at}),)
+			),
+		)
+		result = self.push([env])["results"][0]
+		self.assertEqual(result["result"], "accepted", result)
+		visit = frappe.get_doc(VISIT_DOCTYPE, result["name"])
+		mr = frappe.get_all(
+			"Medication Request",
+			filters={"order_group": visit.encounter, "docstatus": 1},
+			fields=["name", "status", "quantity", line.STATUS_FIELD, "krcs_qty_dispensed"],
+		)[0]
+		self.assertEqual(
+			(mr.quantity, mr.krcs_qty_dispensed, mr.get(line.STATUS_FIELD), mr.status),
+			(10, 6, line.LINE_CLOSED, line.MR_STATUS_COMPLETED),
+		)
+		self.assertEqual(frappe.db.get_value(DISPENSING_DOCTYPE, {"medication_request": mr.name}, "final"), 1)
+		self.assertEqual((visit.status, visit.pharmacy_open), (VISIT_STATUS_DISCHARGED, 0))
+		facility_dispense = frappe.get_doc(
+			{
+				"doctype": DISPENSING_DOCTYPE,
+				"medication_request": mr.name,
+				"outcome": "Dispensed",
+				"quantity": 1,
+			}
+		)
+		with self.assertRaises(line.LineResolvedError):
+			facility_dispense.insert(ignore_permissions=True)
+
+		other = make_patient(krcs_residence=self.leaf).name
+		over = self.env(
+			RECORD_VISIT_CAPTURE,
+			self.visit_payload(
+				patient=other, drugs=(self.drug(dispensed={"quantity": 11, "dispensed_at": at}),)
+			),
+		)
+		out = self.push([over])["results"][0]
+		self.assertEqual(out["result"], "failed")
+		self.assertIn("Only 10", out["error"])
+		self.assertEqual(frappe.db.count(VISIT_DOCTYPE, {"patient": other}), 0)
+
+	# -- F2: correcting a failed record -------------------------------------------------------------------
+	def test_failed_record_corrected_with_same_uuid(self):
+		"""A failed activity (unknown type) re-sent with the same UUID and a corrected payload: the new payload is
+		stored and applied (attempts 2); a later re-send with yet another payload is a duplicate and changes
+		nothing (the accepted payload stays)."""
+		payload = {
+			"activity_type": "T- No Such Type",
+			"activity_date": str(self.captured.date()),
+			"location": "T- market",
+			"topic": "T- hygiene",
+			"participants_male": 1,
+			"participants_female": 2,
+			"participants_total": 3,
+		}
+		env = self.env(RECORD_COMMUNITY_ACTIVITY, payload)
+		self.assertEqual(self.results(self.push([env])), ["failed"])
+		activity_type = frappe.get_all(
+			"Community Activity Type", filters={"enabled": 1}, pluck="name", limit=1
+		)[0]
+		fixed = {**env, "payload": {**payload, "activity_type": activity_type}}
+		self.assertEqual(self.results(self.push([fixed])), ["accepted"])
+		rec = self.record(env["client_uuid"])
+		self.assertEqual((frappe.parse_json(rec.payload), rec.attempts), (fixed["payload"], 2))
+		changed = {**env, "payload": {**fixed["payload"], "topic": "T- changed"}}
+		self.assertEqual(self.results(self.push([changed])), ["duplicate"])
+		self.assertEqual(frappe.parse_json(self.record(env["client_uuid"]).payload), fixed["payload"])
+		self.assertEqual(frappe.db.count(COMMUNITY_ACTIVITY_DOCTYPE, {"topic": "T- changed"}), 0)
+
+	# -- F6: busy database --------------------------------------------------------------------------------
+	def test_deadlock_fails_only_that_record(self):
+		"""[A, B, C] where applying B raises a deadlock and locking C a lock-wait timeout: A and the call succeed,
+		B and C are failed with the busy message and not stored; sent again they are applied."""
+		from unittest import mock
+
+		from onerc_healthcare.outreach import apply
+
+		envs = [self.env(RECORD_PATIENT_REGISTER, self.register_payload()) for _ in range(3)]
+		real_apply, real_lock = apply.apply_record, sync.lock_record
+
+		def apply_record(rec):
+			if rec.name == envs[1]["client_uuid"]:
+				raise frappe.QueryDeadlockError("Deadlock found when trying to get lock")
+			return real_apply(rec)
+
+		def lock_record(name):
+			if name == envs[2]["client_uuid"]:
+				raise frappe.QueryTimeoutError("Lock wait timeout exceeded")
+			return real_lock(name)
+
+		with (
+			mock.patch.object(apply, "apply_record", side_effect=apply_record),
+			mock.patch.object(sync, "lock_record", side_effect=lock_record),
+		):
+			out = self.push(envs)
+		self.assertEqual(self.results(out), ["accepted", "failed", "failed"])
+		self.assertEqual([r["error"] for r in out["results"][1:]], [sync.BUSY_MESSAGE] * 2)
+		for env in envs[1:]:
+			self.assertFalse(frappe.db.exists(OUTREACH_RECORD_DOCTYPE, env["client_uuid"]))
+			self.assertFalse(frappe.db.exists("Patient", {"first_name": env["payload"]["first_name"]}))
+		self.assertEqual(self.results(self.push(envs)), ["duplicate", "accepted", "accepted"])
+
+	# -- F6: role check -----------------------------------------------------------------------------------
+	def test_role_removed_refuses_push_and_status(self):
+		"""A team member whose Outreach Team Member role was withdrawn (still on the team) can neither push nor
+		ask for the status."""
+		from onerc_healthcare.tests.factories import make_user
+
+		env, _result = self.register()
+		make_user("or-member2", [])
+		with self.assertRaises(frappe.PermissionError):
+			self.push([self.env(RECORD_PATIENT_REGISTER, self.register_payload())], user="member2")
+		with as_user(self.users["member2"]), self.assertRaises(frappe.PermissionError):
+			sync.status(self.session, [env["client_uuid"]])

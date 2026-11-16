@@ -234,6 +234,18 @@ class TestCatchmentSelection(PackageCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "no longer accepts"):
 			self.patients()
 
+	def test_package_refused_once_session_closed(self):
+		"""Protocol §6 F1: Closed is "no new work": both package endpoints are refused (cookie sign-in)."""
+		for action in (sessions.ACTION_ACTIVATE, sessions.ACTION_RETURN, sessions.ACTION_CLOSE):
+			sessions.transition(self.session.name, action, system=True)
+		with self.assertRaisesRegex(sessions.OutreachSessionClosedError, "is Closed"):
+			self.patients()
+		with (
+			as_user(self.users["member"]),
+			self.assertRaisesRegex(sessions.OutreachSessionClosedError, "is Closed"),
+		):
+			package.get_reference(self.session.name)
+
 	def test_device_grant_must_match_session(self):
 		from onerc_healthcare.outreach import devices
 
@@ -398,7 +410,9 @@ class TestReference(PackageCase):
 				"icd11",
 				"medications",
 				"dosages",
+				"dosage_units",
 				"periods",
+				"period_days",
 				"dosage_forms",
 				"lab_templates",
 				"departments",
@@ -468,3 +482,28 @@ class TestReference(PackageCase):
 			}
 		).db_insert()
 		self.assertEqual(self.reference()["data"]["departments"], ["Outpatient"])
+
+	def test_dosage_units_and_period_days(self):
+		"""Protocol §6 F3, by hand from the seeded masters: BID has 2 Dosage Strength rows of 1 -> 2 a day, TID 3,
+		QID 4, Once Daily 1; 5 Day = 5 days, 2 Week = 14, 1 Month = 30, 12 Hour = 0.5. Every dosage and duration
+		of the lists has an entry. Paracetamol BID x 5 Day = 2 x 5 = 10, the quantity the server prescribes."""
+		data = self.reference()["data"]
+		units, days = data["dosage_units"], data["period_days"]
+		self.assertEqual(set(units), set(data["dosages"]))
+		self.assertEqual(set(days), set(data["periods"]))
+		expected_units = {"BID": 2, "TID": 3, "QID": 4, "Once Daily": 1}
+		expected_days = {"5 Day": 5, "2 Week": 14, "1 Month": 30, "12 Hour": 0.5}
+		self.assertEqual(
+			{k: units[k] for k in expected_units if k in units},
+			{k: v for k, v in expected_units.items() if k in units},
+		)
+		self.assertEqual(
+			{k: days[k] for k in expected_days if k in days},
+			{k: v for k, v in expected_days.items() if k in days},
+		)
+		self.assertIn("BID", units)
+		self.assertIn("5 Day", days)
+		self.assertEqual(units["BID"] * days["5 Day"], 10)
+		for value in [*units.values(), *days.values()]:  # numbers, never strings
+			self.assertIsInstance(value, int | float)
+			self.assertNotIsInstance(value, bool)

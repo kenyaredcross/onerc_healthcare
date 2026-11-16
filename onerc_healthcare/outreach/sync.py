@@ -4,7 +4,9 @@
 
 `push(session, device_id, batch_id, records)` (POST) and `status(session, uuids)` (GET). Both act as
 ``frappe.session.user`` (a cookie sign-in, or the device grant checked by O1's `outreach.auth` hook) and require
-that user to be on the session team; `push` also requires an open session (Planned, Active or Returned).
+that user to be on the session team and to hold the Outreach Team Member role (protocol §6 F6). The session may
+be open (Planned, Active, Returned) or **Closed**: records captured during the session still arrive after the
+close (§6 F1, NFR-11); a Cancelled session refuses both.
 
 How a call is handled:
 
@@ -20,6 +22,19 @@ How a call is handled:
 - **Dependencies** (``depends_on``): a dependency the server has not received, or one that failed, makes the
   record ``failed``; a dependency that is held or in conflict makes it ``held`` (stored with its payload and
   replayed by `outreach.conflicts` once the conflict is resolved).
+- **Correcting a failed record** (§6 F2): a record stored Failed and re-sent with the same client UUID stores the
+  new payload, counts the attempt and is applied again. Any other stored status is never re-applied, whatever
+  payload arrives.
+- **Busy database** (§6 F6): a deadlock or lock-wait timeout (``frappe.QueryDeadlockError`` /
+  ``frappe.QueryTimeoutError``) while a record is locked, stored or applied makes that record ``failed`` with
+  `BUSY_MESSAGE`, not the call. MariaDB may have rolled back the whole transaction after a deadlock; the records
+  before it were already committed one by one (outside tests), so only the current one is lost, and it is not
+  stored (the device sends it again).
+- **Held records on a Resolved conflict** (§6 F6): every `push` and `status` of a session first replays the
+  session's records still Held on a Resolved conflict (`conflicts.replay_resolved`), so a record held behind
+  another held record never stays held.
+- ``patient.update`` results carry ``modified`` (the Patient's new ``modified``, stored as ``target_modified``)
+  so the device can chain a second edit (§6 F4); a duplicate or ``status`` answer returns it too.
 - Records are applied by `outreach.apply` (the same pipelines as the desk) inside the outreach context.
 - Error messages are plain text (HTML stripped) so the device can show them.
 
@@ -60,6 +75,7 @@ from onerc_healthcare.constants import (
 	RESULT_DUPLICATE,
 	RESULT_FAILED,
 	RESULT_HELD,
+	ROLE_OUTREACH,
 )
 from onerc_healthcare.outreach import apply, devices
 from onerc_healthcare.outreach import session as outreach_session
@@ -72,6 +88,11 @@ RATE_WINDOW = 60 * 60
 PUSH_RATE_LIMIT = 600  # calls per user per hour (50 records each)
 STATUS_RATE_LIMIT = 1200
 SAVEPOINT = "krcs_outreach_record"
+RECEIVE_SAVEPOINT = "krcs_outreach_receive"
+SWEEP_SAVEPOINT = "krcs_outreach_sweep"
+# A deadlock or lock-wait timeout: the record is answered `failed` and sent again by the device (§6 F6).
+BUSY_ERRORS = (frappe.QueryDeadlockError, frappe.QueryTimeoutError)
+BUSY_MESSAGE = "The server was busy; it will be retried."
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 # Stored status -> wire result: first answer (or `status`), and answer to a re-send.
@@ -101,8 +122,7 @@ FINAL_STATUSES = (RECORD_STATUS_ACCEPTED, RECORD_STATUS_DISCARDED)
 def push(session: str, device_id: str, batch_id: str, records: list | str) -> dict:
 	"""Receive one batch of offline records (protocol §4). Returns {"batch", "results"}."""
 	user = frappe.session.user
-	outreach_session.assert_member(session, user)
-	outreach_session.assert_open(session)
+	assert_sync_access(session, user)
 	device_id = cstr(device_id).strip()
 	devices.assert_request_grant(session, device_id)  # a device grant only syncs its own session and device
 	if not device_id or len(device_id) > MAX_DEVICE_ID_LENGTH:
@@ -123,6 +143,7 @@ def push(session: str, device_id: str, batch_id: str, records: list | str) -> di
 		)
 
 	row = apply.session_row(session)
+	sweep_held(session)
 	batch = _open_batch(session, device_id, batch_id, user, len(records))
 	call = frappe._dict(session=row, user=user, device_id=device_id, batch=batch.name)
 	results = [receive(env, call) for env in records]
@@ -136,9 +157,10 @@ def push(session: str, device_id: str, batch_id: str, records: list | str) -> di
 def status(session: str, uuids: list | str) -> dict:
 	"""Current result of records sent earlier by this user in `session` (protocol §4). A held or conflicted
 	record shows its final result once the conflict is resolved. Unknown UUIDs come back with ``result``
-	null. The session may already be closed (read-only)."""
+	null. The session may already be Closed. Records of the session still Held on a Resolved conflict are
+	replayed first (protocol §6 F6)."""
 	user = frappe.session.user
-	outreach_session.assert_member(session, user)
+	assert_sync_access(session, user)
 	devices.assert_request_grant(session)
 	if isinstance(uuids, str):
 		uuids = frappe.parse_json(uuids)
@@ -148,6 +170,8 @@ def status(session: str, uuids: list | str) -> dict:
 		frappe.throw(
 			_("Ask for at most {0} records at a time.").format(STATUS_MAX_UUIDS), frappe.ValidationError
 		)
+	if sweep_held(session):
+		frappe.local.flags.commit = True  # a GET is rolled back otherwise
 	results = []
 	for value in uuids:
 		name = clean_uuid(value)
@@ -159,16 +183,70 @@ def status(session: str, uuids: list | str) -> dict:
 	return {"results": results}
 
 
+def assert_sync_access(session: str, user: str) -> frappe._dict:
+	"""Team member holding the Outreach Team Member role (§6 F6), session open or Closed (§6 F1)."""
+	outreach_session.assert_member(session, user)
+	if not devices.has_outreach_role(user):
+		frappe.throw(
+			_("You no longer hold the {0} role, so you cannot sync outreach records.").format(
+				_(ROLE_OUTREACH)
+			),
+			frappe.PermissionError,
+		)
+	return outreach_session.assert_syncable(session)
+
+
+def sweep_held(session: str) -> list[dict]:
+	"""Replay the session's records still Held on a Resolved conflict (§6 F6). Never fails the call: a busy
+	database or an unexpected error leaves the records Held for the next call."""
+	from onerc_healthcare.outreach import conflicts
+
+	log_start = len(frappe.local.message_log)
+	frappe.db.savepoint(SWEEP_SAVEPOINT)
+	try:
+		return conflicts.replay_resolved(session)
+	except Exception as exc:
+		rollback_to(SWEEP_SAVEPOINT)
+		if not isinstance(exc, BUSY_ERRORS):
+			frappe.log_error(title=f"Outreach sync: replay of held records of {session} failed")
+		return []
+	finally:
+		_restore_messages(log_start)
+
+
+def rollback_to(savepoint: str) -> None:
+	"""Roll back to `savepoint`. After a deadlock MariaDB has already rolled back the whole transaction (the
+	savepoint is gone): outside tests every earlier record was committed on its own, so a full rollback only
+	re-establishes a clean transaction."""
+	try:
+		frappe.db.rollback(save_point=savepoint)
+	except Exception:
+		if frappe.flags.in_test:
+			raise
+		frappe.db.rollback()
+
+
 # --------------------------------------------------------------------------------------------- one record
 
 
 def receive(env, call: frappe._dict) -> dict:
-	"""Handle one envelope of a push call and return its wire result."""
+	"""Handle one envelope of a push call and return its wire result. A busy database (deadlock, lock-wait
+	timeout) answers this record `failed` with `BUSY_MESSAGE`; nothing of it is stored (§6 F6)."""
 	raw_uuid = env.get("client_uuid") if isinstance(env, dict) else None
 	name = clean_uuid(raw_uuid)
 	if not name:
 		return _result(cstr(raw_uuid) or None, RESULT_FAILED, error=_("client_uuid must be a UUID."))
+	log_start = len(frappe.local.message_log)
+	frappe.db.savepoint(RECEIVE_SAVEPOINT)
+	try:
+		return _receive(name, env, call)
+	except BUSY_ERRORS:
+		rollback_to(RECEIVE_SAVEPOINT)
+		_restore_messages(log_start)
+		return _result(name, RESULT_FAILED, error=_(BUSY_MESSAGE))
 
+
+def _receive(name: str, env, call: frappe._dict) -> dict:
 	existing = lock_record(name)
 	if existing:
 		if existing.user != call.user or existing.session != call.session.name:
@@ -213,6 +291,8 @@ def process(doc, session_row: frappe._dict, errors: list[str] | None = None) -> 
 		_set_outcome(doc, outcome)
 		doc.save(ignore_permissions=True)
 	except Exception as exc:
+		if isinstance(exc, BUSY_ERRORS):
+			raise  # the caller rolls back (the savepoint may be gone after a deadlock)
 		message = readable_error(exc, log_start)
 		frappe.db.rollback(save_point=SAVEPOINT)
 		if not isinstance(exc, frappe.ValidationError | frappe.PermissionError | frappe.DoesNotExistError):
@@ -304,7 +384,8 @@ def parse_device_time(value) -> datetime | None:
 def lock_record(name: str) -> frappe._dict | None:
 	"""The stored Outreach Sync Record, read with a row lock (``frappe.get_all`` has no FOR UPDATE)."""
 	rows = frappe.db.sql(
-		f"""SELECT name, status, user, session, record_type, target_doctype, target_name, conflict, error
+		f"""SELECT name, status, user, session, record_type, target_doctype, target_name, target_modified,
+			conflict, error
 		FROM `tab{OUTREACH_RECORD_DOCTYPE}` WHERE name = %s FOR UPDATE""",
 		(name,),
 		as_dict=True,
@@ -316,7 +397,17 @@ def _stored(name: str) -> frappe._dict | None:
 	return frappe.db.get_value(
 		OUTREACH_RECORD_DOCTYPE,
 		name,
-		["name", "status", "user", "session", "target_doctype", "target_name", "conflict", "error"],
+		[
+			"name",
+			"status",
+			"user",
+			"session",
+			"target_doctype",
+			"target_name",
+			"target_modified",
+			"conflict",
+			"error",
+		],
 		as_dict=True,
 	)
 
@@ -397,6 +488,7 @@ def _set_outcome(doc, outcome: apply.Outcome) -> None:
 		doc.target_name = outcome.name
 	if outcome.get("patient"):
 		doc.patient = outcome.patient
+	doc.target_modified = outcome.get("modified") or None
 	if outcome.status in FINAL_STATUSES:
 		doc.applied_at = now_datetime()
 	doc.acknowledged_result = json.dumps(stored_result(doc))
@@ -468,6 +560,8 @@ def stored_result(row, duplicate: bool = False) -> dict:
 	)
 	if row.status == RECORD_STATUS_DISCARDED:
 		out["discarded"] = True
+	if row.get("target_modified") and row.status == RECORD_STATUS_ACCEPTED:
+		out["modified"] = str(get_datetime(row.target_modified))  # §6 F4: the device's next base_modified
 	return out
 
 

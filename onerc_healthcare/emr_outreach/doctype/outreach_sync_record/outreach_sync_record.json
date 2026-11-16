@@ -7,7 +7,7 @@
  "module": "EMR Outreach",
  "name": "Outreach Sync Record",
  "owner": "Administrator",
- "modified": "2026-11-14 15:00:00.000000",
+ "modified": "2026-11-14 18:00:00.000000",
  "modified_by": "Administrator",
  "field_order": [
   "client_uuid",
@@ -24,6 +24,7 @@
   "target_name",
   "patient",
   "conflict",
+  "target_modified",
   "column_break_result",
   "error",
   "attempts",
@@ -84,7 +85,8 @@
    "options": "Outreach Session",
    "reqd": 1,
    "in_standard_filter": 1,
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "user",
@@ -140,6 +142,14 @@
    "fieldtype": "Link",
    "label": "Sync Conflict",
    "options": "Sync Conflict",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "target_modified",
+   "fieldtype": "Datetime",
+   "label": "Patient Version",
+   "description": "The Patient's modified after an applied patient.update / patient.register: returned to the device as \"modified\" (its next base_modified, protocol §6 F4).",
    "read_only": 1
   },
   {

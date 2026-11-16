@@ -34,6 +34,25 @@ the visit's stage times (triage, routing, consultation start, outcome and close)
 their ``resulted_at`` (collection, result and approval time) and dispenses their ``dispensed_at``. The visit
 status log keeps the server time of each action (it is the audit trail of when the system applied it).
 
+**Patients a session may touch** (protocol §6 F5, `assert_session_patient`). A ``patient.update``, and a
+``visit.capture`` naming a server ``patient``, are applied only for a patient whose ``krcs_residence`` lies in
+the session's catchment subtrees (`outreach.package.patient_in_catchment`), or who was registered, linked or
+already updated / visited through an applied record of this session (an Accepted or Discarded Outreach Sync
+Record of the session for that patient: a patient.register, including a Link / Keep facility decision). Any
+other patient: "This patient is not in the session's catchment area." A HIS decision (`rec.resolution`) is not
+checked again (the record passed the check when it was received).
+
+**`patient.update`** (§6 F4). ``base_modified`` is required and may not be later than the patient's current
+``modified`` (failed). When the patient changed after ``base_modified``, a changed field conflicts only when the
+facility changed it too: its server value differs from the ``base_values`` value (as downloaded) and from the
+device's value. Without ``base_values`` (or for a key missing from it) the older rule applies: the server value
+differs from the device's value. An applied patient.update (and patient.register) returns the patient's new
+``modified`` (``Outcome.modified``), which the sync stores and sends back.
+
+**Field dispensing** (§6 F3). The Dispensing Record of a line dispensed in the field is ``final``: a partial
+quantity closes the line (Closed), so the facility pharmacy worklist does not offer it again; over-dispensing is
+refused by the Dispensing Record controller as at the desk.
+
 **Death.** "Died" needs a ``DIED_ROLES`` role at the desk. D58 lets any team member consult, so inside the
 outreach context the member may record it (`clinical.utils.has_any_role(DIED_ROLES)` accepts them); the engine
 call is then made as a system call.
@@ -139,6 +158,9 @@ def accepted(doctype: str, name: str, patient: str | None = None, conflict: str 
 	return Outcome(
 		status=RECORD_STATUS_ACCEPTED, doctype=doctype, name=name, patient=patient, conflict=conflict
 	)
+
+
+NOT_IN_CATCHMENT = "This patient is not in the session's catchment area."
 
 
 def in_conflict(conflict: str, patient: str | None = None) -> Outcome:
@@ -271,6 +293,7 @@ def _patient_from_ref(rec) -> str:
 	if patient:
 		if not frappe.db.exists("Patient", patient):
 			fail(_("Patient {0} does not exist on the server.").format(patient))
+		assert_session_patient(rec, patient)
 		return patient
 	ref = ref.lower()
 	if ref not in (rec.depends_on or []):
@@ -285,6 +308,36 @@ def _patient_from_ref(rec) -> str:
 	if dep.status not in (RECORD_STATUS_ACCEPTED, RECORD_STATUS_DISCARDED) or dep.target_doctype != "Patient":
 		fail(_("The registration {0} this visit needs has not been applied.").format(ref))
 	return dep.target_name
+
+
+def session_linked_patient(session: str, patient: str) -> bool:
+	"""`patient` was registered, linked or already handled through an applied record of `session`."""
+	from onerc_healthcare.constants import OUTREACH_RECORD_DOCTYPE, RECORD_STATUS_DISCARDED
+
+	return bool(
+		frappe.db.exists(
+			OUTREACH_RECORD_DOCTYPE,
+			{
+				"session": session,
+				"patient": patient,
+				"status": ["in", [RECORD_STATUS_ACCEPTED, RECORD_STATUS_DISCARDED]],
+			},
+		)
+	)
+
+
+def assert_session_patient(rec, patient: str) -> None:
+	"""Protocol §6 F5: the session may touch only its catchment's patients and those it registered or linked.
+	Not checked again when a HIS decision applies the record."""
+	if rec.resolution:
+		return
+	from onerc_healthcare.outreach.package import patient_in_catchment
+
+	if patient_in_catchment(patient, rec.session.catchment_area):
+		return
+	if session_linked_patient(rec.session.name, patient):
+		return
+	fail(_(NOT_IN_CATCHMENT))
 
 
 # ------------------------------------------------------------------------------------- patient.register
@@ -387,7 +440,9 @@ def apply_patient_register(rec) -> Outcome:
 			name = conflicts.raise_registration_conflict(rec, doc, candidates)
 			return in_conflict(name, patient=None)
 	doc.insert(ignore_permissions=True)  # DocPerm: Patient create is the Receptionist's (D58)
-	return accepted("Patient", doc.name, patient=doc.name)
+	out = accepted("Patient", doc.name, patient=doc.name)
+	out.modified = frappe.db.get_value("Patient", doc.name, "modified")
+	return out
 
 
 # --------------------------------------------------------------------------------------- patient.update
@@ -437,17 +492,48 @@ def apply_patient_changes(doc, changes: dict, add_identifiers: list | None = Non
 	doc.save(ignore_permissions=True)  # DocPerm: Patient write is the Receptionist's (D58)
 
 
+def _base_modified(p: dict):
+	value = _text(p.get("base_modified"))
+	if not value:
+		return None
+	try:
+		return get_datetime(value)
+	except Exception:
+		fail(_("base_modified {0} is not a date and time.").format(value))
+
+
+def conflicting_fields(doc, changes: dict, base_values: dict | None) -> list[str]:
+	"""The changed fields the facility changed too (protocol §6 F4). With a base value: the server value differs
+	from it and from the device value. Without one (no ``base_values``, or the key is missing): the server value
+	differs from the device value (the older rule)."""
+	out = []
+	for key, value in changes.items():
+		field = PATIENT_FIELDS[key]
+		server = comparable(field, doc.get(field))
+		if server == comparable(field, value):
+			continue
+		if base_values is not None and key in base_values and server == comparable(field, base_values[key]):
+			continue  # unchanged at the facility since the package: the device's edit wins
+		out.append(key)
+	return out
+
+
 def apply_patient_update(rec) -> Outcome:
 	"""Apply demographic changes, or raise a Demographic change conflict when the server copy changed after the
-	package (``modified`` later than ``base_modified``) and a changed field now differs from it (protocol §4)."""
+	package (``modified`` later than ``base_modified``) and the facility changed a field the device changed too
+	(`conflicting_fields`, protocol §6 F4)."""
 	p = rec.payload
 	patient = _text(p.get("patient"))
 	if not patient or not frappe.db.exists("Patient", patient):
 		fail(_("Patient {0} does not exist on the server.").format(patient or ""))
+	assert_session_patient(rec, patient)
 	changes = update_changes(p)
 	add_identifiers = p.get("add_identifiers") or []
 	if not isinstance(add_identifiers, list):
 		fail(_("add_identifiers must be a list."))
+	base_values = p.get("base_values")
+	if base_values is not None and not isinstance(base_values, dict):
+		fail(_("base_values must be an object."))
 	resolution = rec.resolution or {}
 	if (
 		"fields" in resolution
@@ -455,23 +541,28 @@ def apply_patient_update(rec) -> Outcome:
 		changes = {k: v for k, v in changes.items() if k in resolution["fields"]}
 	doc = frappe.get_doc("Patient", patient, for_update=True)
 	if not resolution.get("force"):
-		base = get_datetime(p.get("base_modified")) if _text(p.get("base_modified")) else None
+		base = _base_modified(p)
 		if not base:
 			fail(_("base_modified (the package version of the patient) is required."))
-		if get_datetime(doc.modified) > base:
-			differing = [
-				k
-				for k, v in changes.items()
-				if comparable(PATIENT_FIELDS[k], doc.get(PATIENT_FIELDS[k]))
-				!= comparable(PATIENT_FIELDS[k], v)
-			]
+		current = get_datetime(doc.modified)
+		if base > current:
+			fail(
+				_(
+					"base_modified {0} is later than the last change of patient {1} on the server ({2}). "
+					"Download the patient list again."
+				).format(base, patient, current)
+			)
+		if current > base:
+			differing = conflicting_fields(doc, changes, base_values)
 			if differing:
 				from onerc_healthcare.outreach import conflicts
 
 				name = conflicts.raise_update_conflict(rec, doc, changes, differing)
 				return in_conflict(name, patient=patient)
 	apply_patient_changes(doc, changes, add_identifiers)
-	return accepted("Patient", doc.name, patient=doc.name)
+	out = accepted("Patient", doc.name, patient=doc.name)
+	out.modified = frappe.db.get_value("Patient", doc.name, "modified")
+	return out
 
 
 # ---------------------------------------------------------------------------------------- visit.capture
@@ -908,6 +999,9 @@ def _dispense(encounter: str, drugs: list[dict]) -> list[datetime]:
 				"medication_request": row.medication_request,
 				"outcome": "Dispensed",
 				"quantity": flt(dispensed.get("quantity")),
+				# §6 F3: given in the field, the line is done (a partial quantity closes it as Closed) so the
+				# facility pharmacy worklist does not offer it again.
+				"final": 1,
 			}
 		)
 		doc.insert(ignore_permissions=True)  # DocPerm: Dispensing Record is the Pharmacist's (D58)

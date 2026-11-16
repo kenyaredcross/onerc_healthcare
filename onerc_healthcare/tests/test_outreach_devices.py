@@ -679,3 +679,83 @@ class TestAuthHook(OutreachO1Case):
 			frappe.local.form_dict.session = self.session.name
 			auth.authenticate_device()
 			self.assertEqual(frappe.local.form_dict.session, self.session.name)
+
+	def test_closed_session_grant_syncs_only(self):
+		"""Protocol §6 F1: once the session is Closed the grant still authenticates sync.push and sync.status
+		(also through `cmd`), never the package endpoints; a Cancelled session's grant authenticates nothing."""
+		res = self.enrol()
+		for action in (sessions.ACTION_ACTIVATE, sessions.ACTION_RETURN, sessions.ACTION_CLOSE):
+			sessions.transition(self.session.name, action, system=True)
+		for path in (SYNC_PUSH, "/api/method/onerc_healthcare.outreach.sync.status"):
+			with fake_request(self.header(res), path=path):
+				auth.authenticate_device()
+				self.assertEqual(frappe.session.user, self.users["member"])
+		for path in (
+			"/api/method/onerc_healthcare.outreach.package.get_reference",
+			"/api/method/onerc_healthcare.outreach.package.get_patients",
+		):
+			with (
+				fake_request(self.header(res), path=path),
+				self.assertRaisesRegex(frappe.AuthenticationError, "is Closed"),
+			):
+				auth.authenticate_device()
+		with fake_request(self.header(res), path="/", cmd="onerc_healthcare.outreach.package.get_patients"):
+			with self.assertRaises(frappe.AuthenticationError):
+				auth.authenticate_device()
+		with self.assertRaises(frappe.AuthenticationError):  # no method named: open sessions only
+			devices.verify_grant(res["grant"], res["secret"])
+
+		other = make_session(members=[self.users["member"]], catchment_area=self.area)
+		res2 = self.enrol(session=other.name)
+		sessions.transition(other.name, sessions.ACTION_CANCEL, reason="T-", system=True)
+		with (
+			fake_request(self.header(res2)),
+			self.assertRaisesRegex(frappe.AuthenticationError, "is Cancelled"),
+		):
+			auth.authenticate_device()
+
+	def test_enrol_on_closed_session_only_renews(self):
+		"""Protocol §6 F1: on a Closed session `enrol` renews the live grant of the same user and device (same
+		grant, new secret, new expiry), and refuses a new device, another user's first enrolment of that device
+		and a revoked grant. A Cancelled session refuses every enrolment."""
+		device_id = new_device_id()
+		res = self.enrol(device_id=device_id)
+		for action in (sessions.ACTION_ACTIVATE, sessions.ACTION_RETURN, sessions.ACTION_CLOSE):
+			sessions.transition(self.session.name, action, system=True)
+		frappe.db.set_value(
+			OUTREACH_GRANT_DOCTYPE, res["grant"], "expires_at", add_to_date(now_datetime(), seconds=-1)
+		)
+		again = self.enrol(device_id=device_id)
+		self.assertEqual(again["grant"], res["grant"])
+		self.assertNotEqual(again["secret"], res["secret"])
+		self.assertGreater(get_datetime(again["expires_at"]), now_datetime())
+		with fake_request(self.header(again)):
+			auth.authenticate_device()
+		for kwargs in (
+			{"device_id": new_device_id()},
+			{"device_id": device_id, "user": self.users["member2"]},
+		):
+			with (
+				self.subTest(**kwargs),
+				self.assertRaisesRegex(sessions.OutreachSessionClosedError, "is Closed"),
+			):
+				self.enrol(**kwargs)
+		devices.revoke_grants({"name": res["grant"]}, "T- test")
+		with self.assertRaisesRegex(sessions.OutreachSessionClosedError, "is Closed"):
+			self.enrol(device_id=device_id)
+		other = make_session(members=[self.users["member"]], catchment_area=self.area)
+		sessions.transition(other.name, sessions.ACTION_CANCEL, reason="T-", system=True)
+		with self.assertRaisesRegex(sessions.OutreachSessionClosedError, "is Cancelled"):
+			self.enrol(session=other.name)
+
+	def test_role_withdrawn_refuses_grant(self):
+		"""Protocol §6 F6: a member whose Outreach Team Member role was withdrawn (still enabled and on the team)
+		gets 401 for the grant; given the role back, the grant works again."""
+		res = self.enrol(user=self.users["member2"])
+		make_user("or-member2", [])
+		with fake_request(self.header(res)), self.assertRaisesRegex(frappe.AuthenticationError, "role"):
+			auth.authenticate_device()
+		make_user("or-member2", [ROLE_OUTREACH])
+		with fake_request(self.header(res)):
+			auth.authenticate_device()
+			self.assertEqual(frappe.session.user, self.users["member2"])

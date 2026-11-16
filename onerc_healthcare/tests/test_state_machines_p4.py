@@ -4,10 +4,9 @@
 
 Every Phase 4 lifecycle is driven through its own API, by every relevant actor, from every status, and compared
 with an independent oracle written from the module docstrings, docs/OUTREACH_PROTOCOL.md and D58 (the tables are
-copied below as literals; meta-tests compare them with the code's introspectable tables). Known defects are kept
-as ``@unittest.expectedFailure`` tests that assert the *correct* behaviour (comment ``DEFECT-P4-n``), so they
-turn into unexpected successes once fixed. Matrix oracles stay lenient on the exact combinations a DEFECT-P4
-test covers, so a fix never breaks a matrix.
+copied below as literals; meta-tests compare them with the code's introspectable tables). The defects found by
+the audit (comment ``DEFECT-P4-n``) were fixed in Phase 4 fix round 1 (protocol §6); their tests, once
+``@unittest.expectedFailure``, now pass as ordinary tests.
 
 Machines:
 
@@ -25,7 +24,6 @@ Machines:
 
 from __future__ import annotations
 
-import unittest
 from datetime import timedelta
 
 import frappe
@@ -354,8 +352,8 @@ class TestSessionLifecycle(P4Case):
 				action,
 			)
 		self.assertEqual(set(SESSION_OPEN_STATUSES), {PLANNED, ACTIVE, RETURNED})
-		# Held and Conflict block the close (Failed too since protocol §6 F1: DEFECT-P4-5)
-		self.assertLessEqual({HELD, CONFLICT}, set(sessions.UNRESOLVED_RECORD_STATUSES))
+		# Failed, Held and Conflict block the close (Failed since protocol §6 F1: DEFECT-P4-5)
+		self.assertEqual({FAILED, HELD, CONFLICT}, set(sessions.UNRESOLVED_RECORD_STATUSES))
 
 	def check_step(self, name, before, action, exp, err, actor, reason):
 		after = self.session_state(name)
@@ -433,9 +431,8 @@ class TestSessionLifecycle(P4Case):
 		self.assertEqual(self.session_status(name), ACTIVE)
 
 	def test_close_refused_while_held_or_conflict(self):
-		"""close is refused while an Outreach Sync Record of *this* session is Held or Conflict (and, protocol
-		§6 F1, Failed: DEFECT-P4-5, lenient here); Accepted and Discarded never block, nor a Held record of
-		another session."""
+		"""close is refused while an Outreach Sync Record of *this* session is Failed, Held or Conflict (protocol
+		§6 F1, DEFECT-P4-5); Accepted and Discarded never block, nor a Held record of another session."""
 		name = self.new_session(RETURNED)
 		other = self.new_session(ACTIVE)
 		for record_status in RECORD_STATUSES:
@@ -445,9 +442,7 @@ class TestSessionLifecycle(P4Case):
 					self.raw_record(other, HELD)
 					before = self.session_state(name)
 					_out, err = self.act_as(actor, sessions.apply_action, name, "close")
-					if record_status == FAILED:  # DEFECT-P4-5
-						self.assertEqual(self.session_status(name), CLOSED if err is None else RETURNED)
-					elif record_status in (HELD, CONFLICT):
+					if record_status in (FAILED, HELD, CONFLICT):
 						self.assertIsInstance(err, IllegalSessionTransitionError)
 						self.assertIn("held or in conflict", str(err))
 						self.assertEqual(self.session_state(name), before)
@@ -483,7 +478,6 @@ class TestSessionLifecycle(P4Case):
 		)
 
 	# DEFECT-P4-5: protocol §6 F1, closing is also refused while the session has Failed records
-	@unittest.expectedFailure
 	def test_close_refused_while_failed(self):
 		"""DEFECT-P4-5: protocol §6 F1 ("Closing is also refused while the session has Failed records, as well as
 		Held or Conflict ones"). `session.UNRESOLVED_RECORD_STATUSES` is still (Held, Conflict), so a Returned
@@ -499,7 +493,6 @@ class TestSessionLifecycle(P4Case):
 		self.assertIsNone(err, repr(err))
 
 	# DEFECT-P4-1: Close Session offered while Held / Conflict records keep the session from closing
-	@unittest.expectedFailure
 	def test_close_not_offered_while_records_unresolved(self):
 		"""DEFECT-P4-1: `allowed_actions` checks role and status only, so the Returned session's form offers
 		"Close Session" to the HIS Officer / Medical In-Charge while a Held or Conflict record exists, and the
@@ -851,7 +844,6 @@ class TestSyncRecordStates(P4Case):
 		self.assertEqual(self.open_conflicts(existing), 0)
 
 	# DEFECT-P4-2: a Held record replayed before the Held record it depends on stays Held forever
-	@unittest.expectedFailure
 	def test_held_chain_replayed_in_dependency_order(self):
 		"""DEFECT-P4-2: activity A depends on activity V, which depends on registration R. A arrives first and
 		fails ("dependency not received"); then [R, V, A] are sent: R conflict, V held, A retried -> held on the
@@ -1149,7 +1141,6 @@ class TestConflictDecisions(P4Case):
 			self.assertIsInstance(err, conflicts.SyncConflictError)
 
 	# DEFECT-P4-3: Retry on a Resolved conflict is answered as a failed attempt and logged on the closed conflict
-	@unittest.expectedFailure
 	def test_retry_on_resolved_conflict_refused(self):
 		"""DEFECT-P4-3: `retry` catches every ValidationError of `_resolve`, including "already resolved", so a
 		second Retry (two HIS screens, or Retry after Keep facility version) returns {"resolved": False, "error":
@@ -1225,7 +1216,6 @@ class TestConflictDecisions(P4Case):
 		self.keep_outreach_applies_as_member2(patient, facility_visit, out)
 
 	# DEFECT-P4-4: Keep outreach version / Retry impossible once the author's account is disabled
-	@unittest.expectedFailure
 	def test_decision_after_member_disabled(self):
 		"""DEFECT-P4-4: the outreach visit is applied as its author (`apply.acting_as(record.user)`), and
 		`clinical.practitioner.get_or_create` refuses to create the Healthcare Practitioner of a disabled user
@@ -1238,14 +1228,18 @@ class TestConflictDecisions(P4Case):
 		frappe.db.set_value("User", self.users["member2"], "enabled", 0)
 		self.keep_outreach_applies_as_member2(patient, facility_visit, out)
 
-	def test_conflict_resolvable_after_session_cancelled(self):
-		"""No record loss: a Planned session (records may sync while Planned) can be cancelled with a Conflict
-		record (the cancel rule has no record check); the conflict is still resolved and its held record
-		replayed afterwards."""
+	def test_session_with_records_not_cancelled(self):
+		"""No record loss: a Planned session (records may sync while Planned) that received records cannot be
+		cancelled (fix round 1: "records were received; return and close it instead"), and Cancel is not offered;
+		the conflict is still resolved and its held record replayed. (Before fix round 1 this test showed the
+		cancel succeeding and the conflict still resolvable afterwards.)"""
 		c = self.build("dup")
-		with as_user(self.users["his"]):
-			sessions.apply_action(self.session, "cancel", "T- rain")
-		self.assertEqual(self.session_status(self.session), CANCELLED)
+		doc = frappe.get_doc(OUTREACH_SESSION_DOCTYPE, self.session)
+		self.assertNotIn("cancel", {a["action"] for a in sessions.allowed_actions(doc, self.u("his"))})
+		_out, err = self.act_as("his", sessions.apply_action, self.session, "cancel", "T- rain")
+		self.assertIsInstance(err, IllegalSessionTransitionError)
+		self.assertIn("return and close it instead", str(err).lower())
+		self.assertEqual(self.session_status(self.session), PLANNED)
 		self.resolve(c.name, KF, reason=REASON)
 		self.assertEqual(self.rec_state(c.record)["status"], DISCARDED)
 		self.assertEqual(self.rec_state(c.held[0])["status"], ACCEPTED)
@@ -1396,7 +1390,6 @@ class TestDeviceGrants(P4Case):
 		self.assertIsInstance(err_enrol, frappe.PermissionError)
 
 	# DEFECT-P4-6: protocol §6 F1, a Closed session still syncs its records through the grant
-	@unittest.expectedFailure
 	def test_closed_session_still_syncs(self):
 		"""DEFECT-P4-6: protocol §6 F1 ("Closed means no new work"): on a Closed session the grant keeps working for
 		sync.push / sync.status until expires_at (records captured during the session are accepted), `enrol`
@@ -1438,7 +1431,6 @@ class TestDeviceGrants(P4Case):
 		self.assertIsNotNone(err)
 
 	# DEFECT-P4-7: protocol §6 F6, the grant and push are refused once the Outreach role is removed
-	@unittest.expectedFailure
 	def test_role_removed_ends_sync(self):
 		"""DEFECT-P4-7: protocol §6 F6 ("the grant is refused (401), and push is refused, once the user no longer
 		holds the Outreach Team Member role"). `verify_grant` checks enabled user and team membership only, and

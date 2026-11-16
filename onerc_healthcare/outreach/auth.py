@@ -11,7 +11,8 @@ It does nothing unless the `Authorization` header uses the `OUTREACH_AUTH_SCHEME
    `/api/v1/method/<m>`, `/api/v2/method/<m>`) and from `cmd` in the form dict, which Frappe runs before the
    path when present; any other target, or none, is refused.
 2. `devices.verify_grant` checks the secret (salted SHA-256, constant-time compare), that the grant is not
-   revoked or expired, the device is Active, the user enabled and still on the team, and the session open.
+   revoked or expired, the device is Active, the user enabled, still on the team and still holding the Outreach
+   Team Member role, and the session open (or Closed, for sync.push / sync.status only: protocol §6 F1).
 3. The request then runs as the grant's user (`frappe.set_user`), and `frappe.local.krcs_outreach_grant` holds
    the grant name so sync and package code can match the session and device.
 
@@ -95,7 +96,7 @@ def authenticate_device() -> None:
 	grant, secret = parsed
 	from onerc_healthcare.outreach.devices import touch_grant, verify_grant
 
-	row = verify_grant(grant, secret)
+	row = verify_grant(grant, secret, methods=targets)
 	current = frappe.session.user if getattr(frappe.local, "session", None) else None
 	if current not in (None, "", "Guest") and current != row.user:
 		frappe.throw(
