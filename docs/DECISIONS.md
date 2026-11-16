@@ -406,3 +406,24 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
   - an outreach user, Akai Lotukoi;
   - the catchment area "Village 3 (demo)" with three fictional residents;
   - a planned session (KLB-OUT-2026-00001 on kalobeyei).
+
+**D60. Maternity (Kalobeyei labour ward), 2026-11-16.** BRD §3, SDD §5.12.1 (Wave 1) and §5.12.3. Built from the **Dadaab maternity templates**; it will be adjusted when the Kalobeyei forms arrive (OI-19 is still open).
+- **User answers:**
+  - **Midwife role (ROL-24):** a new Midwife role owns the labour ward records. Clinical Officers and the Medical In-Charge can also act; HIS and MHO read.
+  - **Newborn (OI-23):** each live-born baby is registered at delivery as their own Patient, linked to the mother (`krcs_mother` plus a Patient Relation "Mother" row): first name "Baby", exact date of birth, a walk-in facility ID. Twins are allowed through the duplicate override "Newborn registered at delivery". Stillbirths are recorded on the delivery only.
+  - **Partograph (OI-23):** hourly entry at the bedside, with a live chart. The alert line runs at 1 cm/h from the first dilatation of 4 cm or more (WHO modified partograph), and the action line is 4 h to its right. Warnings: crossing either line, FHR below 110 or above 160, meconium or blood in the liquor, moulding +++, BP 160/110 or more, temperature 38 or more.
+  - **Admission:** normally reception → triage → routed to **Maternity** → the Midwife admits. A **fast path** ("Admit in Labour" on the Patient form) opens the visit behind the scenes. A visit a clinician closed with outcome Admitted is linked; an internal referral to Maternity is received.
+- **Marley's Inpatient Record is not used.**
+  - Why: every save looks up selling prices, which are disabled (D18), so it crashes; its admit dialog needs a price list; and it carries bed-rent billables and stock settlement (C-5).
+  - Instead: our **Maternity Admission** (IP number `KLB-MAT-YYYY-#####`) is the admission record, and Marley's Inpatient area is hidden from the dock.
+- **Visit and stay:** the visit closes at admission (outcome Admitted; MOH 717-E02). The stay lives on the admission: Admitted → In Labour → Delivered → Discharged, with an append-only log.
+  - **Discharge outcomes:** discharged home, referred out, died, absconded. Died needs a cause and a Midwife, Clinical Officer or Medical In-Charge (`DIED_ROLES`).
+  - **Corrections:** the Medical In-Charge archives a wrong admission; nothing is deleted.
+  - **Ward observations:** Vital Signs linked to the admission.
+- **Records stay fixed:**
+  - Partograph rows are append-only (a correction is a new row with a note). Dilatation, contractions, oxytocin and urine are stored so that a blank (not recorded) differs from 0.
+  - A submitted Delivery Record cannot be cancelled; it takes an addendum.
+- **Beds:** a "Maternity Ward" group under each facility (seeded). The EMR System Administrator adds beds. Occupancy is set by locked direct writes and freed on discharge or archive.
+- **MOH 717 (provisional, OI-5):** K01–K08 come from Delivery Records, and J01–J04 from admissions.
+  - **J05 (average stay) and J06 (bed occupancy)** stay Gap, because the report engine stores whole counts. Total stay days are captured as `stay_days`.
+  - **Breech deliveries** fall in no K line; this is a question for the HIS Officers.
