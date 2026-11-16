@@ -176,6 +176,15 @@ class TestPharmacyAndMOHAreas(EMRTestCase):
 class TestDropdowns(EMRTestCase):
 	"""Our remaining Healthcare, Setup and Diagnostics rows are Marley-style dropdowns, clustered with Marley's."""
 
+	def opens(self, key: str) -> bool:
+		"""A section defined with "open" (e.g. Triage) starts expanded; the others start closed."""
+		return any(
+			r.get("key") == key and r.get("open")
+			for blocks in desk_sidebar.SIDEBAR_ROWS.values()
+			for _anchor, rows in blocks
+			for r in rows
+		)
+
 	def items(self, sidebar: str) -> list:
 		return frappe.get_all(
 			"Sidebar Item",
@@ -192,7 +201,8 @@ class TestDropdowns(EMRTestCase):
 				if row.type == "Section Break":
 					section = row
 					if (row.key or "").startswith(desk_sidebar.KEY_PREFIX):
-						self.assertEqual((row.indent, row.keep_closed), (1, 1), row.label)
+						closed = 0 if self.opens(row.key) else 1
+						self.assertEqual((row.indent, row.keep_closed), (1, closed), row.label)
 				elif (row.key or "").startswith(desk_sidebar.KEY_PREFIX) and section and section.key:
 					self.assertEqual(row.child, 1, row.label)
 
@@ -207,3 +217,34 @@ class TestDropdowns(EMRTestCase):
 
 	def test_install_is_idempotent(self):
 		self.assertFalse(desk_sidebar.install())
+
+
+class TestTriageInOutpatient(EMRTestCase):
+	"""Triage lives in the Outpatient area: its queue block on the Outpatient page and a Triage dropdown in the
+	Outpatient sidebar, beside Vital Signs."""
+
+	def test_triage_queue_block_on_outpatient_not_healthcare(self):
+		from onerc_healthcare.visit.workspaces import workspace_definition
+
+		def labels(ws):
+			return {r["label"] for r in workspace_definition(ws)["shortcuts"]}
+
+		self.assertIn("Triage: Waiting for Triage", labels("Outpatient"))
+		self.assertNotIn("Triage: Waiting for Triage", labels("Healthcare"))
+		self.assertFalse(
+			frappe.db.exists("Workspace Shortcut", {"parent": "Healthcare", "label": ["like", "Triage:%"]})
+		)
+
+	def test_outpatient_sidebar_triage_links(self):
+		rows = frappe.get_all(
+			"Sidebar Item",
+			filters={"parent": "Outpatient", "key": ["like", "krcs-triage-%"], "type": "Link"},
+			fields=["label", "link_to", "filters", "is_default_module", "child"],
+		)
+		by_label = {r.label: r for r in rows}
+		self.assertEqual(set(by_label), {"Waiting for Triage", "In Triage"})
+		for r in rows:
+			self.assertEqual((r.link_to, r.is_default_module, r.child), ("Patient Visit", 0, 1))
+		self.assertIn('"Registered"', by_label["Waiting for Triage"].filters)
+		# Patient Visit still opens under Healthcare (the filtered links do not claim it).
+		self.assertEqual(entity_map().get("Patient Visit"), "Healthcare")

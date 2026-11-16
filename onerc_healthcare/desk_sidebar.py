@@ -14,6 +14,8 @@ so nothing is exported into Marley's files in developer mode. Our rows carry a `
 reloads its sidebars).
 """
 
+import json
+
 import frappe
 
 KEY_PREFIX = "krcs-"
@@ -93,6 +95,35 @@ SIDEBAR_ROWS: dict[str, list[tuple[str | None, list[dict]]]] = {
 					"key": "krcs-community-activity",
 					"label": "Community Activity Record",
 					"link_to": "Community Activity Record",
+				},
+			],
+		),
+	],
+	# Triage beside Vital Signs: the visits waiting for triage and in triage (filtered Patient Visit lists).
+	"Outpatient": [
+		(
+			"Practitioner Availability",
+			[
+				{
+					"key": "krcs-triage-section",
+					"type": "Section Break",
+					"label": "Triage",
+					"icon": "activity",
+					"open": True,
+				},
+				{
+					"key": "krcs-triage-waiting",
+					"label": "Waiting for Triage",
+					"link_to": "Patient Visit",
+					"filters": [["Patient Visit", "status", "=", "Registered", False]],
+					"default": False,
+				},
+				{
+					"key": "krcs-triage-in-triage",
+					"label": "In Triage",
+					"link_to": "Patient Visit",
+					"filters": [["Patient Visit", "status", "=", "In Triage", False]],
+					"default": False,
 				},
 			],
 		),
@@ -186,9 +217,11 @@ def _row_values(row: dict) -> dict:
 		"link_type": row.get("link_type", "DocType"),
 		"link_to": row.get("link_to") if is_link else None,
 		"icon": row.get("icon"),
-		"is_default_module": 1 if is_link else 0,
+		# A filtered link to a DocType another sidebar owns (Patient Visit) must not claim it.
+		"is_default_module": 1 if is_link and row.get("default", True) else 0,
 		"collapsible": 1,
-		"keep_closed": 1 if is_section else 0,
+		"keep_closed": 1 if is_section and not row.get("open") else 0,
+		"filters": json.dumps(row["filters"]) if row.get("filters") else None,
 		"indent": 1 if is_section else 0,
 		"child": 1 if row.get("_child") else 0,
 		"open_in_new_tab": 0,
@@ -265,6 +298,7 @@ def _apply(sidebar: str, blocks: list[tuple[str | None, list[dict]]]) -> bool:
 			"child",
 			"indent",
 			"keep_closed",
+			"filters",
 		],
 		order_by="idx asc",
 	)

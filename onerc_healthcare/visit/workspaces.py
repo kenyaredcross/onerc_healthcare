@@ -73,7 +73,8 @@ WS_DIAGNOSTICS = "Diagnostics"
 # Department -> Marley workspace that carries its queue block.
 DEPARTMENT_WORKSPACE = {
 	DEPT_RECEPTION: WS_HEALTHCARE,
-	DEPT_TRIAGE: WS_HEALTHCARE,
+	# Triage sits at the top of Outpatient, beside Vital Signs and the department queues it routes to.
+	DEPT_TRIAGE: WS_OUTPATIENT,
 	DEPT_PHARMACY: WS_HEALTHCARE,
 	DEPT_HIS: WS_HEALTHCARE,
 	DEPT_OUTPATIENT: WS_OUTPATIENT,
@@ -82,6 +83,14 @@ DEPARTMENT_WORKSPACE = {
 	DEPT_NUTRITION: WS_OUTPATIENT,
 	DEPT_LABORATORY: WS_DIAGNOSTICS,
 }
+
+# Labels of every shortcut / quick list we have ever written ("Triage: Waiting for Triage", "Triage Queue",
+# "Visit Overview: ..."), so a block that moves to another workspace is also removed from the old one.
+OUR_LABEL_PREFIXES = (
+	*(f"{d}:" for d in DEPARTMENT_WORKSPACE),
+	*(f"{d} Queue" for d in DEPARTMENT_WORKSPACE),
+	"Visit Overview:",
+)
 
 # Our old standalone workspaces (removed); deleted here if migrate left any behind.
 RETIRED_WORKSPACES = (*(f"{d} Queue" for d in DEPARTMENT_WORKSPACE), "Visit Overview")
@@ -460,7 +469,7 @@ def _sync_rows(workspace: str, parentfield: str, child_doctype: str, fields: tup
 		fields=["name", "idx", *fields],
 		order_by="idx asc",
 	)
-	ours = [r for r in existing if r.label in wanted_labels]
+	ours = [r for r in existing if r.label in wanted_labels or (r.label or "").startswith(OUR_LABEL_PREFIXES)]
 	current = [tuple((r.get(f) or None) for f in fields) for r in ours]
 	target = [tuple((row.get(f) or None) for f in fields) for row in wanted]
 	if current == target:
