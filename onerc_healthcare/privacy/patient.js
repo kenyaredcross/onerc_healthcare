@@ -159,7 +159,17 @@ frappe.ui.form.on("Patient", {
 	},
 
 	refresh(frm) {
-		if (frm.is_new() || frm.doc.krcs_merged_into || !krcs.privacy.can_read_consent()) return;
+		if (frm.is_new()) {
+			// Registration is one screen: say what happens after Save (consent, then the visit).
+			if (krcs.privacy.can_record_consent()) {
+				frm.set_intro(
+					__("After you save, you will record the patient's consent and then start their visit, without leaving this page."),
+					"blue"
+				);
+			}
+			return;
+		}
+		if (frm.doc.krcs_merged_into || !krcs.privacy.can_read_consent()) return;
 		krcs.privacy.load_status(frm).then((status) => krcs.privacy.show_status(frm, status));
 		if (krcs.privacy.can_record_consent()) {
 			frm.add_custom_button(__("Record Consent"), () => krcs.privacy.record_consent_dialog(frm));
