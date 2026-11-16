@@ -1,0 +1,193 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-16 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "observed_at",
+  "recorded_by",
+  "foetal_heart_rate",
+  "liquor",
+  "moulding",
+  "cervical_dilatation_cm",
+  "descent_fifths",
+  "column_break_contractions",
+  "contractions_per_10_min",
+  "contraction_duration",
+  "oxytocin_u_per_l",
+  "oxytocin_drops_per_min",
+  "drugs_iv_fluids",
+  "section_break_maternal",
+  "pulse",
+  "bp_systolic",
+  "bp_diastolic",
+  "temperature",
+  "respiratory_rate",
+  "column_break_urine",
+  "urine_protein",
+  "urine_acetone",
+  "urine_volume_ml",
+  "note"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "observed_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Time",
+   "reqd": 1
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "label": "Recorded By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "foetal_heart_rate",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Foetal Heart Rate (/min)"
+  },
+  {
+   "description": "I intact, C clear, M meconium, B blood-stained, A absent",
+   "fieldname": "liquor",
+   "fieldtype": "Select",
+   "label": "Liquor",
+   "options": "\nI\nC\nM\nB\nA"
+  },
+  {
+   "fieldname": "moulding",
+   "fieldtype": "Select",
+   "label": "Moulding",
+   "options": "\n0\n+\n++\n+++"
+  },
+  {
+   "columns": 1,
+   "fieldname": "cervical_dilatation_cm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Cervical Dilatation (cm)",
+   "precision": "1"
+  },
+  {
+   "columns": 1,
+   "fieldname": "descent_fifths",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Descent (fifths palpable)"
+  },
+  {
+   "fieldname": "column_break_contractions",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 1,
+   "fieldname": "contractions_per_10_min",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Contractions per 10 min"
+  },
+  {
+   "fieldname": "contraction_duration",
+   "fieldtype": "Select",
+   "label": "Contraction Duration",
+   "options": "\n<20 s\n20-40 s\n>40 s"
+  },
+  {
+   "fieldname": "oxytocin_u_per_l",
+   "fieldtype": "Float",
+   "label": "Oxytocin (U/L)"
+  },
+  {
+   "fieldname": "oxytocin_drops_per_min",
+   "fieldtype": "Int",
+   "label": "Oxytocin (drops/min)"
+  },
+  {
+   "fieldname": "drugs_iv_fluids",
+   "fieldtype": "Small Text",
+   "label": "Drugs and IV Fluids"
+  },
+  {
+   "fieldname": "section_break_maternal",
+   "fieldtype": "Section Break",
+   "label": "Maternal"
+  },
+  {
+   "columns": 1,
+   "fieldname": "pulse",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Pulse (/min)"
+  },
+  {
+   "fieldname": "bp_systolic",
+   "fieldtype": "Int",
+   "label": "BP Systolic (mmHg)"
+  },
+  {
+   "fieldname": "bp_diastolic",
+   "fieldtype": "Int",
+   "label": "BP Diastolic (mmHg)"
+  },
+  {
+   "fieldname": "temperature",
+   "fieldtype": "Float",
+   "label": "Temperature (°C)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "respiratory_rate",
+   "fieldtype": "Int",
+   "label": "Respiration (/min)"
+  },
+  {
+   "fieldname": "column_break_urine",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "urine_protein",
+   "fieldtype": "Select",
+   "label": "Urine Protein",
+   "options": "\nNil\nTrace\n+\n++\n+++"
+  },
+  {
+   "fieldname": "urine_acetone",
+   "fieldtype": "Select",
+   "label": "Urine Acetone",
+   "options": "\nNil\nTrace\n+\n++\n+++"
+  },
+  {
+   "fieldname": "urine_volume_ml",
+   "fieldtype": "Int",
+   "label": "Urine Volume (mL)"
+  },
+  {
+   "description": "A correction is a new row with a note; saved rows are never edited.",
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-16 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Maternity",
+ "name": "Partograph Observation",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

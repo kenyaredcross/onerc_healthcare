@@ -55,6 +55,10 @@ DEFAULT_RULES = (
 	# Phase 4 record types (same rule)
 	("Outreach Session", "{prefix}-OUT-.YYYY.-"),
 	("Sync Conflict", "{prefix}-SCF-.YYYY.-"),
+	# Phase 5M maternity record types (same rule); the admission number is the IP number
+	("Maternity Admission", "{prefix}-MAT-.YYYY.-"),
+	("Partograph", "{prefix}-PTG-.YYYY.-"),
+	("Delivery Record", "{prefix}-DEL-.YYYY.-"),
 )
 
 # Marley's Emergency Record names provisional patients with this series directly

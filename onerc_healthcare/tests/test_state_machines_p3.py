@@ -60,6 +60,7 @@ from onerc_healthcare.constants import (
 	ROLE_HIS,
 	ROLE_MHO,
 	ROLE_MIC,
+	ROLE_MIDWIFE,
 	ROLE_OUTREACH,
 	ROLE_RECEPTIONIST,
 	ROLE_TRIAGE,
@@ -708,7 +709,7 @@ EXP_CLOSURE_OUTCOMES = {
 EXP_CLOSE_OTHER = (OUTCOME_NOT_APPLICABLE, OUTCOME_DISCHARGED, OUTCOME_ADMITTED, OUTCOME_LEFT)
 EXP_COMPLETE = (OUTCOME_DISCHARGED, OUTCOME_ADMITTED, OUTCOME_DIED)
 EXP_REFER = (OUTCOME_REFERRED_OUT, OUTCOME_REFERRED_INTERNAL)
-EXP_DIED_ROLES = (ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC)
+EXP_DIED_ROLES = (ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC, ROLE_MIDWIFE)  # Midwife: Phase 5M maternal death
 CLOSE_ACTORS = ("reception", "triage", "clinician", "mho", "mic", ADMIN)
 OUTCOME_ARGS = (None, *VISIT_OUTCOMES)
 
@@ -753,6 +754,7 @@ class TestVisitOutcomes(P3Case):
 		self.assertEqual(tuple(engine.CLOSE_OTHER_OUTCOMES), EXP_CLOSE_OTHER)
 		self.assertEqual(tuple(engine.COMPLETE_OUTCOMES), EXP_COMPLETE)
 		self.assertEqual(tuple(engine.REFER_OUTCOMES), EXP_REFER)
+		self.assertEqual(tuple(engine.ADMIT_OUTCOMES), (OUTCOME_ADMITTED,))  # Phase 5M
 		from onerc_healthcare.constants import DIED_ROLES
 
 		self.assertEqual(set(DIED_ROLES), set(EXP_DIED_ROLES))

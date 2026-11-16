@@ -260,6 +260,10 @@ def _install_workstreams() -> None:
 	from onerc_healthcare.outreach import setup as outreach_setup
 
 	outreach_setup.install()
+	# Phase 5M (W0): maternity custom fields and the Maternity Ward groups
+	from onerc_healthcare.maternity import setup as maternity_setup
+
+	maternity_setup.install()
 	ensure_report_indexes()
 	ensure_naming_settings()
 	desk_sidebar.install()

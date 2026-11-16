@@ -17,7 +17,7 @@ Encounter (`is_consultation_complete`).
 Invariants (kept by every action):
 
 1. Closed (Discharged / Referred) visits never change status again. `closed_at` is set exactly when the
-   visit enters a closed status. Close Visit and Discharge leave no open task; Referred may keep open
+   visit enters a closed status. Close Visit, Discharge and Admit leave no open task; Referred may keep open
    tasks, and the lab/pharmacy events then only clear the flags.
 2. Discharged by a system event (or the retired, server-only `discharge`) requires
    ``lab_open == pharmacy_open == 0``.
@@ -41,10 +41,12 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from onerc_healthcare.constants import (
+	DEPT_MATERNITY,
 	DEPT_RECEPTION,
 	DEPT_TRIAGE,
 	DIED_ROLES,
 	ENCOUNTER_DOCTYPE,
+	MATERNITY_ROLES,
 	OUTCOME_ADMITTED,
 	OUTCOME_DIED,
 	OUTCOME_DISCHARGED,
@@ -88,6 +90,7 @@ ACTION_REFER = "refer"
 ACTION_COMPLETE_CONSULTATION = "complete_consultation"
 ACTION_CLOSE_VISIT = "close_visit"
 ACTION_RECEIVE_REFERRAL = "receive_referral"
+ACTION_ADMIT = "admit"  # Phase 5M (W0): the visit ends in a Maternity Admission
 
 CONSULTING_ROLES = (ROLE_CLINICIAN, ROLE_MHO)
 CLOSE_VISIT_ROLES = (ROLE_RECEPTIONIST, ROLE_TRIAGE, ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC)
@@ -172,6 +175,20 @@ def _guard_discharge(doc) -> str | None:
 	failure = _guard_no_open_tasks(doc)
 	if failure:
 		return failure
+	if _encounter_docstatus(doc) == 0:
+		return _("Visit {0} has an unfinished consultation. Use Complete Consultation on {1}.").format(
+			doc.name, doc.encounter
+		)
+	return None
+
+
+def _guard_admit(doc) -> str | None:
+	"""Admit (Phase 5M): no open laboratory / pharmacy task and no unfinished consultation. The stay continues
+	on the Maternity Admission, so nothing may be left pending on the visit (invariant 1). A clinician who
+	decides on admission during a consultation completes it with outcome Admitted, or refers the patient to
+	Maternity internally; the Midwife then admits from that visit."""
+	if doc.pharmacy_open or doc.lab_open:
+		return _("Visit {0} cannot be admitted while a laboratory or pharmacy task is open.").format(doc.name)
 	if _encounter_docstatus(doc) == 0:
 		return _("Visit {0} has an unfinished consultation. Use Complete Consultation on {1}.").format(
 			doc.name, doc.encounter
@@ -325,6 +342,18 @@ TRANSITIONS: dict[str, Transition] = {
 		needs_department=True,
 		timestamp_field="routed_at",
 	),
+	# Phase 5M (W0, D60): the visit closes when the mother is admitted (outcome Admitted, department
+	# Maternity); the stay is tracked on the Maternity Admission. Run by maternity.admission.admit (M1)
+	# through `admit_visit`, which creates the admission in the same transaction.
+	ACTION_ADMIT: Transition(
+		_("Admit to Maternity"),
+		VISIT_OPEN_STATUSES,
+		VISIT_STATUS_DISCHARGED,
+		MATERNITY_ROLES,
+		timestamp_field="closed_at",
+		guard=_guard_admit,
+		api_only=True,
+	),
 }
 
 # Fields only the engine may change after insert (the controller rejects other edits).
@@ -371,6 +400,7 @@ ANNOTATE_FIELDS = (
 # Visit outcome (Phase 3). Allowed outcomes per closing action; the first is the default.
 COMPLETE_OUTCOMES = (OUTCOME_DISCHARGED, OUTCOME_ADMITTED, OUTCOME_DIED)
 REFER_OUTCOMES = (OUTCOME_REFERRED_OUT, OUTCOME_REFERRED_INTERNAL)
+ADMIT_OUTCOMES = (OUTCOME_ADMITTED,)
 # Close Visit: closure reason -> the outcome it implies. "Other" lets the user choose from
 # CLOSE_OTHER_OUTCOMES (default Not applicable).
 CLOSURE_OUTCOMES = {
@@ -500,6 +530,7 @@ def resolve_outcome(
 	  (DEFECT-P3-2 / review M3: Close Visit must not erase a recorded death or admission). Corrections of a
 	  recorded outcome go through `annotate`.
 	- ``discharge`` (server only): Discharged home.
+	- ``admit`` (server only, Phase 5M): Admitted.
 	"""
 	outcome = (outcome or "").strip() or None
 	if action == ACTION_COMPLETE_CONSULTATION:
@@ -508,6 +539,8 @@ def resolve_outcome(
 		allowed, default = REFER_OUTCOMES, OUTCOME_REFERRED_OUT
 	elif action == ACTION_DISCHARGE:
 		allowed, default = (OUTCOME_DISCHARGED,), OUTCOME_DISCHARGED
+	elif action == ACTION_ADMIT:
+		allowed, default = ADMIT_OUTCOMES, OUTCOME_ADMITTED
 	elif action == ACTION_CLOSE_VISIT:
 		implied = CLOSURE_OUTCOMES.get(closure_reason)
 		allowed = (implied,) if implied else CLOSE_OTHER_OUTCOMES
@@ -560,6 +593,8 @@ def outcome_choices(
 		choices = COMPLETE_OUTCOMES
 	elif action == ACTION_REFER:
 		choices = REFER_OUTCOMES
+	elif action == ACTION_ADMIT:
+		choices = ADMIT_OUTCOMES
 	elif action == ACTION_CLOSE_VISIT:
 		implied = CLOSURE_OUTCOMES.get(closure_reason)
 		if doc.get("outcome") and implied != OUTCOME_DIED:
@@ -730,6 +765,10 @@ def _apply(doc, action: str, rule: Transition, department: str | None = None) ->
 
 	elif action == ACTION_COMPLETE_CONSULTATION:
 		to_status = _completed_status(doc)
+
+	elif action == ACTION_ADMIT:
+		if frappe.db.exists("Medical Department", DEPT_MATERNITY):
+			doc.current_department = DEPT_MATERNITY
 
 	return to_status
 
@@ -918,6 +957,15 @@ def backfill_practitioners(skip: list[str] | tuple[str, ...] = ()) -> int:
 	return count
 
 
+def admit_visit(visit: str, comment: str | None = None):
+	"""Close `visit` because the patient is admitted to Maternity (Phase 5M): Discharged, outcome Admitted,
+	department Maternity. Checked as the current user (MATERNITY_ROLES and read access to the visit), never as a
+	system event. For server code only (`maternity.admission.admit`, M1), which creates the Maternity Admission
+	in the same transaction; the visit is locked first (lock order Visit -> Admission -> Bed). Returns the
+	saved visit."""
+	return transition(visit, ACTION_ADMIT, comment=comment)
+
+
 @frappe.whitelist()
 def get_non_routable_departments() -> list[str]:
 	"""Departments excluded from the route / re-route pickers (Reception, Triage)."""
@@ -938,9 +986,9 @@ def apply_action(
 	rule = TRANSITIONS.get(action)
 	if rule and rule.api_only:
 		frappe.throw(
-			_("{0} is done from the consultation or the referral, not from the visit.").format(
-				frappe.bold(rule.label)
-			),
+			_(
+				"{0} is done from the consultation, the referral or the maternity admission, not from the visit."
+			).format(frappe.bold(rule.label)),
 			frappe.PermissionError,
 		)
 	doc = transition(

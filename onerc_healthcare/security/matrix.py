@@ -17,6 +17,7 @@ from onerc_healthcare.constants import (
 	ROLE_LAB,
 	ROLE_MHO,
 	ROLE_MIC,
+	ROLE_MIDWIFE,
 	ROLE_OUTREACH,
 	ROLE_PHARMACIST,
 	ROLE_RECEPTIONIST,
@@ -35,6 +36,7 @@ FACILITY_ROLES = (
 	ROLE_PHARMACIST,
 	ROLE_HIS,
 	ROLE_MIC,
+	ROLE_MIDWIFE,  # Phase 5M (ROL-24): masters read like every desk role
 )
 _ALL_READ = dict.fromkeys(FACILITY_ROLES, "r")
 
@@ -50,6 +52,7 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_PHARMACIST: "r",
 		ROLE_HIS: "re",
 		ROLE_MIC: "re",
+		ROLE_MIDWIFE: "rwc",  # Phase 5M fast path registers the mother; newborns are created by the server
 	},
 	# No cancel/amend in Phase 1: Marley deletes the Patient Medical Record on cancel and that needs a
 	# delete right we never grant. Corrections are a Phase 2 decision.
@@ -58,12 +61,14 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_CLINICIAN: "r",
 		ROLE_MHO: "r",
 		ROLE_MIC: "r",
+		ROLE_MIDWIFE: "rwcs",  # Phase 5M ward observations (krcs_maternity_admission)
 	},
 	"Patient Encounter": {
 		ROLE_CLINICIAN: "rwcs",
 		ROLE_MHO: "rwcs",
 		ROLE_HIS: "r",  # reports and diagnosis mapping; no editing (SDD §6.1)
 		ROLE_MIC: "r",
+		ROLE_MIDWIFE: "r",  # Phase 5M: antenatal history on admission
 	},
 	# Marley's encounter form lists the patient's Clinical Notes (`get_encounter_details`) and fails for a
 	# role that cannot read them. Read only, for exactly the roles that read the encounter; we never create them.
@@ -72,6 +77,7 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_MHO: "r",
 		ROLE_HIS: "r",
 		ROLE_MIC: "r",
+		ROLE_MIDWIFE: "r",  # Phase 5M: reads encounters
 	},
 	# Phase 2: clinicians read only. Orders are created by the consultation flow (ignore_permissions), and
 	# write would let Marley's set_request_status forge "completed" (audit A3).
@@ -81,6 +87,7 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_LAB: "r",
 		ROLE_HIS: "r",
 		ROLE_MIC: "r",
+		ROLE_MIDWIFE: "r",  # Phase 5M: reads encounters (orders) and lab results
 	},
 	"Medication Request": {
 		ROLE_CLINICIAN: "r",
@@ -88,6 +95,7 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_PHARMACIST: "r",
 		ROLE_HIS: "r",
 		ROLE_MIC: "r",
+		ROLE_MIDWIFE: "r",  # Phase 5M: reads encounters (prescriptions)
 	},
 	"Observation": {
 		ROLE_LAB: "rwcsx",  # x = cancel: a rejected result is cancelled and redone (B2)
@@ -95,6 +103,7 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_MHO: "r",
 		ROLE_HIS: "r",
 		ROLE_MIC: "r",
+		ROLE_MIDWIFE: "r",  # Phase 5M: blood group / rhesus / RPR results on the admission
 	},
 	"Sample Collection": {
 		ROLE_LAB: "rwcs",
@@ -108,6 +117,7 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_MHO: "r",
 		ROLE_HIS: "r",
 		ROLE_MIC: "r",
+		ROLE_MIDWIFE: "r",  # Phase 5M: lab results
 	},
 }
 
@@ -127,10 +137,18 @@ MASTER_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_LAB: "r",
 		ROLE_MIC: "r",
 		ROLE_HIS: "r",  # views encounters (lab rows) and maps confirmation tests
+		ROLE_MIDWIFE: "r",  # Phase 5M: reads encounters and lab results
 		ROLE_SYSADMIN: "r",
 	},
 	# Symptoms on the encounter (Marley's `symptoms` multi-select); read for every role that reads encounters.
-	"Complaint": {ROLE_CLINICIAN: "r", ROLE_MHO: "r", ROLE_HIS: "r", ROLE_MIC: "r", ROLE_SYSADMIN: "rwc"},
+	"Complaint": {
+		ROLE_CLINICIAN: "r",
+		ROLE_MHO: "r",
+		ROLE_HIS: "r",
+		ROLE_MIC: "r",
+		ROLE_MIDWIFE: "r",  # Phase 5M: reads encounters
+		ROLE_SYSADMIN: "rwc",
+	},
 	# Phase 2: medication masters, read for prescribing and dispensing. No write: Marley's Medication form
 	# creates stock Items and Item Prices (C-5); the catalogue is maintained through the seeded JSON (OI-9).
 	**{
@@ -207,6 +225,8 @@ ROLE_SETTINGS: dict[str, dict] = {
 	ROLE_HIS: {"desk_access": 1, "home_page": "app/patient", "two_factor_auth": 1},
 	ROLE_MIC: {"desk_access": 1, "home_page": "app/patient"},
 	ROLE_HEAD_OPS: {"desk_access": 1, "home_page": "app/patient-visit"},
+	# Phase 5M: the Maternity workspace may replace this list route later (integrator).
+	ROLE_MIDWIFE: {"desk_access": 1, "home_page": "app/maternity-admission"},
 	ROLE_SYSADMIN: {"desk_access": 1, "home_page": "app/user", "two_factor_auth": 1},
 	# No desk access (SDD §6.1): the outreach app (Phase 4) is the only entry point.
 	ROLE_OUTREACH: {"desk_access": 0},

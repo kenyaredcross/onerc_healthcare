@@ -298,6 +298,14 @@ DOCK_ROWS = (
 	("MOH Reporting", "MOH Reporting", "file-chart-column", "Outreach"),
 )
 
+# Marley areas taken off the rail (D60, Phase 5M): Marley's Inpatient Record crashes on every save without an
+# enabled selling price list (`set_item_rate`, D18) and carries bed-rent billing and stock (C-5); the labour
+# ward uses our Maternity Admission instead. The row in Marley's dock gets ``hidden = 1`` (direct write, like the
+# rows above, so Marley's Dock is never saved): off the rail, still reachable by route, and a Workspace Manager
+# can bring it back in Manage Dock. Re-applied on every migrate, so a Marley upgrade that reloads its dock does
+# not bring it back. (link_type, link_to)
+HIDDEN_DOCK_ROWS = (("Sidebar", "Inpatient"),)
+
 
 def install() -> bool:
 	"""Apply SIDEBAR_ROWS and DOCK_ROWS. Returns True when anything changed."""
@@ -306,6 +314,7 @@ def install() -> bool:
 		if frappe.db.exists("Sidebar", sidebar):
 			changed |= _apply(sidebar, _desired_blocks(sidebar))
 	changed |= apply_dock()
+	changed |= hide_dock_rows()
 	if changed:
 		frappe.clear_cache()
 	return changed
@@ -432,4 +441,30 @@ def apply_dock() -> bool:
 				"Dock Item", name if row_name == "__mine__" else row_name, "idx", idx, update_modified=False
 			)
 		changed = True
+	return changed
+
+
+def hide_dock_rows() -> bool:
+	"""Set ``hidden = 1`` on each HIDDEN_DOCK_ROWS row of Marley's dock (idempotent). Returns True when changed."""
+	if not frappe.db.exists("Dock", MARLEY_DOCK):
+		return False
+	changed = False
+	for link_type, link_to in HIDDEN_DOCK_ROWS:
+		names = frappe.get_all(
+			"Dock Item",
+			filters={
+				"parent": MARLEY_DOCK,
+				"parenttype": "Dock",
+				"parentfield": "items",
+				"link_type": link_type,
+				"link_to": link_to,
+				"hidden": 0,
+			},
+			pluck="name",
+		)
+		for name in names:
+			frappe.db.set_value("Dock Item", name, "hidden", 1, update_modified=False)
+			changed = True
+	if changed:
+		frappe.clear_document_cache("Dock", MARLEY_DOCK)
 	return changed

@@ -16,6 +16,7 @@ import frappe
 from frappe.utils import cint
 
 from onerc_healthcare.constants import (
+	DEPT_MATERNITY,
 	DEPT_MENTAL_HEALTH,
 	DEPT_OUTPATIENT,
 	DEPT_TRIAGE,
@@ -23,6 +24,7 @@ from onerc_healthcare.constants import (
 	ROLE_CLINICIAN,
 	ROLE_MHO,
 	ROLE_MIC,
+	ROLE_MIDWIFE,
 	ROLE_OUTREACH,
 	ROLE_RECEPTIONIST,
 	ROLE_TRIAGE,
@@ -78,6 +80,8 @@ EXPECTED_VISIT: dict[str, tuple[tuple[str, ...], tuple[str, ...] | str]] = {
 	"refer": ((IC, AL, AP), CONSULT),
 	"close_visit": (OPEN, (ROLE_RECEPTIONIST, ROLE_TRIAGE, *CONSULT, ROLE_MIC)),
 	"receive_referral": ((R,), SYSTEM),
+	# Phase 5M (D60): admission to Maternity closes the visit (server only, maternity.admission.admit).
+	"admit": (OPEN, (ROLE_MIDWIFE, ROLE_CLINICIAN, ROLE_MIC)),
 }
 
 CLOSURE_REASON = "Other"
@@ -306,6 +310,8 @@ def expect_visit(s: VState, action: str, actor: str, kw: dict, via_api: bool = F
 		return Outcome(exc=TriageVitalsMissingError)
 	if action == "receive_referral" and not kw.get("referral"):
 		return Outcome(exc=IllegalVisitTransitionError)
+	if action == "admit" and (s.lab or s.ph or s.enc == "draft"):
+		return Outcome(exc=VisitGuardError)  # nothing may stay pending on an admitted visit
 
 	lab, ph = s.lab, s.ph
 	out = Outcome()
@@ -353,6 +359,8 @@ def expect_visit(s: VState, action: str, actor: str, kw: dict, via_api: bool = F
 	elif action == "close_visit":
 		out.status, out.closure = D, True
 		lab = ph = 0
+	elif action == "admit":
+		out.status, out.dept = D, DEPT_MATERNITY
 	out.lab, out.ph = lab, ph
 	return out
 

@@ -1,0 +1,122 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-16 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "outcome",
+  "sex",
+  "weight_kg",
+  "apgar_1",
+  "apgar_5",
+  "column_break_baby",
+  "head_circumference_cm",
+  "length_cm",
+  "resuscitation",
+  "vitamin_k",
+  "other_drugs",
+  "newborn_patient"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Outcome",
+   "options": "Live birth\nFresh stillbirth\nMacerated stillbirth",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "sex",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Sex",
+   "options": "Gender"
+  },
+  {
+   "columns": 1,
+   "fieldname": "weight_kg",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight (kg)",
+   "precision": "2"
+  },
+  {
+   "columns": 1,
+   "fieldname": "apgar_1",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Apgar 1 min"
+  },
+  {
+   "columns": 1,
+   "fieldname": "apgar_5",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Apgar 5 min"
+  },
+  {
+   "fieldname": "column_break_baby",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "head_circumference_cm",
+   "fieldtype": "Float",
+   "label": "Head Circumference (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "length_cm",
+   "fieldtype": "Float",
+   "label": "Length (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "resuscitation",
+   "fieldtype": "Select",
+   "label": "Resuscitation",
+   "options": "\nNot needed\nStimulation\nSuction\nBag and mask ventilation"
+  },
+  {
+   "fieldname": "vitamin_k",
+   "fieldtype": "Check",
+   "label": "Vitamin K Given"
+  },
+  {
+   "description": "e.g. tetracycline eye ointment",
+   "fieldname": "other_drugs",
+   "fieldtype": "Small Text",
+   "label": "Other Drugs"
+  },
+  {
+   "columns": 2,
+   "description": "Registered when the Delivery Record is submitted (live births only).",
+   "fieldname": "newborn_patient",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Newborn Patient",
+   "no_copy": 1,
+   "options": "Patient",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-16 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Maternity",
+ "name": "Delivery Baby",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

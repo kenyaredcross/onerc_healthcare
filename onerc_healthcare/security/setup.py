@@ -9,7 +9,8 @@ Called by setup/install.py on after_install and after_migrate. Idempotent, never
   billing rights removed from EMR roles and selling price lists disabled (C-5), billing workspaces
   restricted, ``krcs_archived`` added to clinical DocTypes, billing fields hidden from forms (BIL-04).
 - First run only (so admin edits survive): role settings, System Settings, Website Settings.
-- One-off fix-ups (marker ``krcs_security_fixups_v2``): undo the over-reach of the first version.
+- One-off fix-ups (marker ``krcs_security_fixups_v2``): undo the over-reach of the first version; later
+  markers v3 (Phase 2), v4 (Phase 4, no desk for outreach) and v5 (Phase 5M, Midwife role settings).
 """
 
 import frappe
@@ -51,6 +52,7 @@ def install() -> None:
 	apply_fixups()
 	apply_phase2_fixups()
 	apply_phase4_fixups()
+	apply_phase5_fixups()
 	lock_down_billing()
 	hide_billing_fields()
 	add_archived_fields()
@@ -191,6 +193,27 @@ def apply_phase4_fixups() -> None:
 		if frappe.db.exists("Role", role):
 			frappe.db.set_value("Role", role, "desk_access", 0)
 	frappe.db.set_default(PHASE4_FIXUPS_MARKER, "1")
+
+
+PHASE5_FIXUPS_MARKER = "krcs_security_fixups_v5"
+
+
+def apply_phase5_fixups() -> None:
+	"""Phase 5M (ROL-24): role settings were applied once in Phase 1, so a site migrated from then never gave
+	the new Midwife role its desk access and home page; apply its ROLE_SETTINGS entry once. Its Custom DocPerms
+	are new rows, which apply_matrix adds on every run; nothing else needs changing on existing rows."""
+	if frappe.db.get_default(PHASE5_FIXUPS_MARKER):
+		return
+	from onerc_healthcare.constants import ROLE_MIDWIFE
+
+	if frappe.db.exists("Role", ROLE_MIDWIFE):
+		values = matrix.ROLE_SETTINGS[ROLE_MIDWIFE]
+		frappe.db.set_value(
+			"Role",
+			ROLE_MIDWIFE,
+			{**values, "two_factor_auth": values.get("two_factor_auth", 0)},
+		)
+	frappe.db.set_default(PHASE5_FIXUPS_MARKER, "1")
 
 
 def add_archived_fields() -> None:

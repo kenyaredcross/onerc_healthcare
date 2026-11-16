@@ -7,7 +7,7 @@ import os
 
 import frappe
 
-from onerc_healthcare.constants import OPERATIONS
+from onerc_healthcare.constants import MATERNITY_WARD_NAME, OPERATIONS
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
@@ -46,6 +46,16 @@ def facility_unit_name(facility: dict, abbr: str) -> str:
 
 def lab_unit_name(facility: dict, abbr: str) -> str:
 	return f"{facility['short']} Laboratory - {abbr}"
+
+
+def maternity_ward_unit_name(facility: dict) -> str:
+	"""`healthcare_service_unit_name` of a facility's maternity ward group (Phase 5M), e.g. "Maternity Ward - NTK"."""
+	return f"{MATERNITY_WARD_NAME} - {facility['code']}"
+
+
+def maternity_ward_name(facility: dict, abbr: str) -> str:
+	"""Healthcare Service Unit name of a facility's maternity ward group, e.g. "Maternity Ward - NTK - KLB"."""
+	return f"{maternity_ward_unit_name(facility)} - {abbr}"
 
 
 def get_facilities() -> list[str]:

@@ -1,0 +1,610 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-11-16 12:00:00.000000",
+ "custom": 0,
+ "description": "Labour ward admission (SDD §5.12.3, INP-12). Created by maternity.admission.admit; status changes only through its actions (append-only log).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "patient",
+  "patient_name",
+  "status",
+  "visit",
+  "column_break_links",
+  "facility",
+  "ward",
+  "bed",
+  "admitted_at",
+  "admitted_by",
+  "personal_section",
+  "husband_name",
+  "column_break_personal",
+  "employer",
+  "pregnancy_section",
+  "safe_motherhood_no",
+  "gravida",
+  "para",
+  "anc_clinic",
+  "column_break_pregnancy",
+  "lmp",
+  "edd",
+  "gestation_weeks",
+  "history_section",
+  "medical_history",
+  "family_history",
+  "column_break_history",
+  "transfusion_history",
+  "obstetric_history_section",
+  "obstetric_history",
+  "labs_section",
+  "blood_group",
+  "rhesus",
+  "syphilis_rpr",
+  "column_break_labs",
+  "blood_group_result",
+  "rhesus_result",
+  "syphilis_result",
+  "examination_section",
+  "fundal_height_cm",
+  "presentation",
+  "engagement",
+  "position",
+  "foetal_heart_rate",
+  "urine",
+  "haemoglobin",
+  "column_break_exam_vitals",
+  "bp_systolic",
+  "bp_diastolic",
+  "temperature",
+  "pulse",
+  "respiratory_rate",
+  "weight_kg",
+  "column_break_exam_other",
+  "vaginal_discharge",
+  "genitals",
+  "spleen",
+  "abnormalities",
+  "diagnosis_section",
+  "diagnoses",
+  "remarks",
+  "discharge_section",
+  "discharge_outcome",
+  "discharge_condition",
+  "death_reason",
+  "column_break_discharge",
+  "discharged_at",
+  "discharged_by",
+  "discharge_notes",
+  "history_log_section",
+  "status_log"
+ ],
+ "fields": [
+  {
+   "default": "MAT-.YYYY.-",
+   "description": "Set per operation in EMR Naming Settings (D19).",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "no_copy": 1,
+   "options": "MAT-.YYYY.-",
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Patient",
+   "reqd": 1,
+   "search_index": 1,
+   "set_only_once": 1
+  },
+  {
+   "fetch_from": "patient.patient_name",
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Patient Name",
+   "read_only": 1
+  },
+  {
+   "default": "Admitted",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "no_copy": 1,
+   "options": "Admitted\nIn Labour\nDelivered\nDischarged",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "visit",
+   "fieldtype": "Link",
+   "label": "Admitting Visit",
+   "no_copy": 1,
+   "options": "Patient Visit",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_links",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "reqd": 1
+  },
+  {
+   "fieldname": "ward",
+   "fieldtype": "Link",
+   "label": "Ward",
+   "options": "Healthcare Service Unit"
+  },
+  {
+   "fieldname": "bed",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bed",
+   "options": "Healthcare Service Unit"
+  },
+  {
+   "fieldname": "admitted_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Admitted At",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "admitted_by",
+   "fieldtype": "Link",
+   "label": "Admitted By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "personal_section",
+   "fieldtype": "Section Break",
+   "label": "Personal"
+  },
+  {
+   "fieldname": "husband_name",
+   "fieldtype": "Data",
+   "label": "Husband's Name"
+  },
+  {
+   "fieldname": "column_break_personal",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "employer",
+   "fieldtype": "Data",
+   "label": "Employer"
+  },
+  {
+   "fieldname": "pregnancy_section",
+   "fieldtype": "Section Break",
+   "label": "Pregnancy"
+  },
+  {
+   "fieldname": "safe_motherhood_no",
+   "fieldtype": "Data",
+   "label": "Safe Motherhood No."
+  },
+  {
+   "fieldname": "gravida",
+   "fieldtype": "Int",
+   "label": "Gravida"
+  },
+  {
+   "description": "e.g. 2+1",
+   "fieldname": "para",
+   "fieldtype": "Data",
+   "label": "Para"
+  },
+  {
+   "fieldname": "anc_clinic",
+   "fieldtype": "Data",
+   "label": "Antenatal Clinic"
+  },
+  {
+   "fieldname": "column_break_pregnancy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lmp",
+   "fieldtype": "Date",
+   "label": "LMP"
+  },
+  {
+   "description": "Naegele's rule from the LMP; may be corrected.",
+   "fieldname": "edd",
+   "fieldtype": "Date",
+   "label": "EDD"
+  },
+  {
+   "description": "Computed from the LMP.",
+   "fieldname": "gestation_weeks",
+   "fieldtype": "Int",
+   "label": "Gestation (weeks)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "history_section",
+   "fieldtype": "Section Break",
+   "label": "History"
+  },
+  {
+   "fieldname": "medical_history",
+   "fieldtype": "Small Text",
+   "label": "Medical History"
+  },
+  {
+   "fieldname": "family_history",
+   "fieldtype": "Small Text",
+   "label": "Family History"
+  },
+  {
+   "fieldname": "column_break_history",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "transfusion_history",
+   "fieldtype": "Small Text",
+   "label": "Blood Transfusion History"
+  },
+  {
+   "fieldname": "obstetric_history_section",
+   "fieldtype": "Section Break",
+   "label": "Previous Pregnancies"
+  },
+  {
+   "fieldname": "obstetric_history",
+   "fieldtype": "Table",
+   "label": "Obstetric History",
+   "options": "Obstetric History"
+  },
+  {
+   "fieldname": "labs_section",
+   "fieldtype": "Section Break",
+   "label": "Laboratory"
+  },
+  {
+   "fieldname": "blood_group",
+   "fieldtype": "Select",
+   "label": "Blood Group",
+   "options": "\nA\nB\nAB\nO"
+  },
+  {
+   "fieldname": "rhesus",
+   "fieldtype": "Select",
+   "label": "Rhesus",
+   "options": "\nPositive\nNegative"
+  },
+  {
+   "fieldname": "syphilis_rpr",
+   "fieldtype": "Select",
+   "label": "Syphilis (RPR)",
+   "options": "\nReactive\nNon-reactive\nNot done"
+  },
+  {
+   "fieldname": "column_break_labs",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "blood_group_result",
+   "fieldtype": "Link",
+   "label": "Blood Group Result",
+   "options": "Observation"
+  },
+  {
+   "fieldname": "rhesus_result",
+   "fieldtype": "Link",
+   "label": "Rhesus Result",
+   "options": "Observation"
+  },
+  {
+   "fieldname": "syphilis_result",
+   "fieldtype": "Link",
+   "label": "Syphilis Result",
+   "options": "Observation"
+  },
+  {
+   "fieldname": "examination_section",
+   "fieldtype": "Section Break",
+   "label": "Admission Examination"
+  },
+  {
+   "fieldname": "fundal_height_cm",
+   "fieldtype": "Float",
+   "label": "Fundal Height (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "presentation",
+   "fieldtype": "Select",
+   "label": "Presentation",
+   "options": "\nCephalic\nBreech\nTransverse\nOblique\nOther"
+  },
+  {
+   "fieldname": "engagement",
+   "fieldtype": "Select",
+   "label": "Engagement (fifths palpable)",
+   "options": "\n5/5\n4/5\n3/5\n2/5\n1/5\n0/5"
+  },
+  {
+   "description": "e.g. LOA",
+   "fieldname": "position",
+   "fieldtype": "Data",
+   "label": "Position"
+  },
+  {
+   "fieldname": "foetal_heart_rate",
+   "fieldtype": "Int",
+   "label": "Foetal Heart Rate (/min)"
+  },
+  {
+   "fieldname": "urine",
+   "fieldtype": "Data",
+   "label": "Urine"
+  },
+  {
+   "fieldname": "haemoglobin",
+   "fieldtype": "Float",
+   "label": "Hb (g/dL)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "column_break_exam_vitals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bp_systolic",
+   "fieldtype": "Int",
+   "label": "BP Systolic (mmHg)"
+  },
+  {
+   "fieldname": "bp_diastolic",
+   "fieldtype": "Int",
+   "label": "BP Diastolic (mmHg)"
+  },
+  {
+   "fieldname": "temperature",
+   "fieldtype": "Float",
+   "label": "Temperature (°C)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "pulse",
+   "fieldtype": "Int",
+   "label": "Pulse (/min)"
+  },
+  {
+   "fieldname": "respiratory_rate",
+   "fieldtype": "Int",
+   "label": "Respiration (/min)"
+  },
+  {
+   "fieldname": "weight_kg",
+   "fieldtype": "Float",
+   "label": "Weight (kg)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "column_break_exam_other",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "vaginal_discharge",
+   "fieldtype": "Data",
+   "label": "Discharge (vaginal)"
+  },
+  {
+   "fieldname": "genitals",
+   "fieldtype": "Data",
+   "label": "Genitals"
+  },
+  {
+   "fieldname": "spleen",
+   "fieldtype": "Data",
+   "label": "Spleen"
+  },
+  {
+   "fieldname": "abnormalities",
+   "fieldtype": "Small Text",
+   "label": "Abnormalities"
+  },
+  {
+   "fieldname": "diagnosis_section",
+   "fieldtype": "Section Break",
+   "label": "Diagnosis"
+  },
+  {
+   "fieldname": "diagnoses",
+   "fieldtype": "Table",
+   "label": "Diagnoses (ICD-11)",
+   "options": "EMR Encounter Diagnosis"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "discharge_section",
+   "fieldtype": "Section Break",
+   "label": "Discharge"
+  },
+  {
+   "fieldname": "discharge_outcome",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Discharge Outcome",
+   "no_copy": 1,
+   "options": "\nDischarged home\nReferred out\nDied\nAbsconded",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discharge_condition",
+   "fieldtype": "Small Text",
+   "label": "Condition at Discharge",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.discharge_outcome=='Died'",
+   "fieldname": "death_reason",
+   "fieldtype": "Small Text",
+   "label": "Cause of Death",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_discharge",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "discharged_at",
+   "fieldtype": "Datetime",
+   "label": "Discharged At",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "discharged_by",
+   "fieldtype": "Link",
+   "label": "Discharged By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discharge_notes",
+   "fieldtype": "Small Text",
+   "label": "Discharge Notes",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "history_log_section",
+   "fieldtype": "Section Break",
+   "label": "Status History"
+  },
+  {
+   "fieldname": "status_log",
+   "fieldtype": "Table",
+   "label": "Status Log",
+   "no_copy": 1,
+   "options": "Maternity Admission Log",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-16 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Maternity",
+ "name": "Maternity Admission",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Midwife",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Clinical Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Medical In-Charge",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Mental Health Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HIS Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "patient,patient_name,status",
+ "show_title_field_in_link": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 0
+}

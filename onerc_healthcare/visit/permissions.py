@@ -3,7 +3,7 @@
 """Patient Visit permission hooks (wired in hooks.py), SDD §6.1.
 
 DocPerms in the DocType JSON give the matrix (Receptionist creates; Triage Nurse and Clinical/Mental
-Health Officer write through transitions; Lab, Pharmacist, HIS Officer, Medical In-Charge read; Head of
+Health Officer write through transitions; Lab, Pharmacist, HIS Officer, Medical In-Charge, Midwife read; Head of
 Operations reads permlevel 0 only). One site per operation, so there is no company filter. These hooks
 add the rules DocPerms cannot express:
 
@@ -24,6 +24,7 @@ from onerc_healthcare.constants import (
 	ROLE_LAB,
 	ROLE_MHO,
 	ROLE_MIC,
+	ROLE_MIDWIFE,
 	ROLE_PHARMACIST,
 	ROLE_RECEPTIONIST,
 	ROLE_TRIAGE,
@@ -31,7 +32,8 @@ from onerc_healthcare.constants import (
 )
 
 VISIT_WRITE_ROLES = frozenset((ROLE_RECEPTIONIST, ROLE_TRIAGE, ROLE_CLINICIAN, ROLE_MHO))
-VISIT_READ_ROLES = frozenset((ROLE_LAB, ROLE_PHARMACIST, ROLE_HIS, ROLE_MIC, ROLE_HEAD_OPS))
+# Phase 5M: the Midwife reads visits (Maternity queue) and closes them only through engine.admit_visit.
+VISIT_READ_ROLES = frozenset((ROLE_LAB, ROLE_PHARMACIST, ROLE_HIS, ROLE_MIC, ROLE_HEAD_OPS, ROLE_MIDWIFE))
 VISIT_ROLES = VISIT_WRITE_ROLES | VISIT_READ_ROLES
 WRITE_PTYPES = frozenset(("write", "create", "submit", "cancel", "amend", "delete", "import"))
 

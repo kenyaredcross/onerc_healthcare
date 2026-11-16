@@ -449,7 +449,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-16 13:00:00.000000",
+ "modified": "2026-11-16 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Visit",
  "name": "Patient Visit",
@@ -563,6 +563,18 @@
   },
   {
    "permlevel": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Midwife"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Midwife"
+  },
+  {
+   "permlevel": 0,
    "read": 1,
    "report": 1,
    "role": "Head of Operations"
@@ -586,6 +598,11 @@
    "permlevel": 2,
    "read": 1,
    "role": "Medical In-Charge"
+  },
+  {
+   "permlevel": 2,
+   "read": 1,
+   "role": "Midwife"
   }
  ],
  "row_format": "Dynamic",

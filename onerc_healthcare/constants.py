@@ -25,6 +25,8 @@ ROLE_SYSADMIN = "EMR System Administrator"
 ROLE_OUTREACH = "Outreach Team Member"
 # Phase 3: API-only reader of MOH aggregates (no desk access, no users until the DHIS2 link, OI-5).
 ROLE_MOH_API = "MOH Data Reader"
+# Phase 5M (ROL-24, D60): labour ward. Admits, keeps the partograph, records deliveries.
+ROLE_MIDWIFE = "Midwife"
 
 ALL_ROLES = (
 	ROLE_RECEPTIONIST,
@@ -39,6 +41,7 @@ ALL_ROLES = (
 	ROLE_SYSADMIN,
 	ROLE_OUTREACH,
 	ROLE_MOH_API,
+	ROLE_MIDWIFE,
 )
 # Roles created without desk access (API only).
 # Phase 4: the Outreach Team Member works only in the outreach app (/outreach), never the desk (ROL-22).
@@ -54,6 +57,7 @@ CLINICAL_ROLES = (
 	ROLE_PHARMACIST,
 	ROLE_MIC,
 	ROLE_OUTREACH,
+	ROLE_MIDWIFE,
 )
 
 # Patient Visit statuses (FR-7)
@@ -89,6 +93,7 @@ DEPT_NUTRITION = "Nutrition"
 DEPT_LABORATORY = "Laboratory"
 DEPT_PHARMACY = "Pharmacy"
 DEPT_HIS = "Health Information"
+DEPT_MATERNITY = "Maternity"  # Phase 5M: routable; Marley ships the Medical Department too
 
 DEPARTMENTS = (
 	DEPT_RECEPTION,
@@ -100,6 +105,7 @@ DEPARTMENTS = (
 	DEPT_LABORATORY,
 	DEPT_PHARMACY,
 	DEPT_HIS,
+	DEPT_MATERNITY,
 )
 
 # Patient identifier types (FR-1 to FR-3, C-6). Primary types satisfy the
@@ -162,6 +168,10 @@ CLINICAL_DOCTYPES = (
 	"Outreach Sync Batch",
 	"Outreach Sync Record",
 	"Sync Conflict",
+	# Phase 5M (W0 contract)
+	"Maternity Admission",
+	"Partograph",
+	"Delivery Record",
 )
 
 VISIT_DOCTYPE = "Patient Visit"
@@ -217,6 +227,9 @@ ACCESS_LOGGED_DOCTYPES = (
 	"Service Delivered",  # Phase 3
 	"Outreach Sync Record",  # Phase 4: holds offline clinical payloads
 	"Sync Conflict",  # Phase 4: both versions of a patient's data
+	"Maternity Admission",  # Phase 5M
+	"Partograph",  # Phase 5M
+	"Delivery Record",  # Phase 5M
 )
 
 # Modules of this app (our own DocTypes live in these; security setup leaves their JSON perms alone)
@@ -233,6 +246,7 @@ APP_MODULES = (
 	"EMR Reporting",
 	"EMR Community",
 	"EMR Outreach",
+	"EMR Maternity",
 )
 
 # Script/query reports the Phase 2 builders create (exact names; the sidebar links them)
@@ -295,7 +309,7 @@ VISIT_OUTCOMES = (
 	OUTCOME_NOT_APPLICABLE,
 )
 # Roles that may record "Died" (a clinical judgement); the system may too.
-DIED_ROLES = (ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC)
+DIED_ROLES = (ROLE_CLINICIAN, ROLE_MHO, ROLE_MIC, ROLE_MIDWIFE)  # Midwife: Phase 5M (maternal death)
 
 # Attendance (MOH 717 "new" vs "re-attendance"): first visit to this facility in the calendar year.
 ATTENDANCE_NEW = "New"
@@ -447,3 +461,72 @@ OUTREACH_NO_VITALS_REASON = "Outreach visit: no vital signs taken"
 
 # Auth scheme of the device sync grant (outreach.auth, via hooks.auth_hooks)
 OUTREACH_AUTH_SCHEME = "krcs-outreach"
+
+
+# ---------------------------------------------------------------------------
+# Maternity contract (W0): Phase 5M labour ward at Kalobeyei (SDD §5.12.3, INP-12..18, ROL-24, D60). Builders
+# import these and never edit them. Field names and endpoints are in docs/MATERNITY_CONTRACT.md.
+# ---------------------------------------------------------------------------
+# DocTypes (module "EMR Maternity")
+MATERNITY_ADMISSION_DOCTYPE = "Maternity Admission"  # {prefix}-MAT-.YYYY.- (the IP number)
+MATERNITY_ADMISSION_LOG_DOCTYPE = "Maternity Admission Log"  # child: append-only status log
+OBSTETRIC_HISTORY_DOCTYPE = "Obstetric History"  # child: one row per previous pregnancy
+PARTOGRAPH_DOCTYPE = "Partograph"  # {prefix}-PTG-.YYYY.- (one per labour)
+PARTOGRAPH_OBSERVATION_DOCTYPE = "Partograph Observation"  # child: hourly rows, append-only
+DELIVERY_RECORD_DOCTYPE = "Delivery Record"  # {prefix}-DEL-.YYYY.-, submittable (Summary of Labour)
+DELIVERY_BABY_DOCTYPE = "Delivery Baby"  # child: one row per baby
+
+# Maternity Admission lifecycle (M1 owns maternity.admission.TRANSITIONS)
+ADMISSION_ADMITTED = "Admitted"
+ADMISSION_IN_LABOUR = "In Labour"
+ADMISSION_DELIVERED = "Delivered"
+ADMISSION_DISCHARGED = "Discharged"
+ADMISSION_STATUSES = (ADMISSION_ADMITTED, ADMISSION_IN_LABOUR, ADMISSION_DELIVERED, ADMISSION_DISCHARGED)
+ADMISSION_OPEN_STATUSES = (ADMISSION_ADMITTED, ADMISSION_IN_LABOUR, ADMISSION_DELIVERED)
+
+# Discharge outcome of the mother (Maternity Admission.discharge_outcome)
+MATERNITY_DISCHARGED_HOME = "Discharged home"
+MATERNITY_REFERRED_OUT = "Referred out"
+MATERNITY_DIED = "Died"  # needs a reason and a DIED_ROLES role (maternal death, MOH 717)
+MATERNITY_ABSCONDED = "Absconded"
+MATERNITY_DISCHARGE_OUTCOMES = (
+	MATERNITY_DISCHARGED_HOME,
+	MATERNITY_REFERRED_OUT,
+	MATERNITY_DIED,
+	MATERNITY_ABSCONDED,
+)
+
+# Mode of delivery (Delivery Record.delivery_mode); "born before arrival" is the separate Check
+# Delivery Record.born_before_arrival (MOH 717 counts BBA on its own line).
+DELIVERY_SVD = "Spontaneous vaginal delivery"
+DELIVERY_ASSISTED = "Assisted vaginal delivery"
+DELIVERY_CAESAREAN = "Caesarean section"
+DELIVERY_BREECH = "Breech delivery"
+DELIVERY_MODES = (DELIVERY_SVD, DELIVERY_ASSISTED, DELIVERY_CAESAREAN, DELIVERY_BREECH)
+DELIVERY_BBA_FIELD = "born_before_arrival"
+
+# Baby outcome (Delivery Baby.outcome). Only a live birth becomes a Patient.
+BABY_LIVE_BIRTH = "Live birth"
+BABY_FRESH_STILLBIRTH = "Fresh stillbirth"
+BABY_MACERATED_STILLBIRTH = "Macerated stillbirth"
+BABY_OUTCOMES = (BABY_LIVE_BIRTH, BABY_FRESH_STILLBIRTH, BABY_MACERATED_STILLBIRTH)
+
+# Partograph coded values (WHO modified partograph; the Partograph Observation Select options)
+LIQUOR_CODES = ("I", "C", "M", "B", "A")  # intact, clear, meconium, blood-stained, absent
+MOULDING_GRADES = ("0", "+", "++", "+++")
+CONTRACTION_DURATION_BANDS = ("<20 s", "20-40 s", ">40 s")
+URINE_DIPSTICK_VALUES = ("Nil", "Trace", "+", "++", "+++")
+PARTOGRAPH_ACTIVE_LABOUR_CM = 4  # the chart starts at the first observation at or above 4 cm
+
+# Who admits, discharges, keeps the partograph and records deliveries
+MATERNITY_ROLES = (ROLE_MIDWIFE, ROLE_CLINICIAN, ROLE_MIC)
+
+# Newborn registration (M3): duplicate-check override reason (twins / "Baby of ..." names)
+NEWBORN_OVERRIDE_REASON = "Newborn registered at delivery"
+
+# Custom fields (W0 creates them in maternity/setup.py)
+PATIENT_MOTHER_FIELD = "krcs_mother"  # Patient -> Patient (the mother), read-only, set at delivery
+VITAL_SIGNS_ADMISSION_FIELD = "krcs_maternity_admission"  # Vital Signs -> Maternity Admission (ward obs)
+
+# Healthcare Service Unit group seeded under each facility: "Maternity Ward - <facility code>" (+ " - <abbr>")
+MATERNITY_WARD_NAME = "Maternity Ward"

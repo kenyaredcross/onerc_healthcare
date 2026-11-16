@@ -1,0 +1,357 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-11-16 12:00:00.000000",
+ "custom": 0,
+ "description": "Summary of Labour (INP-16). Submitting it moves the admission to Delivered and registers each live-born baby as a Patient (M3).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "admission",
+  "patient",
+  "patient_name",
+  "facility",
+  "column_break_delivery",
+  "delivered_at",
+  "delivered_by",
+  "delivery_mode",
+  "born_before_arrival",
+  "first_stage_section",
+  "labour_induced",
+  "induction_method",
+  "column_break_first_stage",
+  "first_stage_duration_min",
+  "vaginal_examinations",
+  "second_stage_section",
+  "second_stage_duration_min",
+  "third_stage_section",
+  "third_stage_management",
+  "third_stage_duration_min",
+  "placenta",
+  "blood_loss_ml",
+  "column_break_third_stage",
+  "perineum",
+  "perineal_repair",
+  "maternal_section",
+  "maternal_bp_systolic",
+  "maternal_bp_diastolic",
+  "maternal_pulse",
+  "column_break_maternal",
+  "maternal_temperature",
+  "maternal_notes",
+  "babies_section",
+  "babies",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "default": "DEL-.YYYY.-",
+   "description": "Set per operation in EMR Naming Settings (D19).",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "no_copy": 1,
+   "options": "DEL-.YYYY.-",
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "admission",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Maternity Admission",
+   "options": "Maternity Admission",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "admission.patient",
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Patient",
+   "options": "Patient",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "admission.patient_name",
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Patient Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "admission.facility",
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_delivery",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "delivered_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Delivered At",
+   "reqd": 1
+  },
+  {
+   "fieldname": "delivered_by",
+   "fieldtype": "Link",
+   "label": "Delivered By",
+   "options": "User"
+  },
+  {
+   "fieldname": "delivery_mode",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Mode of Delivery",
+   "options": "\nSpontaneous vaginal delivery\nAssisted vaginal delivery\nCaesarean section\nBreech delivery",
+   "reqd": 1
+  },
+  {
+   "fieldname": "born_before_arrival",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Born Before Arrival"
+  },
+  {
+   "fieldname": "first_stage_section",
+   "fieldtype": "Section Break",
+   "label": "First Stage"
+  },
+  {
+   "fieldname": "labour_induced",
+   "fieldtype": "Check",
+   "label": "Labour Induced"
+  },
+  {
+   "depends_on": "eval:doc.labour_induced",
+   "fieldname": "induction_method",
+   "fieldtype": "Data",
+   "label": "Induction Method"
+  },
+  {
+   "fieldname": "column_break_first_stage",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "first_stage_duration_min",
+   "fieldtype": "Int",
+   "label": "First Stage Duration (min)"
+  },
+  {
+   "fieldname": "vaginal_examinations",
+   "fieldtype": "Int",
+   "label": "Number of Vaginal Examinations"
+  },
+  {
+   "fieldname": "second_stage_section",
+   "fieldtype": "Section Break",
+   "label": "Second Stage"
+  },
+  {
+   "fieldname": "second_stage_duration_min",
+   "fieldtype": "Int",
+   "label": "Second Stage Duration (min)"
+  },
+  {
+   "fieldname": "third_stage_section",
+   "fieldtype": "Section Break",
+   "label": "Third Stage"
+  },
+  {
+   "fieldname": "third_stage_management",
+   "fieldtype": "Select",
+   "label": "Management",
+   "options": "\nActive (AMTSL)\nExpectant"
+  },
+  {
+   "fieldname": "third_stage_duration_min",
+   "fieldtype": "Int",
+   "label": "Third Stage Duration (min)"
+  },
+  {
+   "fieldname": "placenta",
+   "fieldtype": "Select",
+   "label": "Placenta",
+   "options": "\nComplete\nIncomplete\nRetained"
+  },
+  {
+   "fieldname": "blood_loss_ml",
+   "fieldtype": "Int",
+   "label": "Blood Loss (mL)"
+  },
+  {
+   "fieldname": "column_break_third_stage",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "perineum",
+   "fieldtype": "Select",
+   "label": "Perineum",
+   "options": "\nIntact\nFirst degree tear\nSecond degree tear\nThird degree tear\nFourth degree tear\nEpisiotomy"
+  },
+  {
+   "fieldname": "perineal_repair",
+   "fieldtype": "Small Text",
+   "label": "Repair"
+  },
+  {
+   "fieldname": "maternal_section",
+   "fieldtype": "Section Break",
+   "label": "Maternal Observations after Delivery"
+  },
+  {
+   "fieldname": "maternal_bp_systolic",
+   "fieldtype": "Int",
+   "label": "BP Systolic (mmHg)"
+  },
+  {
+   "fieldname": "maternal_bp_diastolic",
+   "fieldtype": "Int",
+   "label": "BP Diastolic (mmHg)"
+  },
+  {
+   "fieldname": "maternal_pulse",
+   "fieldtype": "Int",
+   "label": "Pulse (/min)"
+  },
+  {
+   "fieldname": "column_break_maternal",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "maternal_temperature",
+   "fieldtype": "Float",
+   "label": "Temperature (°C)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "maternal_notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "babies_section",
+   "fieldtype": "Section Break",
+   "label": "Babies"
+  },
+  {
+   "fieldname": "babies",
+   "fieldtype": "Table",
+   "label": "Babies",
+   "options": "Delivery Baby",
+   "reqd": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-11-16 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Maternity",
+ "name": "Delivery Record",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Midwife",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Clinical Officer",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Medical In-Charge",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Mental Health Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HIS Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 0
+}
