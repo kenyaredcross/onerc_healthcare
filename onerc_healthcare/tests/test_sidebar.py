@@ -119,3 +119,14 @@ class TestOutreachArea(EMRTestCase):
 		dock = self.dock()
 		self.assertEqual(dock.index("Outreach"), dock.index("Rehabilitation") + 1)
 		self.assertFalse(desk_sidebar.apply_dock())
+
+	def test_outreach_stays_on_marleys_rail(self):
+		"""Our app mounts on Marley's dock (companion app), so opening Outreach keeps Marley's rail and switcher
+		on screen instead of switching the desk to an app with no rail of its own."""
+		from frappe.desk.doctype.dock.dock import get_app_base, mounted_apps
+
+		frappe.local.dock_cache = {"app_dock": {}, "mounts": None}
+		self.assertEqual(mounted_apps().get("onerc_healthcare"), desk_sidebar.MARLEY_DOCK)
+		base = [r.get("link_to") for r in get_app_base(desk_sidebar.MARLEY_DOCK)]
+		self.assertEqual(base.count("Outreach"), 1)
+		self.assertEqual(base.index("Outreach"), base.index("Rehabilitation") + 1)

@@ -182,8 +182,10 @@ def _desired_rows(sidebar: str) -> list[dict]:
 
 
 # Phase 4: Outreach has its own sidebar and workspace (`emr_outreach/sidebar/outreach`,
-# `emr_outreach/workspace/outreach`), placed in Marley's dock next to Outpatient, Inpatient and Rehabilitation.
-# The dock row is written directly, like the sidebar rows: Marley's Dock document is never saved.
+# `emr_outreach/workspace/outreach`). Our app ships a companion Dock (`dock/onerc_healthcare`, mount_on
+# "healthcare"), so the desk keeps Marley's rail on screen in Outreach. Companion rows are appended at the end
+# of the host's rail; this row in Marley's dock places Outreach after Rehabilitation (the duplicate companion
+# row is dropped by Frappe's dedupe). Written directly, like the sidebar rows: Marley's Dock is never saved.
 MARLEY_DOCK = "healthcare"
 DOCK_ROWS = (
 	# (title, sidebar it opens, icon, insert after this sidebar)
