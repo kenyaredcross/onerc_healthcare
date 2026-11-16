@@ -65,6 +65,14 @@ CLINICAL_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_HIS: "r",  # reports and diagnosis mapping; no editing (SDD §6.1)
 		ROLE_MIC: "r",
 	},
+	# Marley's encounter form lists the patient's Clinical Notes (`get_encounter_details`) and fails for a
+	# role that cannot read them. Read only, for exactly the roles that read the encounter; we never create them.
+	"Clinical Note": {
+		ROLE_CLINICIAN: "r",
+		ROLE_MHO: "r",
+		ROLE_HIS: "r",
+		ROLE_MIC: "r",
+	},
 	# Phase 2: clinicians read only. Orders are created by the consultation flow (ignore_permissions), and
 	# write would let Marley's set_request_status forge "completed" (audit A3).
 	"Service Request": {
