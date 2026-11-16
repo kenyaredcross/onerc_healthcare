@@ -358,3 +358,240 @@ class TestRolesAndImmutability(DeliveryCase):
 		with self.assertRaises(DeliveryRecordError):
 			delivery.add_addendum(draft_doc.name, "T- draft")
 		frappe.set_user("Administrator")
+
+
+# ------------------------------------------------------------------------------------------ fix round (5M)
+
+
+class TestSupersede(DeliveryCase):
+	"""Finding 2: the Medical In-Charge supersedes a submitted record; finding 3: the archive flag."""
+
+	def setUp(self):
+		super().setUp()
+		self.d1 = self.deliver([baby(sex="Female"), baby(sex="Male")])  # twins: two newborns
+		self.kids = newborns_of(self.mother.name)
+		self.assertEqual(len(self.kids), 2)
+
+	def as_user(self, key, fn, *args, **kw):
+		frappe.set_user(self.users[key])
+		try:
+			return fn(*args, **kw)
+		finally:
+			frappe.set_user("Administrator")
+
+	def supersede(self, reason="T- the second twin was stillborn"):
+		return self.as_user("mic", delivery.supersede, self.d1.name, reason)
+
+	def adm_doc(self):
+		return frappe.get_doc(c.MATERNITY_ADMISSION_DOCTYPE, self.adm.name)
+
+	def record_delivery_rows(self) -> int:
+		return sum(1 for r in self.adm_doc().status_log if r.action == "record_delivery")
+
+	def test_supersede_archives_and_copies(self):
+		out = self.supersede()
+		self.assertEqual(out["superseded"], self.d1.name)
+		old = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, self.d1.name)
+		self.assertEqual((old.docstatus, old.krcs_archived), (1, 1))
+		self.assertIn("T- the second twin was stillborn", old.addendum)
+		self.assertIn(out["name"], old.addendum)
+		new = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, out["name"])
+		self.assertEqual((new.docstatus, new.supersedes, new.krcs_archived), (0, self.d1.name, 0))
+		self.assertFalse(new.addendum)
+		for field in ("delivered_at", "delivery_mode", "delivered_by", "patient", "facility"):
+			self.assertEqual(new.get(field), old.get(field), field)
+		self.assertEqual(
+			[(b.outcome, b.sex, b.weight_kg, b.apgar_1, b.newborn_patient) for b in new.babies],
+			[(b.outcome, b.sex, b.weight_kg, b.apgar_1, b.newborn_patient) for b in old.babies],
+		)
+		self.assertEqual([b.newborn_patient for b in new.babies], self.kids)
+		adm = self.adm_doc()
+		self.assertEqual(adm.status, c.ADMISSION_DELIVERED)
+		last = adm.status_log[-1]
+		self.assertEqual(
+			(last.action, last.from_status, last.to_status, last.user),
+			("correct_delivery", c.ADMISSION_DELIVERED, c.ADMISSION_DELIVERED, self.users["mic"]),
+		)
+		self.assertIn(self.d1.name, last.comment)
+		self.assertIn(out["name"], last.comment)
+		self.assertIn("T- the second twin was stillborn", last.comment)
+		# Already archived: no second supersede of the same record.
+		with self.assertRaises(DeliveryRecordError):
+			self.supersede()
+		# A draft is edited, not superseded.
+		with self.assertRaises(DeliveryRecordError):
+			self.as_user("mic", delivery.supersede, out["name"], "T- again")
+
+	def test_supersede_refusals(self):
+		for key in ("midwife", "clinician", "his"):
+			with self.subTest(user=key), self.assertRaises(frappe.PermissionError):
+				self.as_user(key, delivery.supersede, self.d1.name, "T- reason")
+		with self.assertRaises(DeliveryRecordError):
+			self.supersede(reason="  ")
+		self.assertEqual(frappe.db.get_value(c.DELIVERY_RECORD_DOCTYPE, self.d1.name, "krcs_archived"), 0)
+		self.assertEqual(frappe.db.count(c.DELIVERY_RECORD_DOCTYPE, {"admission": self.adm.name}), 1)
+
+	def test_submit_superseding_record(self):
+		new_name = self.supersede()["name"]
+		frappe.set_user(self.users["midwife"])
+		try:
+			new = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name)
+			new.delivery_mode = c.DELIVERY_CAESAREAN
+			new.babies[1].outcome = FRESH  # the second twin was stillborn: its newborn record is orphaned
+			new.babies[1].sex = None
+			new.append("babies", baby(sex="Male"))  # a third baby, live: registered now
+			new.save()
+			self.assertEqual([b.newborn_patient for b in new.babies], [self.kids[0], None, None])
+			frappe.clear_messages()
+			new.submit()
+			messages = " ".join(str(m) for m in frappe.get_message_log())
+		finally:
+			frappe.set_user("Administrator")
+		kids = newborns_of(self.mother.name)
+		self.assertEqual(len(kids), 3)  # one new Patient only (the third baby); none deleted
+		self.assertEqual(kids[:2], self.kids)
+		rows = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name).babies
+		self.assertEqual([b.newborn_patient for b in rows], [self.kids[0], None, kids[2]])
+		self.assertEqual(new.flags.krcs_orphaned_newborns, [self.kids[1]])
+		self.assertIn(self.kids[1], messages)
+		self.assertEqual(frappe.db.get_value("Patient", self.kids[1], "status"), "Active")  # never touched
+		# The admission stays Delivered; record_delivery ran once (for the first record).
+		self.assertEqual((self.adm_doc().status, self.record_delivery_rows()), (c.ADMISSION_DELIVERED, 1))
+		self.assertEqual(
+			frappe.get_all(
+				c.DELIVERY_RECORD_DOCTYPE,
+				filters={"admission": self.adm.name, "docstatus": 1, "krcs_archived": 0},
+				pluck="name",
+			),
+			[new_name],
+		)
+		# finish_superseding again (idempotent): nothing new, the same orphan reported.
+		again = delivery.finish_superseding(frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name))
+		self.assertEqual(again, {"newborns": [self.kids[0], kids[2]], "orphaned_newborns": [self.kids[1]]})
+		self.assertEqual(len(newborns_of(self.mother.name)), 3)
+
+	def test_after_discharge(self):
+		from onerc_healthcare.maternity import admission
+
+		frappe.set_user(self.users["midwife"])
+		try:
+			admission.apply_action(
+				self.adm.name, "discharge", {"discharge_outcome": c.MATERNITY_DISCHARGED_HOME}
+			)
+		finally:
+			frappe.set_user("Administrator")
+		new_name = self.supersede()["name"]
+		self.as_user("clinician", lambda: frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name).submit())
+		self.assertEqual(frappe.db.get_value(c.DELIVERY_RECORD_DOCTYPE, new_name, "docstatus"), 1)
+		self.assertEqual((self.adm_doc().status, self.record_delivery_rows()), (c.ADMISSION_DISCHARGED, 1))
+		self.assertEqual(newborns_of(self.mother.name), self.kids)  # both kept, none new
+
+	def test_one_active_record_per_admission(self):
+		new_name = self.supersede()["name"]
+		# No plain second record on a Delivered admission, and supersedes is the server's.
+		with self.assertRaises(DeliveryRecordError):
+			self.as_user("midwife", lambda: self.new_delivery().insert())
+		with self.assertRaises(frappe.PermissionError):
+			self.as_user("midwife", lambda: self.new_delivery(supersedes=self.d1.name).insert())
+		frappe.set_user(self.users["midwife"])
+		try:
+			draft = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name)
+			draft.supersedes = None
+			with self.assertRaises(DeliveryRecordError):
+				draft.save()
+		finally:
+			frappe.set_user("Administrator")
+		# A forged newborn link on the superseding draft (not one of the old record's) is dropped.
+		other = make_maternity_patient().name
+		frappe.set_user(self.users["midwife"])
+		try:
+			draft = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name)
+			draft.babies[0].newborn_patient = other
+			draft.babies[1].newborn_patient = self.kids[0]  # the same baby twice: kept once
+			draft.save()
+			self.assertEqual([b.newborn_patient for b in draft.babies], [None, self.kids[0]])
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_archive_flag_guard(self):
+		for key in ("midwife", "clinician", "mic"):
+			with self.subTest(user=key), self.assertRaises(frappe.PermissionError):
+
+				def archive():
+					doc = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, self.d1.name)
+					doc.krcs_archived = 1
+					doc.save()
+
+				self.as_user(key, archive)
+		self.assertEqual(frappe.db.get_value(c.DELIVERY_RECORD_DOCTYPE, self.d1.name, "krcs_archived"), 0)
+		new_name = self.supersede()["name"]
+
+		def restore():
+			doc = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, self.d1.name)
+			doc.krcs_archived = 0
+			doc.save()
+
+		with self.assertRaises(frappe.PermissionError):
+			self.as_user("mic", restore)  # never restored: two active records
+		self.assertEqual(frappe.db.get_value(c.DELIVERY_RECORD_DOCTYPE, self.d1.name, "krcs_archived"), 1)
+
+		def set_draft(value):
+			doc = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name)
+			doc.krcs_archived = value
+			doc.save()
+
+		with self.assertRaises(frappe.PermissionError):
+			self.as_user("midwife", set_draft, 1)
+		self.as_user("mic", set_draft, 1)  # a draft: the Medical In-Charge may archive it
+		with self.assertRaises(DeliveryRecordError):
+			self.as_user("midwife", lambda: frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name).submit())
+		self.as_user("mic", set_draft, 0)
+		with self.assertRaises(frappe.PermissionError):
+			self.as_user(
+				"midwife",
+				lambda: self.new_delivery(krcs_archived=1, admission=make_admission().name).insert(),
+			)
+
+	def test_reports_count_only_the_active_record(self):
+		from onerc_healthcare.reporting import ages, registry, workload
+
+		ctx = registry.SourceContext(
+			report="T-DEL",
+			from_date=getdate(self.d1.delivered_at),
+			to_date=getdate(self.d1.delivered_at),
+			facility=self.adm.facility,
+			age_bands=(ages.AgeBand("all", 0),),
+		)
+		specs = [
+			registry.ElementSpec(
+				"D", "D", "Delivery", {"measure": "deliveries"}, registry.DISAGGREGATION_NONE
+			),
+			registry.ElementSpec(
+				"L",
+				"L",
+				"Delivery",
+				{"measure": "babies", "baby_outcomes": [LIVE]},
+				registry.DISAGGREGATION_NONE,
+			),
+		]
+
+		def counts() -> tuple[int, int]:
+			out = workload.evaluate_delivery(ctx, specs)
+			return (
+				sum(v for k, v in out.items() if k[0] == "D"),
+				sum(v for k, v in out.items() if k[0] == "L"),
+			)
+
+		deliveries, live = counts()  # this record: 1 delivery, 2 live births (plus others on the site today)
+		new_name = self.supersede()["name"]
+		self.assertEqual(counts(), (deliveries - 1, live - 2))  # archived record out, draft not in yet
+		frappe.set_user(self.users["midwife"])
+		try:
+			new = frappe.get_doc(c.DELIVERY_RECORD_DOCTYPE, new_name)
+			new.babies[1].outcome = FRESH
+			new.babies[1].sex = None
+			new.save()
+			new.submit()
+		finally:
+			frappe.set_user("Administrator")
+		self.assertEqual(counts(), (deliveries, live - 1))  # one delivery, one live birth

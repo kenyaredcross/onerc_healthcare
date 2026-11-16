@@ -6,7 +6,7 @@
 
 const KRCS_MAT = "onerc_healthcare.maternity.admission.";
 const KRCS_MAT_INPUT_FIELDS = [
-	"husband_name", "employer", "safe_motherhood_no", "gravida", "para", "anc_clinic", "lmp", "edd",
+	"husband_name", "employer", "safe_motherhood_no", "gravida", "para", "anc_clinic", "lmp", "edd_basis", "edd",
 	"medical_history", "family_history", "transfusion_history", "blood_group", "rhesus", "syphilis_rpr",
 	"blood_group_result", "rhesus_result", "syphilis_result", "fundal_height_cm", "presentation", "engagement",
 	"position", "foetal_heart_rate", "urine", "haemoglobin", "bp_systolic", "bp_diastolic", "temperature", "pulse",
@@ -21,6 +21,14 @@ const KRCS_MAT_TABLES = {
 };
 const KRCS_MAT_COLORS = { Admitted: "blue", "In Labour": "orange", Delivered: "purple", Discharged: "green" };
 const KRCS_MAT_NAEGELE_DAYS = 280;
+
+// EDD basis LMP (the default): the EDD is always LMP + 280 days (Naegele), as the server sets it. With basis
+// Ultrasound / Clinical estimate the typed EDD is kept and the gestation is counted from it.
+function krcs_mat_edd_from_lmp(frm) {
+	if ((frm.doc.edd_basis || "LMP") === "LMP" && frm.doc.lmp) {
+		frm.set_value("edd", frappe.datetime.add_days(frm.doc.lmp, KRCS_MAT_NAEGELE_DAYS));
+	}
+}
 
 frappe.ui.form.on("Maternity Admission", {
 	setup(frm) {
@@ -83,10 +91,11 @@ frappe.ui.form.on("Maternity Admission", {
 	},
 
 	lmp(frm) {
-		// Naegele (LMP + 280 days); the server fills the EDD the same way when it is left empty.
-		if (frm.doc.lmp && !frm.doc.edd) {
-			frm.set_value("edd", frappe.datetime.add_days(frm.doc.lmp, KRCS_MAT_NAEGELE_DAYS));
-		}
+		krcs_mat_edd_from_lmp(frm);
+	},
+
+	edd_basis(frm) {
+		krcs_mat_edd_from_lmp(frm);
 	},
 
 	validate(frm) {
@@ -209,7 +218,11 @@ function krcs_mat_actions(frm, onload) {
 	const deliveries = onload.deliveries || [];
 	deliveries.forEach((d) =>
 		frm.add_custom_button(
-			d.docstatus === 1 ? __("Delivery Record {0}", [d.name]) : __("Draft Delivery Record {0}", [d.name]),
+			d.krcs_archived
+				? __("Superseded Delivery Record {0}", [d.name])
+				: d.docstatus === 1
+					? __("Delivery Record {0}", [d.name])
+					: __("Draft Delivery Record {0}", [d.name]),
 			() => frappe.set_route("Form", "Delivery Record", d.name),
 			__("View"),
 		),

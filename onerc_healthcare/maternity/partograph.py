@@ -15,8 +15,14 @@ WHO modified partograph (`compute`):
 - A point is **right of** (behind) a line when, at its time, the line already shows more dilatation than
   the point: elapsed hours since started_at > dilatation - d0 (alert) or > dilatation - d0 + 4 (action).
   A point exactly on a line has not crossed it.
+- **Second stage:** the lines describe the first stage only. Rows after the first point at full dilatation
+  (10 cm) are never compared with them (that point itself is).
 - Chart hours are measured from the first observation (latent-phase rows, if any, come before the alert
   line's start).
+
+One per admission: a unique index on `Partograph.admission` (`on_doctype_update`); `get_or_create` reads it
+with a lock and returns the existing one when a concurrent insert wins. `krcs_archived` is changed only by the
+Medical In-Charge, on its own.
 
 Lock order: Maternity Admission, then Partograph (after the admission's own Visit lock in M1, and the same
 order as the Delivery Record submit in M3).
@@ -107,17 +113,35 @@ def get_or_create(admission: str) -> str:
 	"""The admission's Partograph name, created on the first call (MATERNITY_ROLES; Admitted or In Labour)."""
 	require_roles(MATERNITY_ROLES, _("keep the partograph"))
 	adm = _lock_admission(admission)
-	existing = frappe.db.get_value(
-		PARTOGRAPH_DOCTYPE, {"admission": adm.name}, "name", order_by="creation asc"
-	)
+	existing = _existing_partograph(adm.name)
 	if existing:
 		return existing
 	_assert_admission_open(adm)
 	doc = frappe.get_doc({"doctype": PARTOGRAPH_DOCTYPE, "admission": adm.name})
 	doc.flags.from_partograph = True
-	# The Medical In-Charge has no create right (contract §1); the role and the admission are checked above.
-	doc.insert(ignore_permissions=True)
+	savepoint = "krcs_partograph_create"
+	frappe.db.savepoint(savepoint)
+	try:
+		# The Medical In-Charge has no create right (contract §1); the role and the admission are checked above.
+		doc.insert(ignore_permissions=True)
+	except (frappe.UniqueValidationError, frappe.DuplicateEntryError):
+		# Another request created it meanwhile (unique index on `admission`): return that one.
+		frappe.db.rollback(save_point=savepoint)
+		existing = _existing_partograph(adm.name)
+		if existing:
+			return existing
+		raise
+	frappe.db.release_savepoint(savepoint)
 	return doc.name
+
+
+def _existing_partograph(admission: str) -> str | None:
+	"""The admission's partograph, by a locking read (after the admission lock; D41)."""
+	rows = frappe.db.sql(
+		f"SELECT name FROM `tab{PARTOGRAPH_DOCTYPE}` WHERE admission = %s ORDER BY creation ASC LIMIT 1 FOR UPDATE",
+		(admission,),
+	)
+	return rows[0][0] if rows else None
 
 
 @frappe.whitelist(methods=["POST"])
@@ -167,7 +191,9 @@ def get_chart(partograph: str) -> dict:
 		detail="maternity.partograph.get_chart",
 	)
 	summary = compute(doc.get(TABLE))
-	adm_status = frappe.db.get_value(MATERNITY_ADMISSION_DOCTYPE, doc.admission, "status")
+	adm_status, adm_archived = frappe.db.get_value(
+		MATERNITY_ADMISSION_DOCTYPE, doc.admission, ["status", ARCHIVED_FIELD]
+	)
 	return {
 		"started_at": summary["started_at"],
 		"origin": summary["origin"],
@@ -182,6 +208,7 @@ def get_chart(partograph: str) -> dict:
 		"admission_status": adm_status,
 		"can_add": bool(
 			adm_status in PARTOGRAPH_OPEN_STATUSES
+			and not cint(adm_archived)
 			and frappe.has_permission(PARTOGRAPH_DOCTYPE, "write", doc)
 			and _has_maternity_role()
 		),
@@ -340,6 +367,7 @@ def validate_partograph(doc) -> None:
 	before = doc.get_doc_before_save()
 	if before is None:
 		return
+	_guard_archive(doc, before)
 	_guard_rows(doc, before)
 	if not doc.flags.from_partograph:
 		changed = [
@@ -357,9 +385,32 @@ def validate_partograph(doc) -> None:
 			)
 
 
+def _guard_archive(doc, before) -> None:
+	"""`krcs_archived` is the Medical In-Charge's, saved on its own (rows and computed fields are guarded
+	below, so nothing else can change with it)."""
+	if cint(doc.get(ARCHIVED_FIELD)) == cint(before.get(ARCHIVED_FIELD)):
+		return
+	from onerc_healthcare.constants import ROLE_MIC
+
+	if not _has_role((ROLE_MIC,)):
+		frappe.throw(
+			_("Only the Medical In-Charge can archive or restore a partograph."),
+			PartographLockedError,
+			title=_("Not Allowed"),
+		)
+	if doc.flags.from_partograph or len(doc.get(TABLE) or []) != len(before.get(TABLE) or []):
+		frappe.throw(
+			_("Archive or restore the partograph on its own, without other changes."),
+			PartographLockedError,
+			title=_("Not Editable"),
+		)
+
+
 def _validate_new(doc) -> None:
 	if not doc.admission:
 		frappe.throw(_("Select the Maternity Admission."), frappe.MandatoryError)
+	if cint(doc.get(ARCHIVED_FIELD)):
+		frappe.throw(_("A new partograph cannot be archived."), PartographLockedError)
 	adm = _lock_admission(doc.admission)
 	_assert_admission_open(adm)
 	existing = frappe.db.get_value(PARTOGRAPH_DOCTYPE, {"admission": adm.name}, "name")
@@ -443,13 +494,15 @@ def compute(rows) -> dict:
 		]
 
 	points, first_alert, first_action = [], None, None
+	fully_dilated = False  # second stage: after the first point at 10 cm no row is compared with the lines
 	for e in timeline:
 		dil = e.get("cervical_dilatation_cm")
 		alert = action = False
-		if start and dil is not None and e["observed_at"] >= started_at:
+		if start and dil is not None and e["observed_at"] >= started_at and not fully_dilated:
 			behind = (e["observed_at"] - started_at).total_seconds() / 3600 - (dil - d0)
 			alert = behind > EPSILON_HOURS
 			action = behind - ACTION_LINE_OFFSET_HOURS > EPSILON_HOURS
+			fully_dilated = dil >= FULL_DILATATION_CM
 		if alert and first_alert is None:
 			first_alert = e
 		if action and first_action is None:
@@ -643,10 +696,14 @@ def _assert_admission_open(adm) -> None:
 		)
 
 
-def _has_maternity_role() -> bool:
+def _has_role(roles) -> bool:
 	from onerc_healthcare.clinical.utils import has_any_role
 
-	return has_any_role(MATERNITY_ROLES)
+	return has_any_role(roles)
+
+
+def _has_maternity_role() -> bool:
+	return _has_role(MATERNITY_ROLES)
 
 
 def _parse(values) -> dict:

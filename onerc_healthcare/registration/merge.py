@@ -243,6 +243,25 @@ def _refuse_open_visit(source: str) -> None:
 		)
 
 
+def _refuse_open_admission(source: str) -> None:
+	"""Phase 5M fix round: relinking would give the surviving patient a second open Maternity Admission (one
+	open admission per patient) and move its bed. Discharge (or, if wrong, archive) it first."""
+	from onerc_healthcare.constants import MATERNITY_ADMISSION_DOCTYPE
+
+	if not frappe.db.exists("DocType", MATERNITY_ADMISSION_DOCTYPE):
+		return
+	from onerc_healthcare.maternity.admission import open_admission
+
+	admission = open_admission(source)
+	if admission:
+		frappe.throw(
+			_("Patient {0} has an open maternity admission {1}. Discharge it before merging.").format(
+				source, get_link_to_form(MATERNITY_ADMISSION_DOCTYPE, admission)
+			),
+			title=_("Invalid Merge"),
+		)
+
+
 def _recompute_attendance(source: str, target: str) -> dict:
 	"""Phase 3 M4: two records of one person each had a "New" first visit; after the relink only the
 	earliest per facility and year may stay New (`visit.attendance.recompute_after_merge`)."""
@@ -290,6 +309,7 @@ def merge_patients(source: str, target: str, reason: str) -> dict:
 		)
 
 	_refuse_open_visit(source)
+	_refuse_open_admission(source)
 
 	# Identifiers first, so records that copy the patient's identifier get the surviving one.
 	moved, kept = _move_identifiers(source_doc, target_doc)

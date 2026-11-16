@@ -36,7 +36,10 @@ krcs.maternity.admit_dialog = function (opts) {
 					label: __("Facility"),
 					reqd: 1,
 					default: defaults.facility,
-					description: __("A visit is opened here and closed as Admitted."),
+					read_only: defaults.open_visit ? 1 : 0,
+					description: defaults.message
+						? frappe.utils.escape_html(defaults.message)
+						: __("A visit is opened here and closed as Admitted."),
 					get_query: () => ({ filters: { is_group: 1, parent_healthcare_service_unit: ["is", "set"] } }),
 					onchange() {
 						const facility = dialog.get_value("facility");
@@ -69,8 +72,19 @@ krcs.maternity.admit_dialog = function (opts) {
 				},
 				{ fieldtype: "Column Break" },
 				{ fieldname: "lmp", fieldtype: "Date", label: __("LMP") },
-				{ fieldname: "gravida", fieldtype: "Int", label: __("Gravida") },
-				{ fieldname: "para", fieldtype: "Data", label: __("Para"), description: __("e.g. 2 or 2+1") },
+				{
+					fieldname: "gravida",
+					fieldtype: "Int",
+					label: __("Gravida"),
+					reqd: 1,
+					description: __("Every pregnancy including this one (1 for a first pregnancy)."),
+				},
+				{
+					fieldname: "para",
+					fieldtype: "Data",
+					label: __("Para"),
+					description: __("Earlier births (+ abortions), e.g. 2 or 2+1; at most gravida - 1."),
+				},
 				{ fieldtype: "Section Break" },
 				{ fieldname: "remarks", fieldtype: "Small Text", label: __("Remarks") },
 			);

@@ -494,3 +494,112 @@ def ptg_add_json(case: TestPartograph, name: str, values: str) -> dict:
 		return ptg.add_observation(name, values)
 	finally:
 		frappe.set_user("Administrator")
+
+	# ------------------------------------------------------------------ fix round (Phase 5M)
+
+	def test_second_stage_rows_never_cross(self):
+		"""Finding 4, the review's scenario: 4 cm at 0 h, 10 cm at 6 h, 7 h and 11 h. Alert line 4 -> 10 cm
+		from 0 h to 6 h; 10 cm at 6 h is on it (6 - 6 = 0). At 7 h (7 - 6 = 1 > 0) and 11 h (11 - 6 - 4 = 1 > 0)
+		the old rule crossed the alert and action lines; after full dilatation nothing is compared."""
+		t0 = get_datetime("2026-01-01 08:00:00")
+		rows = [
+			frappe._dict(idx=i, observed_at=t0 + timedelta(hours=h), cervical_dilatation_cm=str(d))
+			for i, (h, d) in enumerate(((0, 4), (6, 10), (7, 10), (11, 10)), 1)
+		]
+		result = ptg.compute(rows)
+		self.assertEqual((result["alert_line_crossed"], result["action_line_crossed"]), (0, 0))
+		self.assertEqual([p["alert_crossed"] for p in result["points"]], [False] * 4)
+		self.assertEqual([p["action_crossed"] for p in result["points"]], [False] * 4)
+		self.assertNotIn("alert_line", [w["code"] for w in result["warning_details"]])
+		# The first point at 10 cm itself is still compared: 10 cm at 8 h is 8 - 6 = 2 h right of the alert line
+		# (not of the action line: 2 - 4 < 0); the 10 cm at 12 h after it is not compared (12 - 6 - 4 = 2).
+		late = [
+			frappe._dict(idx=i, observed_at=t0 + timedelta(hours=h), cervical_dilatation_cm=str(d))
+			for i, (h, d) in enumerate(((0, 4), (8, 10), (12, 10)), 1)
+		]
+		result = ptg.compute(late)
+		self.assertEqual((result["alert_line_crossed"], result["action_line_crossed"]), (1, 0))
+		self.assertEqual([p["alert_crossed"] for p in result["points"]], [False, True, False])
+
+	def test_second_stage_through_the_endpoint(self):
+		self.t0 = now_datetime().replace(second=0, microsecond=0) - timedelta(hours=11, minutes=30)
+		adm = make_admission(admitted_at=self.t0 - timedelta(hours=1))
+		name = self.new_partograph(adm)
+		for hours, cm in ((0, 4), (6, 10), (7, 10), (11, 10)):
+			result = self.add(name, observed_at=self.at(hours), cervical_dilatation_cm=cm)
+		self.assertEqual((result["alert_line_crossed"], result["action_line_crossed"]), (0, 0))
+		doc = frappe.get_doc(PARTOGRAPH_DOCTYPE, name)
+		self.assertEqual((doc.alert_line_crossed, doc.action_line_crossed), (0, 0))
+
+	def test_unique_index_on_admission(self):
+		"""Finding 7: one partograph per admission in the database, and get_or_create returns the existing
+		one when a concurrent insert wins (simulated: the pre-insert checks see nothing)."""
+		from unittest.mock import patch
+
+		self.assertTrue(frappe.db.get_column_index("tabPartograph", "admission", unique=True))
+		first = self.new_partograph()
+		real = ptg._existing_partograph
+		with (
+			patch.object(ptg, "_validate_new", lambda doc: None),
+			patch.object(ptg, "_existing_partograph", side_effect=[None, real(self.adm.name)]),
+		):
+			self.assertEqual(self.new_partograph(), first)
+		self.assertEqual(frappe.db.count(PARTOGRAPH_DOCTYPE, {"admission": self.adm.name}), 1)
+		dup = frappe.get_doc(
+			{"doctype": PARTOGRAPH_DOCTYPE, "admission": self.adm.name, "naming_series": "T-PTG-"}
+		)
+		dup.name = f"T-PTG-DUP-{frappe.generate_hash(length=6)}"
+		frappe.db.savepoint("t_ptg_dup")
+		with self.assertRaises((frappe.UniqueValidationError, frappe.DuplicateEntryError)):
+			dup.db_insert()
+		frappe.db.rollback(save_point="t_ptg_dup")
+		self.assertEqual(frappe.db.count(PARTOGRAPH_DOCTYPE, {"admission": self.adm.name}), 1)
+
+	def test_archive_flag_is_the_mics(self):
+		"""Finding 3: only the Medical In-Charge changes krcs_archived, on its own; a new partograph is never
+		archived."""
+		name = self.new_partograph()
+		self.add(name, observed_at=self.at(0), cervical_dilatation_cm=4)
+		for key in ("midwife", "clinician"):
+			frappe.set_user(self.users[key])
+			try:
+				doc = frappe.get_doc(PARTOGRAPH_DOCTYPE, name)
+				doc.krcs_archived = 1
+				with self.assertRaises(PartographLockedError):
+					doc.save()
+			finally:
+				frappe.set_user("Administrator")
+		self.assertEqual(frappe.db.get_value(PARTOGRAPH_DOCTYPE, name, "krcs_archived"), 0)
+		frappe.set_user(self.users["mic"])
+		try:
+			doc = frappe.get_doc(PARTOGRAPH_DOCTYPE, name)
+			doc.krcs_archived = 1
+			doc.append("observations", {"observed_at": self.at(1), "foetal_heart_rate": 140})
+			with self.assertRaises(PartographLockedError):
+				doc.save()  # not with a row
+			doc = frappe.get_doc(PARTOGRAPH_DOCTYPE, name)
+			doc.krcs_archived = 1
+			doc.save()
+		finally:
+			frappe.set_user("Administrator")
+		self.assertEqual(frappe.db.get_value(PARTOGRAPH_DOCTYPE, name, "krcs_archived"), 1)
+		other = make_admission()
+		with self.assertRaises(PartographLockedError):
+			frappe.get_doc(
+				{"doctype": PARTOGRAPH_DOCTYPE, "admission": other.name, "krcs_archived": 1}
+			).insert()
+
+	def test_can_add_false_on_archived_admission(self):
+		"""DEFECT-P5-2: the bedside button is not offered on an archived admission."""
+		name = self.new_partograph()
+		frappe.set_user(self.users["midwife"])
+		try:
+			self.assertTrue(ptg.get_chart(name)["can_add"])
+		finally:
+			frappe.set_user("Administrator")
+		frappe.db.set_value(MATERNITY_ADMISSION_DOCTYPE, self.adm.name, "krcs_archived", 1)
+		frappe.set_user(self.users["midwife"])
+		try:
+			self.assertFalse(ptg.get_chart(name)["can_add"])
+		finally:
+			frappe.set_user("Administrator")

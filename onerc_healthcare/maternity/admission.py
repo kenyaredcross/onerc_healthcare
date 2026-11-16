@@ -13,24 +13,33 @@ Contract: `docs/MATERNITY_CONTRACT.md` §5-§7. Status changes only through this
 | `discharge` | Admitted / In Labour / Delivered -> Discharged | `MATERNITY_ROLES`; outcome Died needs `DIED_ROLES` and a cause |
 
 **Admit** (`admit`, POST), one transaction, lock order Patient -> Visit -> (Referral) -> Admission -> Bed:
-- with `visit`: the patient's visit, either open in Registered / In Triage / Routed to Department (the engine's
-  `admit` closes it: Discharged, outcome Admitted, department Maternity), or already closed by a clinician
-  with outcome Admitted (linked as it is, no transition). A visit In Consultation / Awaiting Laboratory /
-  Awaiting Pharmacy is refused: the clinician completes the consultation with outcome Admitted, or refers the
-  patient to Maternity internally;
-- without `visit` (fast path, active labour): the patient's open visit is used when she has one; otherwise a
+- with `visit`: the patient's visit, either open in Registered / In Triage / Routed to Department **Maternity**
+  (the engine's `admit` closes it: Discharged, outcome Admitted, department Maternity), or already closed with
+  outcome Admitted by a clinician's Complete Consultation (not by Close Visit), or by our own `admit` for an
+  admission since archived (linked as it is, no transition). A visit routed to another department, In
+  Consultation / Awaiting Laboratory / Awaiting Pharmacy is refused: the clinician completes the consultation
+  with outcome Admitted, or refers the patient to Maternity internally (`visit_admit_refusal` gives the reason;
+  `get_visit_state` / `get_patient_state` offer the buttons by the same rule);
+- without `visit` (fast path, active labour): the patient's open visit is used when she has one (a requested
+  facility other than that visit's is refused); otherwise a
   Patient Visit is inserted at the facility (`values["facility"]`, else the user's default facility, else the
   patient's registration facility) with every visit rule (attendance, queue number, one open visit) and then
   closed with `admit`;
 - a Sent internal referral that created the visit (`referred_from`) is marked Received;
-- refused while the patient has another open (not archived) admission, or when the visit already has one;
+- refused while the patient has another open (not archived) admission, or when the visit already has one that
+  is not archived;
+- gravida (this pregnancy included) is required, >= 1; para "P" or "P+A" with P + A <= gravida - 1;
+- dating by `edd_basis` (`set_pregnancy_dates`): LMP (default) -> EDD = LMP + 280, a typed EDD more than 14 days
+  away refused; Ultrasound / Clinical estimate -> the typed EDD is kept and the gestation counted from it;
 - ward: the facility's Maternity Ward (`maternity.setup.ward_for_facility`) unless given; bed optional: a Vacant
   leaf of type Bed directly under that ward, set Occupied by direct write (never by saving the unit: Marley's
   validate resets occupancy).
 
 **Discharge** records outcome, condition, notes, cause of death (Died only), time and user, and frees the bed.
 A Discharged admission is read-only, except `krcs_archived` (Medical In-Charge). Correction of a wrong admission
-is archiving: an archived admission no longer counts as open and its bed is freed. Nothing is ever deleted.
+is archiving: an archived admission no longer counts as open, its bed is freed and its visit may carry a new
+admission. Nothing is ever deleted. A superseded Delivery Record (`maternity.delivery.supersede`) adds a
+`correct_delivery` log row (`log_delivery_correction`; status unchanged, not in TRANSITIONS).
 
 **Ward observations** are Vital Signs with `krcs_maternity_admission` (no `krcs_visit`: the visit closed at
 admission). `record_observation` inserts and submits one with the user's own permissions;
@@ -84,6 +93,8 @@ ACTION_ADMIT = "admit"
 ACTION_START_LABOUR = "start_labour"
 ACTION_RECORD_DELIVERY = "record_delivery"
 ACTION_DISCHARGE = "discharge"
+# Log only, not a transition (the status stays): a submitted Delivery Record superseded by the Medical In-Charge.
+ACTION_CORRECT_DELIVERY = "correct_delivery"
 
 TRANSITIONS: dict[str, Transition] = {
 	ACTION_ADMIT: Transition(_("Admit"), (), ADMISSION_ADMITTED, tuple(MATERNITY_ROLES)),
@@ -139,6 +150,7 @@ INPUT_FIELDS = (
 	"para",
 	"anc_clinic",
 	"lmp",
+	"edd_basis",
 	"edd",
 	"medical_history",
 	"family_history",
@@ -187,6 +199,12 @@ DISCHARGE_INPUTS = ("discharge_outcome", "discharge_condition", "discharge_notes
 
 # Pregnancy dating (Naegele: EDD = LMP + 280 days).
 NAEGELE_DAYS = 280
+EDD_BASIS_LMP = "LMP"
+EDD_BASIS_ULTRASOUND = "Ultrasound"
+EDD_BASIS_CLINICAL = "Clinical estimate"
+EDD_BASES = (EDD_BASIS_LMP, EDD_BASIS_ULTRASOUND, EDD_BASIS_CLINICAL)
+# With basis LMP the EDD is LMP + 280; a typed EDD further than this from it needs another basis.
+EDD_LMP_TOLERANCE_DAYS = 14
 MAX_GESTATION_DAYS = 45 * 7  # beyond 45 weeks the LMP / EDD is a typing error
 # Plausible (not normal) admission examination ranges; temperature, pulse, respiration, BP and weight reuse
 # the triage ranges of visit/events.py.
@@ -240,9 +258,19 @@ def gestation(lmp=None, edd=None, on=None) -> tuple[int, int] | None:
 	return divmod(days, 7)
 
 
+def admission_gestation_days(doc, on=None) -> int | None:
+	"""Gestation of the admission on `on` (default: the admission date) by its EDD basis: from the EDD when
+	there is one (with basis LMP the EDD is LMP + 280, so this equals the LMP count), else from the LMP."""
+	on = on or _admission_date(doc)
+	if doc.get("edd"):
+		return gestation_days(None, doc.edd, on)
+	return gestation_days(doc.get("lmp"), None, on)
+
+
 def gestation_label(doc) -> str | None:
-	"""'39+1 weeks' at admission, for the form."""
-	ga = gestation(doc.lmp, doc.edd, _admission_date(doc))
+	"""'39+1 weeks' at admission, for the form (the same rule as `gestation_weeks`)."""
+	days = admission_gestation_days(doc)
+	ga = divmod(days, 7) if days is not None else None
 	if not ga or ga[0] < 0:
 		return None
 	return _("{0}+{1} weeks").format(ga[0], ga[1])
@@ -308,8 +336,8 @@ def validate_admission(doc) -> None:
 		guard_log(doc, before, LOG_TABLE)
 		if _guard_update(doc, before):
 			return  # archive-only change
-	set_pregnancy_dates(doc)
-	validate_gravida_para(doc)
+	set_pregnancy_dates(doc, before)
+	validate_gravida_para(doc, before)
 	validate_examination(doc)
 	validate_obstetric_history(doc)
 	validate_lab_links(doc)
@@ -395,18 +423,63 @@ def on_admission_update(doc) -> None:
 		free_bed(doc.bed)
 
 
-def set_pregnancy_dates(doc) -> None:
-	"""EDD from the LMP by Naegele when empty; gestation (completed weeks) at the admission date."""
+def _dating_changed(doc, before) -> bool:
+	if before is None:
+		return True
+	return any(
+		(getdate(doc.get(f)) if doc.get(f) else None) != (getdate(before.get(f)) if before.get(f) else None)
+		for f in ("lmp", "edd")
+	) or (doc.get("edd_basis") or EDD_BASIS_LMP) != (before.get("edd_basis") or EDD_BASIS_LMP)
+
+
+def set_pregnancy_dates(doc, before=None) -> None:
+	"""The EDD by its basis, then gestation (completed weeks) at the admission date (`admission_gestation_days`).
+
+	- Basis LMP (the default): the EDD is always LMP + 280 (Naegele), recomputed whenever the LMP changes. A
+	  typed EDD more than `EDD_LMP_TOLERANCE_DAYS` from LMP + 280 is refused: the EDD then comes from an
+	  ultrasound or a clinical estimate, and the basis must say so. Without an LMP a typed EDD is kept.
+	- Basis Ultrasound / Clinical estimate: the typed EDD is kept (required) and the gestation is computed from
+	  it (280 - days to the EDD), whatever the LMP.
+
+	The rules run on a new admission and whenever the LMP, the EDD or the basis changes; a save that leaves
+	them alone keeps the stored dates (an admission dated before these rules is not rewritten)."""
+	basis = doc.get("edd_basis") or EDD_BASIS_LMP
+	if basis not in EDD_BASES:
+		_implausible(_("The EDD basis must be one of {0}.").format(", ".join(_(b) for b in EDD_BASES)))
+	doc.edd_basis = basis
 	adm_date = _admission_date(doc)
-	if doc.lmp:
-		lmp = getdate(doc.lmp)
-		if lmp > adm_date:
+	if _dating_changed(doc, before):
+		lmp = getdate(doc.lmp) if doc.lmp else None
+		if lmp and lmp > adm_date:
 			_implausible(_("The LMP ({0}) cannot be after the admission date.").format(_fmt_date(lmp)))
-		if not doc.edd:
-			doc.edd = edd_from_lmp(lmp)
-		elif getdate(doc.edd) <= lmp:
+		if basis == EDD_BASIS_LMP and lmp:
+			computed = edd_from_lmp(lmp)
+			typed = getdate(doc.edd) if doc.edd else None
+			edd_typed = typed and (
+				before is None or not before.get("edd") or typed != getdate(before.get("edd"))
+			)
+			if edd_typed and abs((typed - computed).days) > EDD_LMP_TOLERANCE_DAYS:
+				_implausible(
+					_(
+						"The EDD {0} is {1} days from the date given by the LMP ({2} = LMP + 280 days). If the EDD"
+						" comes from an ultrasound or a clinical estimate, set the EDD basis to {3} or {4};"
+						" otherwise correct the LMP or clear the EDD."
+					).format(
+						_fmt_date(typed),
+						abs((typed - computed).days),
+						_fmt_date(computed),
+						frappe.bold(_(EDD_BASIS_ULTRASOUND)),
+						frappe.bold(_(EDD_BASIS_CLINICAL)),
+					)
+				)
+			doc.edd = computed
+		elif basis != EDD_BASIS_LMP and not doc.edd:
+			_implausible(
+				_("Enter the EDD given by the {0}, or set the EDD basis to LMP.").format(_(basis).lower())
+			)
+		if lmp and doc.edd and getdate(doc.edd) <= lmp:
 			_implausible(_("The EDD must be after the LMP."))
-	days = gestation_days(doc.lmp, doc.edd, adm_date)
+	days = admission_gestation_days(doc, adm_date)
 	if days is None:
 		doc.gestation_weeks = None
 		return
@@ -419,19 +492,29 @@ def set_pregnancy_dates(doc) -> None:
 	doc.gestation_weeks = days // 7
 
 
-def validate_gravida_para(doc) -> None:
-	"""Gravida >= para (births + abortions) >= 0; a pregnant woman is at least gravida 1."""
+def validate_gravida_para(doc, before=None) -> None:
+	"""Gravida counts every pregnancy including this one: required (>= 1) at admission and never cleared once
+	entered. Para is "P" or "P+A" (births at or after viability + abortions), all from earlier pregnancies,
+	so P + A <= gravida - 1."""
 	gravida = cint(doc.gravida)
 	if gravida < 0:
 		_implausible(_("Gravida cannot be negative."))
+	required = (doc.is_new() and doc.flags.from_admit) or (before is not None and cint(before.get("gravida")))
 	para = parse_para(doc.para)
+	if gravida < 1 and (required or para is not None):
+		_implausible(
+			_("Enter gravida: the number of pregnancies including this one (1 for a first pregnancy).")
+		)
 	if para is None:
 		doc.para = None
 		return
 	doc.para = f"{para[0]}+{para[1]}" if para[1] else str(para[0])
-	if gravida and sum(para) > gravida:
+	if sum(para) > gravida - 1:
 		_implausible(
-			_("Para {0} counts more pregnancies than gravida {1}.").format(frappe.bold(doc.para), gravida)
+			_(
+				"Para {0} counts {1} earlier pregnancies, but gravida {2} leaves {3} before this one"
+				" (para births + abortions must be at most gravida - 1)."
+			).format(frappe.bold(doc.para), sum(para), gravida, gravida - 1)
 		)
 
 
@@ -707,6 +790,19 @@ def _fast_path_facility(patient: str, requested: str | None) -> str:
 	return facility
 
 
+def _refuse_other_facility(visit: str, facility: str, requested: str | None) -> None:
+	"""The fast path uses the patient's open visit, so the admission is at that visit's facility."""
+	if requested and requested != facility:
+		frappe.throw(
+			_(
+				"The patient has an open visit {0} at {1}; she is admitted there, not at {2}. Close that visit"
+				" first to admit her at another facility."
+			).format(frappe.bold(visit), frappe.bold(facility), frappe.bold(requested)),
+			MaternityAdmissionError,
+			title=_("Wrong Facility"),
+		)
+
+
 def _check_patient(patient: str) -> None:
 	from onerc_healthcare.visit.patients import assert_patient_active
 
@@ -746,25 +842,77 @@ def _close_visit_for_admission(visit: str, patient: str):
 	doc = _locked_visit(visit)
 	if doc.patient != patient:
 		frappe.throw(_("Visit {0} belongs to another patient.").format(visit), MaternityAdmissionError)
-	if frappe.db.exists(MATERNITY_ADMISSION_DOCTYPE, {"visit": visit}):
+	existing = visit_admission(visit)
+	if existing:
 		frappe.throw(
-			_("Visit {0} already has a maternity admission.").format(frappe.bold(visit)),
+			_("Visit {0} already has a maternity admission ({1}).").format(
+				frappe.bold(visit), frappe.bold(existing)
+			),
 			OpenAdmissionExistsError,
 			title=_("Already Admitted"),
 		)
+	refusal = visit_admit_refusal(doc.name, doc.status, doc.current_department, doc.outcome)
+	if refusal:
+		frappe.throw(refusal, MaternityAdmissionError, title=_("Cannot Admit From This Visit"))
 	if doc.status in ADMITTABLE_VISIT_STATUSES:
 		return engine.admit_visit(visit, comment=_("Admitted to Maternity"))
-	if doc.status == VISIT_STATUS_DISCHARGED and doc.outcome == OUTCOME_ADMITTED:
-		return doc  # the clinician completed the consultation with outcome Admitted
-	frappe.throw(
-		_(
-			"Visit {0} is {1}. Admit from a visit that is waiting (Registered, In Triage or Routed to Department),"
-			" or ask the clinician to complete the consultation with outcome Admitted or to refer the patient to"
-			" Maternity."
-		).format(frappe.bold(visit), frappe.bold(_(doc.status))),
-		MaternityAdmissionError,
-		title=_("Cannot Admit From This Visit"),
+	return doc  # closed with outcome Admitted by Complete Consultation (or by an archived admission)
+
+
+def visit_admission(visit: str) -> str | None:
+	"""The visit's maternity admission that is not archived (an archived admission no longer holds its visit)."""
+	rows = frappe.db.sql(
+		f"""SELECT name FROM `tab{MATERNITY_ADMISSION_DOCTYPE}`
+		WHERE visit = %s AND IFNULL({ARCHIVED_FIELD}, 0) = 0 ORDER BY creation ASC LIMIT 1""",
+		(visit,),
 	)
+	return rows[0][0] if rows else None
+
+
+def _closing_actions(visit: str) -> set[str]:
+	return set(
+		frappe.get_all(
+			"Patient Visit Status Log",
+			filters={"parent": visit, "parenttype": VISIT_DOCTYPE, "parentfield": "status_log"},
+			pluck="action",
+		)
+	)
+
+
+def visit_admit_refusal(visit: str, status: str, department: str | None, outcome: str | None) -> str | None:
+	"""Why the visit cannot carry a new admission (None when it can), apart from an existing admission.
+
+	- Registered / In Triage: yes (the fast path, an emergency); Routed to Department: only to Maternity;
+	- Discharged with outcome Admitted: only when a clinician closed it with Complete Consultation (not Close
+	  Visit), or when our own `admit` closed it for an admission since archived;
+	- anything else (a consultation running, referred out, another outcome): no."""
+	from onerc_healthcare.visit import engine
+
+	label = frappe.bold(visit)
+	if status in (VISIT_STATUS_REGISTERED, VISIT_STATUS_IN_TRIAGE):
+		return None
+	if status == VISIT_STATUS_ROUTED:
+		if department == DEPT_MATERNITY:
+			return None
+		return _(
+			"Visit {0} is routed to {1}. Admit from a visit routed to Maternity: ask triage to re-route the"
+			" patient, or the clinician to refer her to Maternity."
+		).format(label, frappe.bold(_(department or "")))
+	if status == VISIT_STATUS_DISCHARGED and outcome == OUTCOME_ADMITTED:
+		actions = _closing_actions(visit)
+		if engine.ACTION_CLOSE_VISIT not in actions and (
+			engine.ACTION_COMPLETE_CONSULTATION in actions or engine.ACTION_ADMIT in actions
+		):
+			return None
+		return _(
+			"Visit {0} was closed with Close Visit, not by a clinician's Complete Consultation. Admit from a new"
+			" visit (Admit in Labour on the Patient form)."
+		).format(label)
+	return _(
+		"Visit {0} is {1}. Admit from a visit that is waiting (Registered, In Triage or Routed to Maternity), or"
+		" ask the clinician to complete the consultation with outcome Admitted or to refer the patient to"
+		" Maternity."
+	).format(label, frappe.bold(_(status)))
 
 
 def _receive_referral(visit_doc) -> str | None:
@@ -838,11 +986,11 @@ def admit(
 			frappe.throw(_("Patient Visit {0} does not exist.").format(visit), MaternityAdmissionError)
 	else:
 		waiting = find_open_visit(patient)
-		facility = (
-			frappe.db.get_value(VISIT_DOCTYPE, waiting.name, "facility")
-			if waiting
-			else _fast_path_facility(patient, requested_facility)
-		)
+		if waiting:
+			facility = frappe.db.get_value(VISIT_DOCTYPE, waiting.name, "facility")
+			_refuse_other_facility(waiting.name, facility, requested_facility)
+		else:
+			facility = _fast_path_facility(patient, requested_facility)
 	ward = _resolve_ward(facility, ward, bed)
 
 	savepoint = "krcs_maternity_admit"
@@ -1026,6 +1174,16 @@ def _apply_delivery(doc, delivery: str | None) -> str | None:
 	return _("Delivery Record {0}").format(delivery) if delivery else None
 
 
+def log_delivery_correction(admission: str, old: str, new: str, reason: str):
+	"""Log row `correct_delivery` (status unchanged) when the Medical In-Charge supersedes Delivery Record `old`
+	with the draft `new` (`maternity.delivery.supersede`). Server only. Returns the saved admission."""
+	doc = frappe.get_doc(MATERNITY_ADMISSION_DOCTYPE, admission, for_update=True)
+	comment = _("Delivery Record {0} superseded by {1}: {2}").format(old, new, reason)
+	_append_log(doc, doc.status, doc.status, ACTION_CORRECT_DELIVERY, comment)
+	_save(doc)
+	return doc
+
+
 def record_delivery(admission: str, delivery: str):
 	"""System transition to Delivered, run by the Delivery Record submit (M3). Refuses a non-open admission and
 	a second delivery. Returns the saved admission."""
@@ -1098,7 +1256,7 @@ def onload(doc) -> None:
 		frappe.get_all(
 			DELIVERY_RECORD_DOCTYPE,
 			filters={"admission": doc.name, "docstatus": ["<", 2]},
-			fields=["name", "docstatus"],
+			fields=["name", "docstatus", ARCHIVED_FIELD],
 			order_by="creation asc",
 		)
 		if frappe.db.table_exists(DELIVERY_RECORD_DOCTYPE)
@@ -1179,33 +1337,57 @@ def record_observation(admission: str, values: dict | str) -> dict:
 
 @frappe.whitelist(methods=["GET"])
 def get_patient_state(patient: str) -> dict:
-	"""For the Patient form's "Admit in Labour": the open admission (if any) and whether the user may admit."""
+	"""For the Patient form's "Admit in Labour": the open admission (if any), whether the user may admit now
+	(`can_admit`) and, when not, why (`reason`). Offered only with no open admission and an open visit that is
+	missing or admittable (Registered, In Triage, Routed to Maternity): the fast path would use that visit."""
+	from onerc_healthcare.emr_visit.doctype.patient_visit.patient_visit import find_open_visit
+
 	frappe.has_permission("Patient", "read", doc=patient, throw=True)
+	admission = open_admission(patient)
+	reason = None
+	if admission:
+		reason = _("Already admitted ({0}).").format(admission)
+	elif not has_any_role(MATERNITY_ROLES):
+		reason = _("Admitting needs one of the roles {0}.").format(", ".join(_(r) for r in MATERNITY_ROLES))
+	else:
+		visit = find_open_visit(patient)
+		if visit:
+			department = frappe.db.get_value(VISIT_DOCTYPE, visit.name, "current_department")
+			reason = visit_admit_refusal(visit.name, visit.status, department, None)
 	return {
-		"admission": open_admission(patient),
-		"can_admit": has_any_role(MATERNITY_ROLES),
+		"admission": admission,
+		"can_admit": reason is None,
+		"reason": reason,
 		"department": DEPT_MATERNITY,
 	}
 
 
 @frappe.whitelist(methods=["GET"])
 def get_visit_state(visit: str) -> dict:
-	"""For the Patient Visit form's "Admit to Maternity": the visit's admission, or whether it can be admitted."""
+	"""For the Patient Visit form's "Admit to Maternity": the visit's (not archived) admission, or whether it
+	can be admitted (`can_admit`) and, when not, why (`reason`)."""
 	row = frappe.db.get_value(
 		VISIT_DOCTYPE, visit, ["name", "patient", "status", "outcome", "current_department"], as_dict=True
 	)
 	if not row:
 		frappe.throw(_("Patient Visit {0} does not exist.").format(visit))
 	frappe.has_permission(VISIT_DOCTYPE, "read", doc=visit, throw=True)
-	admission = frappe.db.get_value(MATERNITY_ADMISSION_DOCTYPE, {"visit": visit}, "name")
-	admittable = row.status in ADMITTABLE_VISIT_STATUSES or (
-		row.status == VISIT_STATUS_DISCHARGED and row.outcome == OUTCOME_ADMITTED
-	)
+	admission = visit_admission(visit)
 	other = open_admission(row.patient)
+	reason = None
+	if admission:
+		reason = _("Visit {0} already has a maternity admission ({1}).").format(visit, admission)
+	elif other:
+		reason = _("Already admitted ({0}).").format(other)
+	elif not has_any_role(MATERNITY_ROLES):
+		reason = _("Admitting needs one of the roles {0}.").format(", ".join(_(r) for r in MATERNITY_ROLES))
+	else:
+		reason = visit_admit_refusal(visit, row.status, row.current_department, row.outcome)
 	return {
 		"admission": admission,
 		"open_admission": other,
-		"can_admit": bool(not admission and not other and admittable and has_any_role(MATERNITY_ROLES)),
+		"can_admit": reason is None,
+		"reason": reason,
 		"maternity": row.current_department == DEPT_MATERNITY,
 	}
 
@@ -1214,14 +1396,32 @@ def get_visit_state(visit: str) -> dict:
 def get_admit_defaults(
 	patient: str | None = None, visit: str | None = None, facility: str | None = None
 ) -> dict:
-	"""Defaults for the admit dialogs: the facility (the visit's; else `facility`; else the fast-path default) and
-	its Maternity Ward."""
+	"""Defaults for the admit dialogs: the facility and its Maternity Ward.
+
+	The facility is the visit's; else, for the fast path, the patient's open visit's (the fast path admits from
+	that visit, so its facility is fixed: `open_visit` and `message` say so); else `facility`; else the
+	fast-path default."""
+	from onerc_healthcare.emr_visit.doctype.patient_visit.patient_visit import find_open_visit
 	from onerc_healthcare.maternity.setup import ward_for_facility
 
+	open_visit = message = None
 	if visit:
 		frappe.has_permission(VISIT_DOCTYPE, "read", doc=visit, throw=True)
 		facility = frappe.db.get_value(VISIT_DOCTYPE, visit, "facility")
-	elif not facility and patient:
+	elif patient:
 		frappe.has_permission("Patient", "read", doc=patient, throw=True)
-		facility = default_facility(patient)
-	return {"facility": facility, "ward": ward_for_facility(facility) if facility else None}
+		waiting = find_open_visit(patient)
+		if waiting:
+			open_visit = waiting.name
+			facility = frappe.db.get_value(VISIT_DOCTYPE, open_visit, "facility")
+			message = _(
+				"The patient has an open visit {0} at {1}; she is admitted from that visit, there."
+			).format(open_visit, facility)
+		elif not facility:
+			facility = default_facility(patient)
+	return {
+		"facility": facility,
+		"ward": ward_for_facility(facility) if facility else None,
+		"open_visit": open_visit,
+		"message": message,
+	}

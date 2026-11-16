@@ -10,6 +10,7 @@
  "field_order": [
   "naming_series",
   "admission",
+  "supersedes",
   "patient",
   "patient_name",
   "facility",
@@ -68,6 +69,17 @@
    "label": "Maternity Admission",
    "options": "Maternity Admission",
    "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "depends_on": "eval:doc.supersedes",
+   "description": "The submitted Delivery Record this one corrects (archived by the Medical In-Charge with Supersede Delivery).",
+   "fieldname": "supersedes",
+   "fieldtype": "Link",
+   "label": "Supersedes",
+   "no_copy": 1,
+   "options": "Delivery Record",
+   "read_only": 1,
    "search_index": 1
   },
   {
@@ -282,7 +294,7 @@
  "index_web_pages_for_search": 0,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-16 15:00:00.000000",
+ "modified": "2026-11-16 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Maternity",
  "name": "Delivery Record",

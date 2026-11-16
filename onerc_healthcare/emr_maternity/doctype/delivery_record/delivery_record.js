@@ -30,6 +30,16 @@ frappe.ui.form.on("Delivery Record", {
 		if (frm.doc.docstatus === 1 && KRCS_ADDENDUM_ROLES.some((r) => frappe.user.has_role(r))) {
 			frm.add_custom_button(__("Add Addendum"), () => krcs_delivery_add_addendum(frm));
 		}
+		// Correction of a submitted record (Medical In-Charge): archived and replaced by a new draft.
+		if (frm.doc.docstatus === 1 && !frm.doc.krcs_archived && frappe.user.has_role("Medical In-Charge")) {
+			frm.add_custom_button(__("Supersede Delivery"), () => krcs_delivery_supersede(frm));
+		}
+		if (frm.doc.krcs_archived) {
+			frm.dashboard.set_headline_alert(
+				__("This Delivery Record is archived (superseded); it no longer counts in reports."),
+				"orange",
+			);
+		}
 	},
 
 	born_before_arrival(frm) {
@@ -59,7 +69,12 @@ frappe.ui.form.on("Delivery Record", {
 		frappe.msgprint({
 			title: __("Register newborns"),
 			message: live.length
-				? __("Registered {0} newborn patient(s), linked to the mother:", [live.length]) +
+				? (frm.doc.supersedes
+						? __("{0} newborn patient(s), linked to the mother (kept from {1} or registered now):", [
+								live.length,
+								frm.doc.supersedes,
+							])
+						: __("Registered {0} newborn patient(s), linked to the mother:", [live.length])) +
 				  "<br>" +
 				  lines.join("<br>")
 				: lines.join("<br>") || __("No live births: no newborn patient was registered."),
@@ -110,5 +125,28 @@ function krcs_delivery_add_addendum(frm) {
 		},
 		__("Add Addendum"),
 		__("Add")
+	);
+}
+
+function krcs_delivery_supersede(frm) {
+	frappe.prompt(
+		[
+			{
+				fieldname: "reason",
+				fieldtype: "Small Text",
+				label: __("Reason for the correction"),
+				reqd: 1,
+				description: __(
+					"This record is archived and a new draft copying it is opened: correct it there, then a Midwife or Clinical Officer submits it."
+				),
+			},
+		],
+		(values) => {
+			frappe
+				.xcall(`${KRCS_DELIVERY_API}.supersede`, { delivery: frm.doc.name, reason: values.reason })
+				.then((r) => frappe.set_route("Form", "Delivery Record", r.name));
+		},
+		__("Supersede Delivery"),
+		__("Supersede"),
 	);
 }

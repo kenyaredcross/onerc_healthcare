@@ -30,6 +30,7 @@
   "anc_clinic",
   "column_break_pregnancy",
   "lmp",
+  "edd_basis",
   "edd",
   "gestation_weeks",
   "history_section",
@@ -207,10 +208,11 @@
   {
    "fieldname": "gravida",
    "fieldtype": "Int",
-   "label": "Gravida"
+   "label": "Gravida",
+   "description": "Every pregnancy including this one (1 for a first pregnancy). Required at admission."
   },
   {
-   "description": "e.g. 2+1",
+   "description": "Earlier births (+ abortions), e.g. 2+1; at most gravida - 1 in all.",
    "fieldname": "para",
    "fieldtype": "Data",
    "label": "Para"
@@ -230,13 +232,22 @@
    "label": "LMP"
   },
   {
-   "description": "Naegele's rule from the LMP; may be corrected.",
-   "fieldname": "edd",
-   "fieldtype": "Date",
-   "label": "EDD"
+   "default": "LMP",
+   "description": "Where the EDD comes from. LMP: the EDD is LMP + 280 days. Ultrasound / Clinical estimate: the EDD is typed and the gestation is counted from it.",
+   "fieldname": "edd_basis",
+   "fieldtype": "Select",
+   "label": "EDD Basis",
+   "options": "LMP\nUltrasound\nClinical estimate"
   },
   {
-   "description": "Computed from the LMP.",
+   "description": "With basis LMP: LMP + 280 days (Naegele), set automatically. Otherwise the date from the ultrasound or the clinical estimate.",
+   "fieldname": "edd",
+   "fieldtype": "Date",
+   "label": "EDD",
+   "read_only_depends_on": "eval:(doc.edd_basis || 'LMP') == 'LMP' && doc.lmp"
+  },
+  {
+   "description": "Completed weeks at admission: from the EDD (280 days minus the days left), else from the LMP.",
    "fieldname": "gestation_weeks",
    "fieldtype": "Int",
    "label": "Gestation (weeks)",
@@ -516,7 +527,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-16 12:00:00.000000",
+ "modified": "2026-11-16 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Maternity",
  "name": "Maternity Admission",

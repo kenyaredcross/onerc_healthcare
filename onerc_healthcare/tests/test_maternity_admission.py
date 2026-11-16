@@ -11,7 +11,7 @@ from datetime import date
 from unittest.mock import patch
 
 import frappe
-from frappe.utils import add_days, getdate, nowdate, random_string, today
+from frappe.utils import add_days, getdate, nowdate, nowtime, random_string, today
 
 from onerc_healthcare import constants as c
 from onerc_healthcare.maternity import admission as adm
@@ -62,8 +62,12 @@ class MaternityCase(EMRTestCase):
 		return routed_visit(c.DEPT_MATERNITY, patient=patient or self.mother())
 
 	def admit(self, user: str = "midwife", **kw) -> dict:
+		"""adm.admit as `user`; gravida 1 unless the test gives the pregnancy fields (gravida is required)."""
+		values = kw.pop("values", None) or {}
+		if isinstance(values, dict) and "gravida" not in values:
+			values = {"gravida": 1, **values}
 		with as_user(self.u(user)):
-			return adm.admit(**kw)
+			return adm.admit(values=values, **kw)
 
 	def act(self, name: str, action: str, user: str = "midwife", **values) -> dict:
 		with as_user(self.u(user)):
@@ -228,7 +232,7 @@ class TestFastPath(MaternityCase):
 				.insert()
 				.name
 			)
-			out = adm.admit(patient=patient, values={"lmp": add_days(today(), -266)})
+			out = adm.admit(patient=patient, values={"lmp": add_days(today(), -266), "gravida": 1})
 		visits = frappe.get_all(
 			c.VISIT_DOCTYPE,
 			filters={"patient": patient},
@@ -802,3 +806,319 @@ class TestFormState(MaternityCase):
 		with as_user(self.vusers["reception"]):
 			other = make_visit(patient=self.mother(), ignore_permissions=False)
 			self.assertFalse(adm.get_visit_state(other.name)["can_admit"])
+
+
+# ------------------------------------------------------------------------------------------ fix round (5M)
+
+
+class TestEddBasis(MaternityCase):
+	"""Finding 1: the EDD follows its basis. Naegele: EDD = LMP + 280 days."""
+
+	def admit_values(self, **values) -> str:
+		visit = self.maternity_visit()
+		return self.admit(patient=visit.patient, visit=visit.name, values=values)["name"]
+
+	def test_basis_lmp_edd_is_lmp_plus_280(self):
+		lmp = add_days(today(), -275)  # LMP + 280 = today + 5
+		# A typed EDD 10 days from LMP + 280 (within the 14-day tolerance) is replaced by LMP + 280.
+		name = self.admit_values(lmp=lmp, edd=add_days(lmp, 290))
+		doc = self.admission(name)
+		self.assertEqual(doc.edd_basis, "LMP")  # the default
+		self.assertEqual(getdate(doc.edd), getdate(add_days(today(), 5)))
+		self.assertEqual(doc.gestation_weeks, 39)  # 275 days = 39 weeks 2 days
+		self.assertEqual(adm.gestation_label(doc), "39+2 weeks")
+
+	def test_basis_lmp_refuses_a_far_edd(self):
+		lmp = add_days(today(), -275)
+		visit = self.maternity_visit()
+		# EDD = LMP + 300: 20 days from LMP + 280 (> 14): the basis must be set.
+		with self.assertRaisesRegex(adm.ImplausibleAdmissionValueError, "EDD basis"):
+			self.admit(
+				patient=visit.patient, visit=visit.name, values={"lmp": lmp, "edd": add_days(lmp, 300)}
+			)
+		# 15 days off is refused too; 14 days is the limit and is replaced by LMP + 280.
+		with self.assertRaises(adm.ImplausibleAdmissionValueError):
+			self.admit(
+				patient=visit.patient, visit=visit.name, values={"lmp": lmp, "edd": add_days(lmp, 295)}
+			)
+		name = self.admit(
+			patient=visit.patient, visit=visit.name, values={"lmp": lmp, "edd": add_days(lmp, 294)}
+		)["name"]
+		self.assertEqual(getdate(self.admission(name).edd), getdate(add_days(lmp, 280)))
+
+	def test_ultrasound_edd_kept_and_gestation_from_it(self):
+		lmp = add_days(today(), -275)  # by the LMP: 39+2
+		edd = add_days(today(), 20)  # ultrasound: 280 - 20 = 260 days = 37 weeks 1 day
+		name = self.admit_values(lmp=lmp, edd=edd, edd_basis="Ultrasound")
+		doc = self.admission(name)
+		self.assertEqual((doc.edd_basis, getdate(doc.edd)), ("Ultrasound", getdate(edd)))
+		self.assertEqual(doc.gestation_weeks, 37)
+		self.assertEqual(adm.gestation_label(doc), "37+1 weeks")  # the headline uses the same rule
+		with as_user(self.u("midwife")):
+			doc.run_method("onload")
+			self.assertEqual(doc.get_onload().gestation_label, "37+1 weeks")
+
+	def test_other_basis_needs_an_edd(self):
+		visit = self.maternity_visit()
+		for basis in ("Ultrasound", "Clinical estimate"):
+			with self.subTest(basis=basis), self.assertRaisesRegex(adm.ImplausibleAdmissionValueError, "EDD"):
+				self.admit(
+					patient=visit.patient,
+					visit=visit.name,
+					values={"lmp": add_days(today(), -200), "edd_basis": basis},
+				)
+		with self.assertRaises(adm.ImplausibleAdmissionValueError):
+			self.admit(patient=visit.patient, visit=visit.name, values={"edd_basis": "Guess"})
+
+	def test_lmp_change_recomputes_edd_and_far_typed_edd_refused_later(self):
+		name = self.admit_values(lmp=add_days(today(), -275))  # EDD today + 5
+		with as_user(self.u("midwife")):
+			doc = self.admission(name)
+			doc.lmp = add_days(today(), -270)  # the EDD left as it was: recomputed to today + 10
+			doc.save()
+			doc = self.admission(name)
+			self.assertEqual(getdate(doc.edd), getdate(add_days(today(), 10)))
+			self.assertEqual(doc.gestation_weeks, 38)  # 270 days = 38 weeks 4 days
+			doc.edd = add_days(today(), 30)  # 20 days from LMP + 280, basis LMP: refused
+			with self.assertRaisesRegex(adm.ImplausibleAdmissionValueError, "EDD basis"):
+				doc.save()
+			doc = self.admission(name)
+			doc.edd_basis = "Clinical estimate"
+			doc.edd = add_days(today(), 30)  # 280 - 30 = 250 days = 35 weeks 5 days
+			doc.save()
+			doc = self.admission(name)
+			self.assertEqual((getdate(doc.edd), doc.gestation_weeks), (getdate(add_days(today(), 30)), 35))
+			doc.edd_basis = "LMP"  # back to the LMP: EDD = LMP + 280 = today + 10 again
+			doc.save()
+			self.assertEqual(getdate(self.admission(name).edd), getdate(add_days(today(), 10)))
+
+
+class TestGravidaPara(MaternityCase):
+	"""Finding 10: gravida (this pregnancy included) required and >= 1; para P(+A) with P + A <= gravida - 1."""
+
+	def test_rules(self):
+		visit = self.maternity_visit()
+
+		def admit(values):
+			with as_user(self.u("midwife")):
+				return adm.admit(patient=visit.patient, visit=visit.name, values=values)
+
+		refused = (
+			{},  # no gravida
+			{"gravida": 0},
+			{"gravida": 1, "para": "1"},  # a first pregnancy has no earlier birth: 1 > 0
+			{"gravida": 3, "para": "2+1"},  # 3 earlier pregnancies > 3 - 1 = 2
+			{"gravida": 2, "para": "0+2"},  # 2 > 1
+		)
+		for values in refused:
+			with self.subTest(values=values), self.assertRaises(adm.ImplausibleAdmissionValueError):
+				admit(values)
+		name = admit({"gravida": 3, "para": "1+1"})["name"]  # 1 + 1 = 2 = 3 - 1
+		self.assertEqual(frappe.db.get_value(MAT, name, ["gravida", "para"]), (3, "1+1"))
+		with as_user(self.u("midwife")):
+			doc = self.admission(name)
+			doc.gravida = 0  # once entered, never cleared
+			with self.assertRaises(adm.ImplausibleAdmissionValueError):
+				doc.save()
+
+	def test_primigravida(self):
+		visit = self.maternity_visit()
+		name = self.admit(patient=visit.patient, visit=visit.name, values={"gravida": 1, "para": "0"})["name"]
+		self.assertEqual(frappe.db.get_value(MAT, name, ["gravida", "para"]), (1, "0"))
+
+
+class TestVisitRulesFixRound(MaternityCase):
+	"""Findings 8, 11, 13, 14."""
+
+	def test_routed_elsewhere_refused_and_explained(self):
+		visit = routed_visit(c.DEPT_OUTPATIENT, patient=self.mother())
+		with as_user(self.u("midwife")):
+			state = adm.get_visit_state(visit.name)
+		self.assertFalse(state["can_admit"])
+		self.assertIn("routed to", state["reason"])
+		with self.assertRaises(adm.MaternityAdmissionError):
+			self.admit(patient=visit.patient, visit=visit.name)
+		self.assertEqual(frappe.db.get_value(c.VISIT_DOCTYPE, visit.name, "status"), c.VISIT_STATUS_ROUTED)
+		# The fast path would use that visit too: not offered, refused.
+		with as_user(self.u("midwife")):
+			self.assertFalse(adm.get_patient_state(visit.patient)["can_admit"])
+		with self.assertRaises(adm.MaternityAdmissionError):
+			self.admit(patient=visit.patient)
+
+	def test_closed_by_close_visit_refused(self):
+		from onerc_healthcare.visit import engine
+
+		visit = make_visit(patient=self.mother())
+		engine.transition(
+			visit.name,
+			"close_visit",
+			system=True,
+			closure_reason="Other",
+			outcome=c.OUTCOME_ADMITTED,
+			comment="T- closed",
+		)
+		with as_user(self.u("midwife")):
+			state = adm.get_visit_state(visit.name)
+		self.assertFalse(state["can_admit"])
+		self.assertIn("Close Visit", state["reason"])
+		with self.assertRaises(adm.MaternityAdmissionError):
+			self.admit(patient=visit.patient, visit=visit.name)
+
+	def test_archived_admission_frees_its_visit(self):
+		visit = self.maternity_visit()
+		first = self.admit(patient=visit.patient, visit=visit.name)["name"]
+		with as_user(self.u("midwife")):
+			self.assertFalse(adm.get_visit_state(visit.name)["can_admit"])
+		with as_user(self.u("mic")):
+			doc = self.admission(first)
+			doc.krcs_archived = 1
+			doc.save()
+		log = len(frappe.get_doc(c.VISIT_DOCTYPE, visit.name).status_log)
+		with as_user(self.u("midwife")):
+			state = adm.get_visit_state(visit.name)
+		self.assertEqual((state["admission"], state["can_admit"]), (None, True))
+		second = self.admit(patient=visit.patient, visit=visit.name)["name"]
+		self.assertNotEqual(second, first)
+		self.assertEqual(frappe.db.get_value(MAT, second, "visit"), visit.name)
+		self.assertEqual(len(frappe.get_doc(c.VISIT_DOCTYPE, visit.name).status_log), log)  # linked as it is
+
+	def test_patient_state_by_open_visit(self):
+		cases = {
+			"no visit": (None, True),
+			"registered": ("registered", True),
+			"in triage": ("triage", True),
+			"routed maternity": ("maternity", True),
+			"routed outpatient": ("outpatient", False),
+			"in consultation": ("consultation", False),
+		}
+		from onerc_healthcare.visit import engine
+
+		for label, (kind, expected) in cases.items():
+			mother = self.mother()
+			if kind == "registered":
+				make_visit(patient=mother)
+			elif kind == "triage":
+				engine.transition(make_visit(patient=mother).name, "start_triage", system=True)
+			elif kind == "maternity":
+				routed_visit(c.DEPT_MATERNITY, patient=mother)
+			elif kind == "outpatient":
+				routed_visit(c.DEPT_OUTPATIENT, patient=mother)
+			elif kind == "consultation":
+				start(routed_visit(c.DEPT_OUTPATIENT, patient=mother).name, self.vusers["clinician"])
+			with self.subTest(case=label), as_user(self.u("midwife")):
+				state = adm.get_patient_state(mother)
+				self.assertEqual(state["can_admit"], expected)
+				self.assertEqual(state["reason"] is None, expected)
+		with as_user(self.u("his")):
+			state = adm.get_patient_state(self.mother())
+		self.assertEqual((state["can_admit"], bool(state["reason"])), (False, True))
+
+	def test_admit_defaults_follow_the_open_visit(self):
+		other = get_facility(1)
+		visit = make_visit(patient=self.mother(), facility=other)
+		with as_user(self.u("midwife")):
+			d = adm.get_admit_defaults(patient=visit.patient)
+		self.assertEqual(
+			(d["facility"], d["ward"], d["open_visit"]), (other, ward_for_facility(other), visit.name)
+		)
+		self.assertIn(visit.name, d["message"])
+		# The fast path with another facility is refused clearly; nothing is written.
+		with self.assertRaisesRegex(adm.MaternityAdmissionError, "open visit"):
+			self.admit(patient=visit.patient, values={"facility": self.facility})
+		self.assertEqual(
+			frappe.db.get_value(c.VISIT_DOCTYPE, visit.name, "status"), c.VISIT_STATUS_REGISTERED
+		)
+		out = self.admit(patient=visit.patient, values={"facility": other})
+		self.assertEqual(
+			(out["visit"], frappe.db.get_value(MAT, out["name"], "facility")), (visit.name, other)
+		)
+		# Without an open visit: the facility asked for (or the default).
+		with as_user(self.u("midwife")):
+			d = adm.get_admit_defaults(patient=self.mother(), facility=other)
+		self.assertEqual((d["facility"], d["open_visit"], d["message"]), (other, None, None))
+
+
+class TestMidwifeVitalSigns(MaternityCase):
+	"""Finding 5: a Midwife (without Triage Nurse) records ward observations only."""
+
+	def vs(self, patient: str, **kw):
+		return frappe.get_doc(
+			{
+				"doctype": "Vital Signs",
+				"patient": patient,
+				"signs_date": nowdate(),
+				"signs_time": nowtime(),
+				"temperature": "36.8",
+				"pulse": "80",
+				**kw,
+			}
+		)
+
+	def test_midwife_only_ward_observations(self):
+		from onerc_healthcare.tests.factories import make_user
+
+		visit = self.maternity_visit()
+		name = self.admit(patient=visit.patient, visit=visit.name)["name"]
+		triage_visit = make_visit(patient=self.mother())
+		with as_user(self.u("midwife")):
+			with self.assertRaises(frappe.PermissionError):
+				self.vs(triage_visit.patient, krcs_visit=triage_visit.name).insert()
+			with self.assertRaises(frappe.PermissionError):
+				self.vs(triage_visit.patient).insert()  # neither a visit nor an admission
+			doc = self.vs(visit.patient, **{c.VITAL_SIGNS_ADMISSION_FIELD: name}).insert()
+			doc.submit()
+			self.assertEqual(doc.docstatus, 1)
+		# Midwife and Triage Nurse: both kinds.
+		both = make_user("mat-midwife-triage", [c.ROLE_MIDWIFE, c.ROLE_TRIAGE])
+		with as_user(both):
+			doc = self.vs(triage_visit.patient, krcs_visit=triage_visit.name)
+			doc.insert()
+			self.assertTrue(doc.name)
+
+
+class TestMentalHealthEncounters(MaternityCase):
+	"""Finding 6: a Midwife (without CO / MHO / MIC / HIS) does not read Mental Health encounters."""
+
+	def test_midwife_does_not_read_mental_health_encounters(self):
+		from onerc_healthcare.tests.factories import make_user
+
+		mother = self.mother()
+		mh_visit = routed_visit(c.DEPT_MENTAL_HEALTH, patient=mother)
+		mh_enc = start(mh_visit.name, self.vusers["mho"])
+		op_mother = self.mother()
+		op_enc = start(routed_visit(c.DEPT_OUTPATIENT, patient=op_mother).name, self.vusers["clinician"])
+		self.assertEqual(
+			frappe.db.get_value(c.ENCOUNTER_DOCTYPE, mh_enc, "krcs_department"), c.DEPT_MENTAL_HEALTH
+		)
+
+		def reads(user: str, encounter: str) -> tuple[bool, bool]:
+			with as_user(user):
+				one = frappe.has_permission(c.ENCOUNTER_DOCTYPE, "read", doc=encounter)
+				listed = encounter in frappe.get_list(
+					c.ENCOUNTER_DOCTYPE, filters={"name": encounter}, pluck="name"
+				)
+			return bool(one), listed
+
+		self.assertEqual(reads(self.u("midwife"), mh_enc), (False, False))
+		self.assertEqual(reads(self.u("midwife"), op_enc), (True, True))
+		midwife_his = make_user("mat-midwife-his", [c.ROLE_MIDWIFE, c.ROLE_HIS])
+		for user in (self.vusers["clinician"], self.vusers["mho"], self.vusers["mic"], midwife_his):
+			with self.subTest(user=user):
+				self.assertEqual(reads(user, mh_enc), (True, True))
+
+
+class TestMergeWithOpenAdmission(MaternityCase):
+	"""Finding 9: no merge while the source patient has an open admission."""
+
+	def test_merge_refused_then_allowed_after_discharge(self):
+		from onerc_healthcare.registration.merge import merge_patients
+
+		visit = self.maternity_visit()
+		name = self.admit(patient=visit.patient, visit=visit.name)["name"]
+		target = self.mother()
+		with self.assertRaisesRegex(frappe.ValidationError, "open maternity admission"):
+			merge_patients(visit.patient, target, "T- duplicate")
+		self.assertFalse(frappe.db.get_value("Patient", visit.patient, "krcs_merged_into"))
+		self.act(name, "discharge", discharge_outcome=c.MATERNITY_DISCHARGED_HOME)
+		merge_patients(visit.patient, target, "T- duplicate")
+		self.assertEqual(frappe.db.get_value(MAT, name, "patient"), target)
