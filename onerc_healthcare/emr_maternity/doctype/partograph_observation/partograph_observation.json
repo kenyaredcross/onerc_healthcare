@@ -71,17 +71,18 @@
   {
    "columns": 1,
    "fieldname": "cervical_dilatation_cm",
-   "fieldtype": "Float",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Cervical Dilatation (cm)",
-   "precision": "1"
+   "description": "Blank = not recorded."
   },
   {
    "columns": 1,
    "fieldname": "descent_fifths",
-   "fieldtype": "Int",
+   "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Descent (fifths palpable)"
+   "label": "Descent (fifths palpable)",
+   "options": "\n5\n4\n3\n2\n1\n0"
   },
   {
    "fieldname": "column_break_contractions",
@@ -90,9 +91,10 @@
   {
    "columns": 1,
    "fieldname": "contractions_per_10_min",
-   "fieldtype": "Int",
+   "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Contractions per 10 min"
+   "label": "Contractions per 10 min",
+   "description": "Blank = not recorded."
   },
   {
    "fieldname": "contraction_duration",
@@ -102,13 +104,15 @@
   },
   {
    "fieldname": "oxytocin_u_per_l",
-   "fieldtype": "Float",
-   "label": "Oxytocin (U/L)"
+   "fieldtype": "Data",
+   "label": "Oxytocin (U/L)",
+   "description": "Blank = not recorded."
   },
   {
    "fieldname": "oxytocin_drops_per_min",
-   "fieldtype": "Int",
-   "label": "Oxytocin (drops/min)"
+   "fieldtype": "Data",
+   "label": "Oxytocin (drops/min)",
+   "description": "Blank = not recorded."
   },
   {
    "fieldname": "drugs_iv_fluids",
@@ -140,7 +144,7 @@
   {
    "fieldname": "temperature",
    "fieldtype": "Float",
-   "label": "Temperature (°C)",
+   "label": "Temperature (\u00b0C)",
    "precision": "1"
   },
   {
@@ -166,8 +170,9 @@
   },
   {
    "fieldname": "urine_volume_ml",
-   "fieldtype": "Int",
-   "label": "Urine Volume (mL)"
+   "fieldtype": "Data",
+   "label": "Urine Volume (mL)",
+   "description": "Blank = not recorded."
   },
   {
    "description": "A correction is a new row with a note; saved rows are never edited.",
@@ -179,7 +184,7 @@
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-11-16 12:00:00.000000",
+ "modified": "2026-11-16 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Maternity",
  "name": "Partograph Observation",
