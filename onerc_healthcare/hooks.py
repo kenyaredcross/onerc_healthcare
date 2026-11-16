@@ -37,6 +37,10 @@ extend_doctype_class = {
 }
 
 doc_events = {
+	# Phase 5M: beds under a Maternity Ward get type Bed; a leaf with no type gets a clear message (Marley bug)
+	"Healthcare Service Unit": {
+		"before_validate": "onerc_healthcare.maternity.beds.service_unit_before_validate",
+	},
 	"Patient": {
 		# D57: Marley's emergency patients (ER-2026-...) get the site prefix (KLB-ER-2026-...)
 		"before_insert": "onerc_healthcare.naming.prefix_emergency_patient",
