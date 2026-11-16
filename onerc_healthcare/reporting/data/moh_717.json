@@ -974,11 +974,13 @@
    "label": "Admissions",
    "section": "J. Inpatient services",
    "sort_order": 62,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Maternity Admission",
+   "rule": {
+    "measure": "admissions"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -986,11 +988,13 @@
    "label": "Discharges",
    "section": "J. Inpatient services",
    "sort_order": 63,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Maternity Admission",
+   "rule": {
+    "measure": "discharges"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -998,11 +1002,16 @@
    "label": "Inpatient deaths",
    "section": "J. Inpatient services",
    "sort_order": 64,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Maternity Admission",
+   "rule": {
+    "measure": "discharges",
+    "outcomes": [
+     "Died"
+    ]
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1010,11 +1019,13 @@
    "label": "Inpatient bed days",
    "section": "J. Inpatient services",
    "sort_order": 65,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Maternity Admission",
+   "rule": {
+    "measure": "bed_days"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1026,7 +1037,7 @@
    "rule": null,
    "disaggregation": "None",
    "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "gap_note": "Gap — Wave 2 / OI-5: average length of stay is a ratio and MOH report cells hold whole numbers; compute it as (total stay days of the month's discharges: Maternity Admission source, measure stay_days) / J02",
    "dhis2_uid": null
   },
   {
@@ -1038,7 +1049,7 @@
    "rule": null,
    "disaggregation": "None",
    "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: inpatient care is not in the EMR yet (OI-18)",
+   "gap_note": "Gap — Wave 2 / OI-5: bed occupancy is a percentage and no maternity beds are configured yet (beds are added under the Maternity Ward); J04 bed days is its numerator",
    "dhis2_uid": null
   },
   {
@@ -1046,11 +1057,16 @@
    "label": "Normal deliveries",
    "section": "K. Maternity",
    "sort_order": 68,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Delivery",
+   "rule": {
+    "delivery_modes": [
+     "Spontaneous vaginal delivery"
+    ],
+    "born_before_arrival": "exclude"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1058,11 +1074,16 @@
    "label": "Caesarean sections",
    "section": "K. Maternity",
    "sort_order": 69,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Delivery",
+   "rule": {
+    "delivery_modes": [
+     "Caesarean section"
+    ],
+    "born_before_arrival": "exclude"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1070,11 +1091,16 @@
    "label": "Assisted vaginal deliveries",
    "section": "K. Maternity",
    "sort_order": 70,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Delivery",
+   "rule": {
+    "delivery_modes": [
+     "Assisted vaginal delivery"
+    ],
+    "born_before_arrival": "exclude"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1082,11 +1108,13 @@
    "label": "Born before arrival",
    "section": "K. Maternity",
    "sort_order": 71,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Delivery",
+   "rule": {
+    "born_before_arrival": "only"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1094,11 +1122,16 @@
    "label": "Live births",
    "section": "K. Maternity",
    "sort_order": 72,
-   "source_type": null,
-   "rule": null,
-   "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "source_type": "Delivery",
+   "rule": {
+    "measure": "babies",
+    "baby_outcomes": [
+     "Live birth"
+    ]
+   },
+   "disaggregation": "Sex",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1106,11 +1139,16 @@
    "label": "Fresh stillbirths",
    "section": "K. Maternity",
    "sort_order": 73,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Delivery",
+   "rule": {
+    "measure": "babies",
+    "baby_outcomes": [
+     "Fresh stillbirth"
+    ]
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1118,11 +1156,16 @@
    "label": "Macerated stillbirths",
    "section": "K. Maternity",
    "sort_order": 74,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Delivery",
+   "rule": {
+    "measure": "babies",
+    "baby_outcomes": [
+     "Macerated stillbirth"
+    ]
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -1130,11 +1173,16 @@
    "label": "Maternal deaths",
    "section": "K. Maternity",
    "sort_order": 75,
-   "source_type": null,
-   "rule": null,
+   "source_type": "Maternity Admission",
+   "rule": {
+    "measure": "discharges",
+    "outcomes": [
+     "Died"
+    ]
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: maternity is not in the EMR yet (Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {

@@ -43,7 +43,9 @@
   "maternal_notes",
   "babies_section",
   "babies",
-  "remarks"
+  "remarks",
+  "addendum_section",
+  "addendum"
  ],
  "fields": [
   {
@@ -259,12 +261,28 @@
    "fieldname": "remarks",
    "fieldtype": "Small Text",
    "label": "Remarks"
+  },
+  {
+   "collapsible": 0,
+   "depends_on": "eval:doc.docstatus==1 || doc.addendum",
+   "fieldname": "addendum_section",
+   "fieldtype": "Section Break",
+   "label": "Corrections"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "A submitted Delivery Record is never cancelled or edited. Corrections are appended here with Add Addendum (dated and signed).",
+   "fieldname": "addendum",
+   "fieldtype": "Long Text",
+   "label": "Addendum",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-16 12:00:00.000000",
+ "modified": "2026-11-16 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Maternity",
  "name": "Delivery Record",

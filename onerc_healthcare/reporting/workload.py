@@ -119,6 +119,10 @@ have no patient and no visit, so the visit filters cannot apply: the facility fi
   at least male + female). Sex disaggregation is allowed for participants only: Male and Female from the
   split, "Other" for the remainder. Age disaggregation is refused (no ages are recorded).
 
+**Delivery** and **Maternity Admission** (Phase 5M, M3): evaluated in `reporting.maternity`, whose docstring
+holds their rule formats; `evaluate_delivery` and `evaluate_maternity_admission` below are thin wrappers so
+the definition form checks their rules like every workload source.
+
 R3's DocTypes (Service Delivered, Visit Service Type, Community Activity Record / Type) are guarded with
 ``frappe.db.table_exists``: before they exist those evaluators return nothing and add one "Source not
 available" exception.
@@ -133,10 +137,13 @@ import frappe
 from onerc_healthcare.clinical import referral
 from onerc_healthcare.constants import (
 	ATTENDANCE_TYPES,
+	BABY_OUTCOMES,
 	COMMUNITY_ACTIVITY_DOCTYPE,
 	COMMUNITY_ACTIVITY_TYPE_DOCTYPE,
+	DELIVERY_MODES,
 	DISPENSING_DOCTYPE,
 	ENCOUNTER_DOCTYPE,
+	MATERNITY_DISCHARGE_OUTCOMES,
 	REFERRAL_DOCTYPE,
 	SERVICE_DELIVERED_DOCTYPE,
 	SERVICE_TYPE_DOCTYPE,
@@ -165,6 +172,8 @@ SOURCE_REFERRALS = "Referrals"
 SOURCE_OUTCOME = "Visit Outcome"
 SOURCE_SERVICES = "Service Delivered"
 SOURCE_COMMUNITY = "Community Activity"
+SOURCE_DELIVERY = "Delivery"  # Phase 5M (M3): reporting/maternity.py
+SOURCE_MATERNITY_ADMISSION = "Maternity Admission"  # Phase 5M (M3): reporting/maternity.py
 
 SEX_MALE = "Male"
 SEX_FEMALE = "Female"
@@ -263,8 +272,22 @@ RULE_SCHEMAS: dict[str, dict] = {
 		"moh_lines": _names(),
 		"measure": _choice("sessions", "participants"),
 	},
+	SOURCE_DELIVERY: {
+		"measure": _choice("deliveries", "babies"),
+		"delivery_modes": _names(*DELIVERY_MODES),
+		"born_before_arrival": _choice("include", "exclude", "only"),
+		"baby_outcomes": _names(*BABY_OUTCOMES),
+	},
+	SOURCE_MATERNITY_ADMISSION: {
+		"measure": _choice("admissions", "discharges", "bed_days", "stay_days"),
+		"outcomes": _names(*MATERNITY_DISCHARGE_OUTCOMES),
+	},
 }
-REQUIRED_KEYS = {SOURCE_REFERRALS: ("direction",), SOURCE_OUTCOME: ("outcomes",)}
+REQUIRED_KEYS = {
+	SOURCE_REFERRALS: ("direction",),
+	SOURCE_OUTCOME: ("outcomes",),
+	SOURCE_MATERNITY_ADMISSION: ("measure",),
+}
 
 
 def validate_rule(source_type: str, rule, disaggregation: str | None = None) -> list[str]:
@@ -299,6 +322,10 @@ def validate_rule(source_type: str, rule, disaggregation: str | None = None) -> 
 			errors.append("community activities record no ages: use no age disaggregation")
 		if disaggregation == DISAGGREGATION_SEX and rule.get("measure", "sessions") != "participants":
 			errors.append("only participants can be split by sex")
+	if source_type in (SOURCE_DELIVERY, SOURCE_MATERNITY_ADMISSION):
+		from onerc_healthcare.reporting import maternity
+
+		errors += maternity.rule_errors(source_type, rule, disaggregation)
 	return errors
 
 
@@ -797,6 +824,20 @@ def evaluate_community(ctx: SourceContext, elements: list[ElementSpec]) -> dict[
 				key = cell_key(element, None, sex)
 				out[key] = out.get(key, 0) + n
 	return out
+
+
+def evaluate_delivery(ctx: SourceContext, elements: list[ElementSpec]) -> dict[CellKey, int]:
+	"""Phase 5M (M3): `reporting.maternity.evaluate_delivery` (MOH 717 K01-K07)."""
+	from onerc_healthcare.reporting import maternity
+
+	return maternity.evaluate_delivery(ctx, elements)
+
+
+def evaluate_maternity_admission(ctx: SourceContext, elements: list[ElementSpec]) -> dict[CellKey, int]:
+	"""Phase 5M (M3): `reporting.maternity.evaluate_maternity_admission` (MOH 717 J01-J04, K08)."""
+	from onerc_healthcare.reporting import maternity
+
+	return maternity.evaluate_maternity_admission(ctx, elements)
 
 
 def install() -> None:
