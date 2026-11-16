@@ -342,6 +342,8 @@ WORKFLOW_FIELDS = (
 	"triage_vital_signs",
 	"routed_without_vitals",
 	"encounter",
+	"practitioner",  # the consultation's clinician (set with the encounter; shown in the visit list)
+	"practitioner_name",
 	"referred_from",
 	"closure_reason",
 	# Phase 3: outcome (closing actions) and attendance (registration rule; corrections via annotate)
@@ -877,11 +879,43 @@ def link_encounter(visit: str, encounter: str):
 			),
 			IllegalVisitTransitionError,
 		)
-	if doc.encounter == encounter:
+	practitioner, practitioner_name = frappe.db.get_value(
+		ENCOUNTER_DOCTYPE, encounter, ["practitioner", "practitioner_name"]
+	)
+	if (doc.encounter, doc.get("practitioner"), doc.get("practitioner_name")) == (
+		encounter,
+		practitioner,
+		practitioner_name,
+	):
 		return doc
 	doc.encounter = encounter
+	doc.practitioner = practitioner
+	doc.practitioner_name = practitioner_name
 	_save_from_workflow(doc)
 	return doc
+
+
+def backfill_practitioners(skip: list[str] | tuple[str, ...] = ()) -> int:
+	"""Fill the clinician of visits whose encounter was linked before the field existed. Direct writes,
+	`modified` unchanged, no status-log rows; visits in `skip` are left alone. Returns the count."""
+	rows = frappe.db.sql(
+		"""select v.name, e.practitioner, e.practitioner_name
+		from `tabPatient Visit` v join `tabPatient Encounter` e on e.name = v.encounter
+		where ifnull(v.practitioner, '') = '' and ifnull(e.practitioner, '') != ''""",
+		as_dict=True,
+	)
+	count = 0
+	for r in rows:
+		if r.name in skip:
+			continue
+		frappe.db.set_value(
+			VISIT_DOCTYPE,
+			r.name,
+			{"practitioner": r.practitioner, "practitioner_name": r.practitioner_name},
+			update_modified=False,
+		)
+		count += 1
+	return count
 
 
 @frappe.whitelist()

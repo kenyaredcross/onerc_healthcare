@@ -31,6 +31,8 @@
   "triage_vital_signs",
   "routed_without_vitals",
   "encounter",
+  "practitioner",
+  "practitioner_name",
   "referred_from",
   "closure_reason",
   "attendance_section",
@@ -246,6 +248,24 @@
    "search_index": 1
   },
   {
+   "description": "The clinician of the consultation; set when the consultation starts.",
+   "fieldname": "practitioner",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Clinician",
+   "no_copy": 1,
+   "options": "Healthcare Practitioner",
+   "read_only": 1
+  },
+  {
+   "fieldname": "practitioner_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Clinician Name",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
    "description": "Internal referral that created this visit",
    "fieldname": "referred_from",
    "fieldtype": "Link",
@@ -429,7 +449,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-14 12:00:00.000000",
+ "modified": "2026-11-16 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Visit",
  "name": "Patient Visit",
