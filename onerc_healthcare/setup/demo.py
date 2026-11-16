@@ -29,6 +29,7 @@ from onerc_healthcare.constants import (
 	ROLE_LAB,
 	ROLE_MHO,
 	ROLE_MIC,
+	ROLE_OUTREACH,
 	ROLE_PHARMACIST,
 	ROLE_RECEPTIONIST,
 	ROLE_SYSADMIN,
@@ -53,6 +54,8 @@ STAFF = (
 	("headops", "John", "Mutua", ROLE_HEAD_OPS),
 	("his", "Grace", "Wambui", ROLE_HIS),
 	("sysadmin", "Samuel", "Kiprono", ROLE_SYSADMIN),
+	# Phase 4: signs in to the offline app at /outreach only (no desk access, D58)
+	("outreach", "Akai", "Lotukoi", ROLE_OUTREACH),
 )
 
 # Patients: fictional names typical of the Kalobeyei population (South Sudanese, Congolese, Burundian
@@ -259,6 +262,29 @@ COMPLETED = (
 )
 HIS_DESIGNATION = "HIS Officer"
 
+# Phase 4: one catchment area with three fictional residents and a planned outreach session, so the offline
+# app at /outreach has a package to download.
+OUTREACH_RESIDENCE = "Village 3 (demo)"
+OUTREACH_AREA = "Village 3 catchment (demo)"
+OUTREACH_SESSION_TITLE = "Village 3 outreach (demo)"
+OUTREACH_PATIENTS = (
+	{
+		"first": "Ayen",
+		"last": "Kuol",
+		"sex": "Female",
+		"age": 31,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-25D00311")],
+	},
+	{"first": "Lokol", "last": "Ewoi", "sex": "Male", "age": 58, "ids": [(IDENTIFIER_UNHCR, "KBY-25D00312")]},
+	{
+		"first": "Furaha",
+		"last": "Bahati",
+		"sex": "Female",
+		"age": 4,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-25D00313")],
+	},
+)
+
 
 def seed_demo(site: str) -> dict:
 	"""Create the demo staff and patients on `site` (must equal the current site, as a safety check)."""
@@ -294,12 +320,14 @@ def seed_demo(site: str) -> dict:
 		)
 	_seed_community_activity(users, facilities[0])
 	frappe.db.set_value("User", users["his"], "krcs_designation", HIS_DESIGNATION)
+	outreach = _seed_outreach(users, facilities[0])
 	frappe.set_user("Administrator")
 	frappe.db.commit()
 	return {
 		"password": DEMO_PASSWORD,
 		"users": {frappe.db.get_value("User", u, "full_name"): u for u in users.values()},
 		"patients": created,
+		"outreach_session": outreach,
 	}
 
 
@@ -469,3 +497,73 @@ def _seed_community_activity(users: dict, facility: str) -> None:
 		}
 	).insert().submit()
 	frappe.set_user("Administrator")
+
+
+def _seed_outreach(users: dict, facility: str) -> str:
+	"""A residence, a catchment area over it with three residents, and a Planned outreach session for the demo
+	outreach user (HIS Officer plans it). Re-running reuses them."""
+	from onerc_healthcare.registration.residence import (
+		ensure_residence_root,
+		get_residence_levels,
+		get_residence_root_name,
+	)
+
+	frappe.set_user(users["his"])
+	ensure_residence_root()
+	residence = frappe.db.get_value("Residence Location", {"location_name": OUTREACH_RESIDENCE}, "name")
+	if not residence:
+		residence = (
+			frappe.get_doc(
+				{
+					"doctype": "Residence Location",
+					"location_name": OUTREACH_RESIDENCE,
+					"parent_residence_location": get_residence_root_name(),
+					"level": get_residence_levels()[0],
+					"is_group": 0,
+				}
+			)
+			.insert()
+			.name
+		)
+	if not frappe.db.exists("Catchment Area", OUTREACH_AREA):
+		frappe.get_doc(
+			{
+				"doctype": "Catchment Area",
+				"area_name": OUTREACH_AREA,
+				"facility": facility,
+				"locations": [{"residence_location": residence}],
+				"description": "Demo data (fictional)",
+			}
+		).insert()
+	frappe.set_user("Administrator")
+	for spec in OUTREACH_PATIENTS:
+		patient = _ensure_patient({**spec, "facility": 0}, users["reception"], facility)
+		if not frappe.db.get_value("Patient", patient, "krcs_residence"):
+			frappe.set_user(users["reception"])
+			doc = frappe.get_doc("Patient", patient)
+			doc.krcs_residence = residence
+			doc.save()
+			frappe.set_user("Administrator")
+	session = frappe.db.get_value("Outreach Session", {"title": OUTREACH_SESSION_TITLE}, "name")
+	if session:
+		return session
+	frappe.set_user(users["his"])
+	session = (
+		frappe.get_doc(
+			{
+				"doctype": "Outreach Session",
+				"title": OUTREACH_SESSION_TITLE,
+				"facility": facility,
+				"catchment_area": OUTREACH_AREA,
+				"start_date": nowdate(),
+				"end_date": add_days(nowdate(), 6),
+				"team": [{"user": users["outreach"], "is_lead": 1}],
+				"departments": [{"department": "Outpatient"}, {"department": "Maternal and Child Health"}],
+				"notes": "Demo data (fictional)",
+			}
+		)
+		.insert()
+		.name
+	)
+	frappe.set_user("Administrator")
+	return session

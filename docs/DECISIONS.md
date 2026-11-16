@@ -375,3 +375,34 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
   - **Data key:** the device's data key is escrowed on the grant, so a forgotten PIN (5 wrong attempts) never loses records; an online sign-in restores the key.
   - **Lost device:** revoking a device ends its sync.
 - **Frontend:** React 18 + TypeScript + Vite PWA at `/outreach` (the user's choice, replacing the earlier Vue + frappe-ui note). It is built by `bench build` from the app's root `package.json`.
+
+**D59. Phase 4 review, audit and fix round, 2026-11-14 to 2026-11-16.**
+- **Closed sessions still deliver their records (NFR-11).**
+  - **What Closed means:** no new device and no new package.
+  - **What still works:** a device's grant keeps working for `sync.push` and `sync.status` until it expires, and `enrol` can renew an existing grant for the same user and device.
+  - **When a session can be closed:** not while it has Failed, Held or Conflict records.
+  - **When it can be cancelled:** only before any record has been received.
+- **Failed records:**
+  - the device can correct a failed record and resend it under the same client UUID;
+  - Accepted, Held, Conflict and Discarded records are never re-applied.
+- **Field dispensing:**
+  - the app limits the quantity to the prescribed course, worked out as doses per day × days (from the new `dosage_units` and `period_days` in the reference data);
+  - a field dispense is final, so the facility pharmacy does not dispense the line again.
+- **Demographic conflicts are per field.** A changed field conflicts only when the facility changed it after the package was downloaded (`base_values`) and the value differs from the device's. Accepted updates return the patient's new `modified`, so edits made on the same device chain.
+- **Scope.** A session may update, or record visits for, only patients in its catchment area or patients it registered or linked.
+- **Robustness:**
+  - a deadlock affects only the record involved;
+  - held records are replayed until no more can be applied, and swept on each push or status call;
+  - losing the Outreach role ends sync;
+  - a disabled author stays the practitioner when the HIS Officer decides later (DEFECT-P4-4).
+- **Accepted risk (review M5).** Someone with a copy of a lost tablet's storage could try every 6-digit PIN offline. The app's PIN protects the app only. The controls are:
+  - the tablet's own storage encryption and screen lock (a deployment requirement);
+  - the package being limited to one catchment area;
+  - the 7-day offline session;
+  - prompt revocation (`docs/outreach-lost-device.md`).
+- **The cached `/outreach` page** carries no CSRF token or user.
+- **DEFECT-RX-1 (found by the Phase 4 smoke test).** Seeded medications had no dose interval, so Marley's prescribed quantity was one day's dose and a full course could not be dispensed at the desk. Every medication now gets a daily interval: through the seed, and through the patch `medication_default_interval`.
+- **Demo data.** `setup/demo.py` adds:
+  - an outreach user, Akai Lotukoi;
+  - the catchment area "Village 3 (demo)" with three fictional residents;
+  - a planned session (KLB-OUT-2026-00001 on kalobeyei).
