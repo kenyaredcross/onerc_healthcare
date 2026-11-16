@@ -248,3 +248,28 @@ class TestTriageInOutpatient(EMRTestCase):
 		self.assertIn('"Registered"', by_label["Waiting for Triage"].filters)
 		# Patient Visit still opens under Healthcare (the filtered links do not claim it).
 		self.assertEqual(entity_map().get("Patient Visit"), "Healthcare")
+
+
+class TestConsultationInOutpatient(EMRTestCase):
+	"""Outpatient sidebar: a Consultation dropdown after Triage, with the routed / in consultation / awaiting
+	laboratory visit lists."""
+
+	def test_consultation_links_follow_triage(self):
+		rows = frappe.get_all(
+			"Sidebar Item",
+			filters={"parent": "Outpatient", "parenttype": "Sidebar"},
+			fields=["type", "label", "link_to", "filters", "child", "keep_closed", "is_default_module"],
+			order_by="idx asc",
+		)
+		labels = [r.label for r in rows]
+		self.assertEqual(labels.index("Consultation"), labels.index("In Triage") + 1)
+		expected = {
+			"Waiting for Consultation": "Routed to Department",
+			"In Consultation": "In Consultation",
+			"Awaiting Laboratory": "Awaiting Laboratory",
+		}
+		for label, status in expected.items():
+			row = rows[labels.index(label)]
+			self.assertEqual((row.link_to, row.child, row.is_default_module), ("Patient Visit", 1, 0), label)
+			self.assertIn(f'"{status}"', row.filters, label)
+		self.assertEqual(rows[labels.index("Consultation")].keep_closed, 0)
