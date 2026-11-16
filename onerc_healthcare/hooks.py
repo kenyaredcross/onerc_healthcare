@@ -44,7 +44,11 @@ doc_events = {
 		"after_insert": "onerc_healthcare.registration.events.patient_after_insert",
 	},
 	"Vital Signs": {
-		"validate": "onerc_healthcare.visit.events.vital_signs_validate",
+		"validate": [
+			"onerc_healthcare.visit.events.vital_signs_validate",
+			# Phase 5M: ward observations linked to a Maternity Admission
+			"onerc_healthcare.maternity.vital_signs.validate_ward_observation",
+		],
 		"on_submit": "onerc_healthcare.visit.events.vital_signs_on_submit",
 	},
 	"User": {
@@ -119,7 +123,10 @@ doctype_js = {
 		"privacy/patient.js",
 		"outreach/patient.js",
 		"visit/patient.js",  # Start Visit from the patient; last step of registration
+		"maternity/admit_dialog.js",  # Phase 5M: must load before maternity/patient.js
+		"maternity/patient.js",  # Admit in Labour (fast path)
 	],
+	"Patient Visit": ["maternity/admit_dialog.js", "maternity/patient_visit.js"],  # Admit to Maternity
 	"Vital Signs": "visit/vital_signs.js",
 	"Patient Encounter": "clinical/patient_encounter.js",
 	"Service Request": "lab/service_request.js",

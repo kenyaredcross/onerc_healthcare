@@ -135,6 +135,7 @@ class TestOutreachArea(EMRTestCase):
 # area -> (dock neighbour it follows, pages that open under it)
 OWN_AREAS = {
 	"Pharmacy": ("Diagnostics", ("Dispensing Record", "Medication Request")),
+	"Maternity": ("Outpatient", ("Maternity Admission", "Partograph", "Delivery Record")),
 	"MOH Reporting": (
 		"Outreach",
 		("MOH Report Run", "MOH Report", "MOH Disease Category", "MOH Diagnosis Mapping", "ICD-11 Block"),
@@ -273,3 +274,16 @@ class TestConsultationInOutpatient(EMRTestCase):
 			self.assertEqual((row.link_to, row.child, row.is_default_module), ("Patient Visit", 1, 0), label)
 			self.assertIn(f'"{status}"', row.filters, label)
 		self.assertEqual(rows[labels.index("Consultation")].keep_closed, 0)
+
+
+class TestInpatientHidden(EMRTestCase):
+	"""Marley's Inpatient area is hidden from the dock: Inpatient Record saves need selling price lists (D18) and
+	carry billing (C-5); the labour ward uses Maternity Admission."""
+
+	def test_inpatient_dock_row_hidden(self):
+		self.assertEqual(
+			frappe.db.get_value(
+				"Dock Item", {"parent": desk_sidebar.MARLEY_DOCK, "link_to": "Inpatient"}, "hidden"
+			),
+			1,
+		)

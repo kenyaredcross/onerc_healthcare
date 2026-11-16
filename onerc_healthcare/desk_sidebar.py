@@ -294,6 +294,7 @@ MARLEY_DOCK = "healthcare"
 DOCK_ROWS = (
 	# (title, sidebar it opens, icon, insert after this sidebar)
 	("Pharmacy", "Pharmacy", "pill", "Diagnostics"),
+	("Maternity", "Maternity", "baby", "Outpatient"),  # Phase 5M: labour ward
 	("Outreach", "Outreach", "route", "Rehabilitation"),
 	("MOH Reporting", "MOH Reporting", "file-chart-column", "Outreach"),
 )

@@ -29,6 +29,7 @@ from onerc_healthcare.constants import (
 	ROLE_LAB,
 	ROLE_MHO,
 	ROLE_MIC,
+	ROLE_MIDWIFE,
 	ROLE_OUTREACH,
 	ROLE_PHARMACIST,
 	ROLE_RECEPTIONIST,
@@ -56,6 +57,8 @@ STAFF = (
 	("sysadmin", "Samuel", "Kiprono", ROLE_SYSADMIN),
 	# Phase 4: signs in to the offline app at /outreach only (no desk access, D58)
 	("outreach", "Akai", "Lotukoi", ROLE_OUTREACH),
+	# Phase 5M: labour ward
+	("midwife", "Naliaka", "Wekesa", ROLE_MIDWIFE),
 )
 
 # Patients: fictional names typical of the Kalobeyei population (South Sudanese, Congolese, Burundian
@@ -321,6 +324,7 @@ def seed_demo(site: str) -> dict:
 	_seed_community_activity(users, facilities[0])
 	frappe.db.set_value("User", users["his"], "krcs_designation", HIS_DESIGNATION)
 	outreach = _seed_outreach(users, facilities[0])
+	maternity = _seed_maternity(users, facilities[0])
 	frappe.set_user("Administrator")
 	frappe.db.commit()
 	return {
@@ -328,6 +332,7 @@ def seed_demo(site: str) -> dict:
 		"users": {frappe.db.get_value("User", u, "full_name"): u for u in users.values()},
 		"patients": created,
 		"outreach_session": outreach,
+		"maternity": maternity,
 	}
 
 
@@ -567,3 +572,108 @@ def _seed_outreach(users: dict, facility: str) -> str:
 	)
 	frappe.set_user("Administrator")
 	return session
+
+
+# Phase 5M: two fictional mothers on the labour ward: one in labour with four hourly partograph rows, one delivered
+# (one live baby, registered as a patient) and waiting for discharge.
+MATERNITY_MOTHERS = (
+	{
+		"first": "Nyabol",
+		"last": "Garang",
+		"sex": "Female",
+		"age": 24,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-25M00401")],
+		"stage": "labour",
+		"hours_ago": 4,
+		"lmp_days": 275,
+		"gravida": 2,
+		"para": "1",
+	},
+	{
+		"first": "Mapendo",
+		"last": "Furaha",
+		"sex": "Female",
+		"age": 29,
+		"ids": [(IDENTIFIER_UNHCR, "KBY-25M00402")],
+		"stage": "delivered",
+		"hours_ago": 9,
+		"lmp_days": 280,
+		"gravida": 3,
+		"para": "2",
+	},
+)
+# (hours after admission, dilatation cm, descent fifths, FHR, contractions per 10 min)
+PARTOGRAPH_ROWS = (
+	(0, "4", "4", 138, "2"),
+	(1, "5", "4", 142, "3"),
+	(2, "6", "3", 136, "3"),
+	(3, "7", "3", 140, "4"),
+)
+
+
+def _seed_maternity(users: dict, facility: str) -> list:
+	"""Re-runnable: a mother who already has an admission is left as she is."""
+	from frappe.utils import add_to_date, now_datetime
+
+	from onerc_healthcare.maternity import admission as adm
+	from onerc_healthcare.maternity import partograph as ptg
+
+	out = []
+	for spec in MATERNITY_MOTHERS:
+		patient = _ensure_patient({**spec, "facility": 0}, users["reception"], facility)
+		existing = frappe.db.get_value("Maternity Admission", {"patient": patient}, "name")
+		if existing:
+			out.append(existing)
+			continue
+		frappe.set_user(users["midwife"])
+		lmp = add_days(nowdate(), -spec["lmp_days"])
+		res = adm.admit(patient, values={"lmp": lmp, "gravida": spec["gravida"], "para": spec["para"]})
+		admission = res["name"]
+		start = add_to_date(now_datetime(), hours=-spec["hours_ago"])
+		# Demo only: move the fictional admission (and its visit) back so the hourly rows fit after it.
+		frappe.db.set_value("Maternity Admission", admission, "admitted_at", start, update_modified=False)
+		adm.apply_action(admission, "start_labour")
+		partograph = ptg.get_or_create(admission)
+		for hours, dil, descent, fhr, contractions in PARTOGRAPH_ROWS:
+			ptg.add_observation(
+				partograph,
+				{
+					"observed_at": str(add_to_date(start, hours=hours, minutes=10)),
+					"cervical_dilatation_cm": dil,
+					"descent_fifths": descent,
+					"foetal_heart_rate": fhr,
+					"contractions_per_10_min": contractions,
+					"contraction_duration": "20-40 s",
+					"liquor": "C",
+					"pulse": 88,
+					"bp_systolic": 118,
+					"bp_diastolic": 76,
+				},
+			)
+		if spec["stage"] == "delivered":
+			delivery = frappe.get_doc(
+				{
+					"doctype": "Delivery Record",
+					"admission": admission,
+					"delivered_at": add_to_date(start, hours=5),
+					"delivery_mode": "Spontaneous vaginal delivery",
+					"third_stage_management": "Active (AMTSL)",
+					"blood_loss_ml": 250,
+					"babies": [
+						{
+							"outcome": "Live birth",
+							"sex": "Female",
+							"weight_kg": 3.1,
+							"apgar_1": 8,
+							"apgar_5": 9,
+							"vitamin_k": 1,
+						}
+					],
+				}
+			)
+			delivery.insert()
+			delivery.submit()
+		frappe.set_user("Administrator")
+		out.append(admission)
+	frappe.set_user("Administrator")
+	return out
