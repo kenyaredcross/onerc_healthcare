@@ -95,9 +95,9 @@
    "fieldtype": "Link",
    "label": "Encounter",
    "options": "Patient Encounter",
-   "fetch_from": "medication_request.order_group",
    "search_index": 1,
-   "read_only": 1
+   "read_only": 1,
+   "description": "Set by the server from the prescription when the record is saved (the Pharmacist cannot open consultations)."
   },
   {
    "fieldname": "dispensed_by",
@@ -265,7 +265,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-13 16:00:00.000000",
+ "modified": "2026-11-16 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Pharmacy",
  "name": "Dispensing Record",

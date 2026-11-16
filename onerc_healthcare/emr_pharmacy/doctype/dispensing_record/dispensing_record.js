@@ -77,7 +77,8 @@ frappe.ui.form.on("Dispensing Record", {
 					[
 						"patient",
 						"patient_name",
-						"encounter",
+						// not "encounter": the Pharmacist cannot read consultations, so the desk would refuse
+						// the link; the server sets it on save.
 						"prescribed_medication",
 						"prescribed_item",
 						"prescribed_dosage",
