@@ -415,7 +415,8 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
   - **Admission:** normally reception → triage → routed to **Maternity** → the Midwife admits. A **fast path** ("Admit in Labour" on the Patient form) opens the visit behind the scenes. A visit a clinician closed with outcome Admitted is linked; an internal referral to Maternity is received.
 - **Marley's Inpatient Record is not used.**
   - Why: every save looks up selling prices, which are disabled (D18), so it crashes; its admit dialog needs a price list; and it carries bed-rent billables and stock settlement (C-5).
-  - Instead: our **Maternity Admission** (IP number `KLB-MAT-YYYY-#####`) is the admission record, and Marley's Inpatient area is hidden from the dock.
+  - Instead: our **Maternity Admission** (IP number `KLB-MAT-YYYY-#####`) is the admission record.
+  - **Where it sits (user, 2026-11-16):** inside Marley's **Inpatient** area, with the Inpatient Record parts hidden there (record, IP medication order/entry, treatment counselling, discharge summary, billing links, and its Home-page cards and charts). Mothers waiting for admission and newborns are under **Outpatient**. There is no separate Maternity area.
 - **Visit and stay:** the visit closes at admission (outcome Admitted; MOH 717-E02). The stay lives on the admission: Admitted → In Labour → Delivered → Discharged, with an append-only log.
   - **Discharge outcomes:** discharged home, referred out, died, absconded. Died needs a cause and a Midwife, Clinical Officer or Medical In-Charge (`DIED_ROLES`).
   - **Corrections:** the Medical In-Charge archives a wrong admission; nothing is deleted.

@@ -1,10 +1,14 @@
 # Maternity (labour ward): user guide
 
+**Where it is:**
+- **Inpatient** (in Marley's area switcher): the labour ward, meaning admissions (Admitted, In Labour, Delivered), partograph, delivery record, discharged, and wards and beds.
+- **Outpatient:** mothers waiting for admission, and newborns.
+
 **Who uses this:** the Midwife; also the Clinical Officer and Medical In-Charge. HIS Officers and Mental Health Officers can read the records.
 
 ## Admitting a mother
 
-**Normal route.** Reception registers the visit, and triage routes her to **Maternity**. The visit then appears under **Maternity › Waiting for Admission**. Open it and press **Admit to Maternity**, then choose:
+**Normal route.** Reception registers the visit, and triage routes her to **Maternity**. The visit then appears under **Outpatient › Maternity › Waiting for Admission** (also on the Outpatient page). Open it and press **Admit to Maternity**, then choose:
 - the ward (her facility's Maternity Ward);
 - a free bed, if beds are set up;
 - the LMP, gravida and para.
