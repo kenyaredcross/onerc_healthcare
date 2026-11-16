@@ -126,8 +126,11 @@ MASTER_MATRIX: dict[str, dict[str, str]] = {
 		ROLE_MHO: "r",
 		ROLE_LAB: "r",
 		ROLE_MIC: "r",
+		ROLE_HIS: "r",  # views encounters (lab rows) and maps confirmation tests
 		ROLE_SYSADMIN: "r",
 	},
+	# Symptoms on the encounter (Marley's `symptoms` multi-select); read for every role that reads encounters.
+	"Complaint": {ROLE_CLINICIAN: "r", ROLE_MHO: "r", ROLE_HIS: "r", ROLE_MIC: "r", ROLE_SYSADMIN: "rwc"},
 	# Phase 2: medication masters, read for prescribing and dispensing. No write: Marley's Medication form
 	# creates stock Items and Item Prices (C-5); the catalogue is maintained through the seeded JSON (OI-9).
 	**{

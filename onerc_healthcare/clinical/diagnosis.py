@@ -152,10 +152,10 @@ def search_icd11(
 		from `tabCode Value`
 		where code_system = %(system)s
 			and ifnull(krcs_chapter, '') != %(excluded)s
-			and (code_value like %(like)s or display like %(like)s)
+			and (name = %(txt)s or code_value like %(like)s or display like %(like)s)
 		order by
 			case
-				when code_value = %(txt)s then 0
+				when name = %(txt)s or code_value = %(txt)s then 0
 				when code_value like %(prefix)s then 1
 				when display like %(prefix)s then 2
 				else 3

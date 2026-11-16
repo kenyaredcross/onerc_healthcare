@@ -194,6 +194,18 @@ ENCOUNTER_PROPERTIES = (
 	("coverage_status", "hidden", "1", "Check"),
 	("get_applicable_treatment_plans", "hidden", "1", "Check"),
 	("order_history_html", "hidden", "1", "Check"),
+	# Not used by KRCS (walk-in visits, no inpatient or emergency module yet): the links would only open
+	# searches the clinical roles cannot run.
+	("appointment", "hidden", "1", "Check"),
+	("inpatient_record", "hidden", "1", "Check"),
+	("emergency_record", "hidden", "1", "Check"),
+)
+
+# Lab Prescription rows: tests are ordered by Observation Template; Marley's legacy Lab Test template and
+# care type columns are not used (D5).
+LAB_PRESCRIPTION_PROPERTIES = (
+	("lab_test_code", "hidden", "1", "Check"),
+	("patient_care_type", "hidden", "1", "Check"),
 )
 
 
@@ -217,23 +229,32 @@ def ensure_appointment_type() -> None:
 	).insert(ignore_permissions=True)
 
 
-def _has_property_setter(fieldname: str, prop: str) -> bool:
+def _has_property_setter(fieldname: str, prop: str, doctype: str = ENCOUNTER_DOCTYPE) -> bool:
 	return bool(
-		frappe.db.exists(
-			"Property Setter", {"doc_type": ENCOUNTER_DOCTYPE, "field_name": fieldname, "property": prop}
-		)
+		frappe.db.exists("Property Setter", {"doc_type": doctype, "field_name": fieldname, "property": prop})
 	)
 
 
 def set_encounter_properties() -> None:
-	meta = frappe.get_meta(ENCOUNTER_DOCTYPE)
 	changed = False
-	for fieldname, prop, value, prop_type in ENCOUNTER_PROPERTIES:
-		if not meta.has_field(fieldname) or _has_property_setter(fieldname, prop):
+	for doctype, properties in (
+		(ENCOUNTER_DOCTYPE, ENCOUNTER_PROPERTIES),
+		("Lab Prescription", LAB_PRESCRIPTION_PROPERTIES),
+	):
+		changed |= _set_properties(doctype, properties)
+	if changed:
+		frappe.clear_cache(doctype=ENCOUNTER_DOCTYPE)
+
+
+def _set_properties(doctype: str, properties) -> bool:
+	meta = frappe.get_meta(doctype)
+	changed = False
+	for fieldname, prop, value, prop_type in properties:
+		if not meta.has_field(fieldname) or _has_property_setter(fieldname, prop, doctype):
 			continue
 		frappe.make_property_setter(
 			{
-				"doctype": ENCOUNTER_DOCTYPE,
+				"doctype": doctype,
 				"doctype_or_field": "DocField",
 				"fieldname": fieldname,
 				"property": prop,
@@ -244,5 +265,4 @@ def set_encounter_properties() -> None:
 			module=MODULE,
 		)
 		changed = True
-	if changed:
-		frappe.clear_cache(doctype=ENCOUNTER_DOCTYPE)
+	return changed
