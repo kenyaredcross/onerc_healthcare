@@ -118,6 +118,7 @@ doctype_js = {
 		"registration/patient.js",
 		"privacy/patient.js",
 		"outreach/patient.js",
+		"visit/patient.js",  # Start Visit from the patient; last step of registration
 	],
 	"Vital Signs": "visit/vital_signs.js",
 	"Patient Encounter": "clinical/patient_encounter.js",

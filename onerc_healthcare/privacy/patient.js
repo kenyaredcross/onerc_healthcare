@@ -37,11 +37,18 @@ krcs.privacy.load_status = function (frm) {
 	return frappe.xcall(`${krcs.privacy.CONSENT_API}.get_consent_status`, { patient: frm.doc.name }, "GET");
 };
 
-krcs.privacy.record_consent_dialog = function (frm, intro) {
+// `on_close` (optional) runs once when the dialog closes, recorded or not: registration continues with it.
+krcs.privacy.record_consent_dialog = function (frm, intro, on_close) {
+	const done = () => {
+		const next = on_close;
+		on_close = null;
+		if (next) next();
+	};
 	frappe.xcall(`${krcs.privacy.STATEMENT_API}.get_active_statements`, {}, "GET").then((statements) => {
 		statements = statements || [];
 		if (!statements.length) {
 			frappe.msgprint(__("No Active Consent Statement exists. Ask the Medical In-Charge to activate one."));
+			done();
 			return;
 		}
 		const lang = frappe.boot.lang || "en";
@@ -120,6 +127,7 @@ krcs.privacy.record_consent_dialog = function (frm, intro) {
 			);
 		};
 		if (intro) dialog.fields_dict.intro.$wrapper.html(`<p>${frappe.utils.escape_html(intro)}</p>`);
+		dialog.onhide = done;
 		dialog.show();
 		render_text();
 	});
@@ -130,16 +138,22 @@ frappe.ui.form.on("Patient", {
 		frm.__krcs_consent_first_save = frm.is_new();
 	},
 
+	// Registering a new patient continues on this screen: consent first, then the visit (visit/patient.js
+	// listens for `krcs_registration_next`).
 	after_save(frm) {
 		if (!frm.__krcs_consent_first_save) return;
 		frm.__krcs_consent_first_save = false;
-		if (!krcs.privacy.can_record_consent()) return;
+		const next = () => frm.trigger("krcs_registration_next");
+		if (!krcs.privacy.can_record_consent()) return next();
 		krcs.privacy.load_status(frm).then((status) => {
 			if (status && status.outcome === "none") {
 				krcs.privacy.record_consent_dialog(
 					frm,
-					__("No consent is recorded for this patient yet. Read the statement to the patient and record the outcome.")
+					__("No consent is recorded for this patient yet. Read the statement to the patient and record the outcome."),
+					next
 				);
+			} else {
+				next();
 			}
 		});
 	},
