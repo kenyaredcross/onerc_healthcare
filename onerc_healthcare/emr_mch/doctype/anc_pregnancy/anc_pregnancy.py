@@ -8,6 +8,9 @@ from onerc_healthcare.mch import anc
 
 
 class ANCPregnancy(Document):
+	def onload(self):
+		anc.pregnancy_onload(self)
+
 	def validate(self):
 		anc.pregnancy_validate(self)
 

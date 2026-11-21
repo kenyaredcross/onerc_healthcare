@@ -101,3 +101,57 @@ def make_record(doctype: str, patient: str, visit: str | None = None, submit: bo
 	if submit:
 		doc.submit()
 	return doc
+
+
+# ------------------------------------------------------------------------------------ MCH-A helpers
+
+
+def live_baby(sex: str = "Female", **kw) -> dict:
+	"""A Delivery Baby row: a live birth of 3.1 kg, Apgar 8/9."""
+	from onerc_healthcare.constants import BABY_LIVE_BIRTH
+
+	row = {"outcome": BABY_LIVE_BIRTH, "sex": sex, "weight_kg": 3.1, "apgar_1": 8, "apgar_5": 9}
+	row.update(kw)
+	return row
+
+
+def make_delivery(mother: str, user: str | None = None, days_ago: int = 0, babies: list[dict] | None = None):
+	"""Admit `mother` (`maternity_factories.make_admission`, admitted 2 hours before the delivery) and insert
+	and submit a Delivery Record as `user` (default: the MCH midwife), delivered `days_ago` days ago. The real
+	submit runs: the admission moves to Delivered, live-born babies become Patients (``krcs_mother``) and the
+	hooks run (`mch.anc.close_on_delivery`). Returns the submitted Delivery Record."""
+	from frappe.utils import add_to_date, now_datetime
+
+	from onerc_healthcare.constants import DELIVERY_RECORD_DOCTYPE, DELIVERY_SVD
+	from onerc_healthcare.tests.maternity_factories import make_admission
+
+	delivered_at = add_to_date(now_datetime(), days=-days_ago, minutes=-5)
+	adm = make_admission(mother, admitted_at=add_to_date(delivered_at, hours=-2))
+	user = user or make_user("mch-midwife", [ROLE_MIDWIFE])
+	frappe.set_user(user)
+	try:
+		doc = frappe.get_doc(
+			{
+				"doctype": DELIVERY_RECORD_DOCTYPE,
+				"admission": adm.name,
+				"delivered_at": delivered_at,
+				"delivery_mode": DELIVERY_SVD,
+				"babies": babies if babies is not None else [live_baby()],
+			}
+		).insert()
+		doc.submit()
+	finally:
+		frappe.set_user("Administrator")
+	return doc
+
+
+def make_next_visit(patient: str, facility: str | None = None):
+	"""A new open visit for `patient` after closing (status Discharged, written directly) any open one: a
+	patient has one open visit at a time (Patient Visit rule), and MCH tests need one visit per record."""
+	from onerc_healthcare.constants import VISIT_DOCTYPE, VISIT_OPEN_STATUSES, VISIT_STATUS_DISCHARGED
+
+	for name in frappe.get_all(
+		VISIT_DOCTYPE, filters={"patient": patient, "status": ("in", VISIT_OPEN_STATUSES)}, pluck="name"
+	):
+		frappe.db.set_value(VISIT_DOCTYPE, name, "status", VISIT_STATUS_DISCHARGED, update_modified=False)
+	return make_mch_visit(patient, facility)
