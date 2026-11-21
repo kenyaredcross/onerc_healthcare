@@ -170,7 +170,8 @@
    "fieldname": "measurement_position",
    "fieldtype": "Select",
    "label": "Measured",
-   "options": "\nLying (length)\nStanding (height)"
+   "options": "\nLying (length)\nStanding (height)",
+   "description": "Blank: lying under 2 years, standing from 2 years. The other position gets the WHO 0.7 cm correction."
   },
   {
    "fieldname": "column_break_meas",
@@ -180,7 +181,8 @@
    "fieldname": "muac_cm",
    "fieldtype": "Float",
    "label": "MUAC (cm)",
-   "precision": "1"
+   "precision": "1",
+   "description": "Classifies acute malnutrition from 6 months: below 11.5 SAM, 11.5-12.4 MAM."
   },
   {
    "fieldname": "head_circumference_cm",
@@ -256,7 +258,8 @@
    "fieldtype": "Small Text",
    "label": "Calculation Note",
    "read_only": 1,
-   "no_copy": 1
+   "no_copy": 1,
+   "description": "Why a z-score is blank, position corrections and the estimated date of birth."
   },
   {
    "fieldname": "plan_section",
@@ -315,7 +318,7 @@
  "index_web_pages_for_search": 0,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-21 10:00:00.000000",
+ "modified": "2026-11-21 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "EMR MCH",
  "name": "Growth Monitoring",

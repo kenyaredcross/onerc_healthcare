@@ -1,0 +1,262 @@
+{
+ "_comment": "KEPI vaccine schedule seed (contract §7, CON-16). PROVISIONAL until the MCH In-Charge confirms it (OI-8, D62). seed_schedule() inserts missing dose_labels only and never edits a row (D46). Ages in days: 6/10/14 weeks = 42/70/98; 9 months = 274; 18 months = 548; latest_age_days 0 = no upper limit (the schedule ends at 5 years).",
+ "rows": [
+  {
+   "dose_label": "BCG",
+   "antigen": "BCG",
+   "dose_number": 0,
+   "route": "Intradermal",
+   "due_age_days": 0,
+   "latest_age_days": 0,
+   "min_interval_days": 0,
+   "sort_order": 10,
+   "description": "At birth or at the first contact."
+  },
+  {
+   "dose_label": "OPV 0",
+   "antigen": "OPV",
+   "dose_number": 0,
+   "route": "Oral",
+   "due_age_days": 0,
+   "latest_age_days": 14,
+   "min_interval_days": 0,
+   "sort_order": 20,
+   "description": "Birth dose: only within the first 2 weeks of life."
+  },
+  {
+   "dose_label": "OPV 1",
+   "antigen": "OPV",
+   "dose_number": 1,
+   "route": "Oral",
+   "due_age_days": 42,
+   "latest_age_days": 0,
+   "min_interval_days": 28,
+   "sort_order": 30
+  },
+  {
+   "dose_label": "Penta 1",
+   "antigen": "Penta",
+   "dose_number": 1,
+   "route": "Intramuscular",
+   "due_age_days": 42,
+   "latest_age_days": 0,
+   "min_interval_days": 0,
+   "sort_order": 40,
+   "description": "DTP-HepB-Hib."
+  },
+  {
+   "dose_label": "PCV 1",
+   "antigen": "PCV",
+   "dose_number": 1,
+   "route": "Intramuscular",
+   "due_age_days": 42,
+   "latest_age_days": 0,
+   "min_interval_days": 0,
+   "sort_order": 50
+  },
+  {
+   "dose_label": "Rota 1",
+   "antigen": "Rota",
+   "dose_number": 1,
+   "route": "Oral",
+   "due_age_days": 42,
+   "latest_age_days": 729,
+   "min_interval_days": 0,
+   "sort_order": 60,
+   "description": "Not given from 24 months of age."
+  },
+  {
+   "dose_label": "OPV 2",
+   "antigen": "OPV",
+   "dose_number": 2,
+   "route": "Oral",
+   "due_age_days": 70,
+   "latest_age_days": 0,
+   "min_interval_days": 28,
+   "sort_order": 70
+  },
+  {
+   "dose_label": "Penta 2",
+   "antigen": "Penta",
+   "dose_number": 2,
+   "route": "Intramuscular",
+   "due_age_days": 70,
+   "latest_age_days": 0,
+   "min_interval_days": 28,
+   "sort_order": 80
+  },
+  {
+   "dose_label": "PCV 2",
+   "antigen": "PCV",
+   "dose_number": 2,
+   "route": "Intramuscular",
+   "due_age_days": 70,
+   "latest_age_days": 0,
+   "min_interval_days": 28,
+   "sort_order": 90
+  },
+  {
+   "dose_label": "Rota 2",
+   "antigen": "Rota",
+   "dose_number": 2,
+   "route": "Oral",
+   "due_age_days": 70,
+   "latest_age_days": 729,
+   "min_interval_days": 28,
+   "sort_order": 100
+  },
+  {
+   "dose_label": "OPV 3",
+   "antigen": "OPV",
+   "dose_number": 3,
+   "route": "Oral",
+   "due_age_days": 98,
+   "latest_age_days": 0,
+   "min_interval_days": 28,
+   "sort_order": 110
+  },
+  {
+   "dose_label": "Penta 3",
+   "antigen": "Penta",
+   "dose_number": 3,
+   "route": "Intramuscular",
+   "due_age_days": 98,
+   "latest_age_days": 0,
+   "min_interval_days": 28,
+   "sort_order": 120
+  },
+  {
+   "dose_label": "PCV 3",
+   "antigen": "PCV",
+   "dose_number": 3,
+   "route": "Intramuscular",
+   "due_age_days": 98,
+   "latest_age_days": 0,
+   "min_interval_days": 28,
+   "sort_order": 130
+  },
+  {
+   "dose_label": "IPV",
+   "antigen": "IPV",
+   "dose_number": 1,
+   "route": "Intramuscular",
+   "due_age_days": 98,
+   "latest_age_days": 0,
+   "min_interval_days": 0,
+   "sort_order": 140
+  },
+  {
+   "dose_label": "MR 1",
+   "antigen": "MR",
+   "dose_number": 1,
+   "route": "Subcutaneous",
+   "due_age_days": 274,
+   "latest_age_days": 0,
+   "min_interval_days": 0,
+   "sort_order": 150,
+   "description": "Measles-Rubella, at 9 months."
+  },
+  {
+   "dose_label": "Vitamin A 1",
+   "antigen": "Vitamin A",
+   "dose_number": 1,
+   "route": "Oral",
+   "due_age_days": 274,
+   "latest_age_days": 455,
+   "min_interval_days": 0,
+   "sort_order": 160,
+   "description": "Vitamin A at 9 months, then every 6 months to 59 months."
+  },
+  {
+   "dose_label": "Vitamin A 2",
+   "antigen": "Vitamin A",
+   "dose_number": 2,
+   "route": "Oral",
+   "due_age_days": 456,
+   "latest_age_days": 638,
+   "min_interval_days": 120,
+   "sort_order": 170
+  },
+  {
+   "dose_label": "MR 2",
+   "antigen": "MR",
+   "dose_number": 2,
+   "route": "Subcutaneous",
+   "due_age_days": 548,
+   "latest_age_days": 0,
+   "min_interval_days": 28,
+   "sort_order": 180,
+   "description": "Measles-Rubella, at 18 months."
+  },
+  {
+   "dose_label": "Vitamin A 3",
+   "antigen": "Vitamin A",
+   "dose_number": 3,
+   "route": "Oral",
+   "due_age_days": 639,
+   "latest_age_days": 820,
+   "min_interval_days": 120,
+   "sort_order": 190
+  },
+  {
+   "dose_label": "Vitamin A 4",
+   "antigen": "Vitamin A",
+   "dose_number": 4,
+   "route": "Oral",
+   "due_age_days": 821,
+   "latest_age_days": 1003,
+   "min_interval_days": 120,
+   "sort_order": 200
+  },
+  {
+   "dose_label": "Vitamin A 5",
+   "antigen": "Vitamin A",
+   "dose_number": 5,
+   "route": "Oral",
+   "due_age_days": 1004,
+   "latest_age_days": 1185,
+   "min_interval_days": 120,
+   "sort_order": 210
+  },
+  {
+   "dose_label": "Vitamin A 6",
+   "antigen": "Vitamin A",
+   "dose_number": 6,
+   "route": "Oral",
+   "due_age_days": 1186,
+   "latest_age_days": 1368,
+   "min_interval_days": 120,
+   "sort_order": 220
+  },
+  {
+   "dose_label": "Vitamin A 7",
+   "antigen": "Vitamin A",
+   "dose_number": 7,
+   "route": "Oral",
+   "due_age_days": 1369,
+   "latest_age_days": 1550,
+   "min_interval_days": 120,
+   "sort_order": 230
+  },
+  {
+   "dose_label": "Vitamin A 8",
+   "antigen": "Vitamin A",
+   "dose_number": 8,
+   "route": "Oral",
+   "due_age_days": 1551,
+   "latest_age_days": 1733,
+   "min_interval_days": 120,
+   "sort_order": 240
+  },
+  {
+   "dose_label": "Vitamin A 9",
+   "antigen": "Vitamin A",
+   "dose_number": 9,
+   "route": "Oral",
+   "due_age_days": 1734,
+   "latest_age_days": 1795,
+   "min_interval_days": 120,
+   "sort_order": 250
+  }
+ ]
+}
