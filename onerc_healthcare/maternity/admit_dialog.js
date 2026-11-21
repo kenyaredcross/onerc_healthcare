@@ -129,5 +129,21 @@ krcs.maternity.admit_dialog = function (opts) {
 				},
 			});
 			dialog.show();
+			// MCH: prefill LMP, gravida and para from the mother's open ANC Pregnancy (never overwrite a typed value).
+			if (frappe.model.can_read("ANC Pregnancy")) {
+				frappe
+					.xcall("onerc_healthcare.mch.anc.admit_prefill", { patient: opts.patient }, "GET")
+					.then((p) => {
+						if (!p || !p.pregnancy) return;
+						["lmp", "gravida", "para"].forEach((k) => {
+							if (p[k] && !dialog.get_value(k)) dialog.set_value(k, p[k]);
+						});
+						dialog.set_df_property(
+							"lmp",
+							"description",
+							__("From antenatal record {0}", [frappe.utils.escape_html(p.pregnancy)]),
+						);
+					});
+			}
 		});
 };

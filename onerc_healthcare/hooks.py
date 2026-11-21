@@ -133,10 +133,16 @@ doctype_js = {
 		"visit/patient.js",  # Start Visit from the patient; last step of registration
 		"maternity/admit_dialog.js",  # Phase 5M: must load before maternity/patient.js
 		"maternity/patient.js",  # Admit in Labour (fast path)
+		"mch/growth_chart.js",  # onerc_mch.render_growth_chart (MCH-B); before mch/forms.js
+		"mch/forms.js",  # MCH panel (open pregnancy, immunisation schedule, growth chart)
 	],
-	"Patient Visit": ["maternity/admit_dialog.js", "maternity/patient_visit.js"],  # Admit to Maternity
+	"Patient Visit": [
+		"maternity/admit_dialog.js",
+		"maternity/patient_visit.js",  # Admit to Maternity
+		"mch/forms.js",  # MCH button group
+	],
 	"Vital Signs": "visit/vital_signs.js",
-	"Patient Encounter": "clinical/patient_encounter.js",
+	"Patient Encounter": ["clinical/patient_encounter.js", "mch/forms.js"],  # MCH button group (MCH visits)
 	"Service Request": "lab/service_request.js",
 	"Medication Request": "pharmacy/medication_request.js",
 }

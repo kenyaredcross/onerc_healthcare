@@ -328,6 +328,10 @@ def seed_demo(site: str) -> dict:
 	frappe.db.set_value("User", users["his"], "krcs_designation", HIS_DESIGNATION)
 	outreach = _seed_outreach(users, facilities[0])
 	maternity = _seed_maternity(users, facilities[0])
+	# MCH (D62): a pregnant mother, Baby Furaha's birth doses, an infant with overdue doses, growth records
+	from onerc_healthcare.mch.demo import seed_mch
+
+	mch = seed_mch(users, facilities[0])
 	frappe.set_user("Administrator")
 	frappe.db.commit()
 	return {
@@ -336,6 +340,7 @@ def seed_demo(site: str) -> dict:
 		"patients": created,
 		"outreach_session": outreach,
 		"maternity": maternity,
+		"mch": mch,
 	}
 
 

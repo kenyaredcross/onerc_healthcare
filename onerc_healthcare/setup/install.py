@@ -98,6 +98,7 @@ def after_migrate() -> None:
 REPORT_INDEXES = (
 	("Patient Encounter", ("encounter_date",)),
 	("Patient", ("krcs_residence",)),
+	("Immunisation", ("facility",)),  # MCH: Due Immunisations (children immunised at the facility)
 )
 
 
