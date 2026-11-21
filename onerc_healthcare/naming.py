@@ -59,6 +59,10 @@ DEFAULT_RULES = (
 	("Maternity Admission", "{prefix}-MAT-.YYYY.-"),
 	("Partograph", "{prefix}-PTG-.YYYY.-"),
 	("Delivery Record", "{prefix}-DEL-.YYYY.-"),
+	# Phase 6S stock record types (same rule): goods received note, S11 requisition, adjustment
+	("Stock Receipt", "{prefix}-GRN-.YYYY.-"),
+	("Stock Requisition", "{prefix}-S11-.YYYY.-"),
+	("Stock Adjustment", "{prefix}-ADJ-.YYYY.-"),
 	# MCH record types (same rule)
 	("ANC Pregnancy", "{prefix}-ANC-.YYYY.-"),
 	("ANC Contact", "{prefix}-ANCV-.YYYY.-"),

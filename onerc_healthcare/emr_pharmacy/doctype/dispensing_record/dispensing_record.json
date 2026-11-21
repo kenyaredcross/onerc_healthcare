@@ -33,6 +33,11 @@
   "quantity",
   "final",
   "not_dispensed_reason",
+  "stock_section",
+  "warehouse",
+  "stock_entry",
+  "column_break_stock",
+  "stock_status",
   "cancellation_section",
   "cancel_reason",
   "amended_from"
@@ -240,6 +245,42 @@
    "mandatory_depends_on": "eval:doc.outcome=='Not Dispensed'"
   },
   {
+   "collapsible": 1,
+   "fieldname": "stock_section",
+   "fieldtype": "Section Break",
+   "label": "Stock"
+  },
+  {
+   "description": "The store the medicine was deducted from (the facility Pharmacy, or Outreach for field dispensing).",
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Store",
+   "no_copy": 1,
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "no_copy": 1,
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_stock",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Stock Status",
+   "no_copy": 1,
+   "options": "\nDeducted\nNot deducted (short)\nNot applicable",
+   "read_only": 1
+  },
+  {
    "fieldname": "cancellation_section",
    "fieldtype": "Section Break",
    "label": "Cancellation",
@@ -265,7 +306,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-16 14:00:00.000000",
+ "modified": "2026-11-21 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Pharmacy",
  "name": "Dispensing Record",

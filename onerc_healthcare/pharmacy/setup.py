@@ -4,7 +4,7 @@
 
 - Medication Request dispensing fields (`krcs_dispense_status`, `krcs_qty_dispensed`), FR-21, and the
   prescriber hold (`krcs_hold_status`, `krcs_hold_reason`), fix round L3.
-- The PROVISIONAL medication catalogue (OI-9), non-stock and price-free (C-5).
+- The PROVISIONAL medication catalogue (OI-9): batch stock items (Phase 6S), price-free (C-5).
 """
 
 import frappe

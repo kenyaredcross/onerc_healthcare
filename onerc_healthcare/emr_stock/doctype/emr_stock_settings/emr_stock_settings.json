@@ -1,0 +1,121 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-21 12:00:00.000000",
+ "custom": 0,
+ "description": "Stock alerts and the provisional catalogue note (Phase 6S).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "expiry_alert_days",
+  "provisional_catalogue_note"
+ ],
+ "fields": [
+  {
+   "default": "90",
+   "description": "Batches expiring within this many days are listed on Stock Alerts.",
+   "fieldname": "expiry_alert_days",
+   "fieldtype": "Int",
+   "label": "Expiry Alert (days)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "default": "PROVISIONAL (OI-9): the supplies and reagents lists await KRCS confirmation.",
+   "description": "Shown on stock items seeded from the provisional catalogues.",
+   "fieldname": "provisional_catalogue_note",
+   "fieldtype": "Small Text",
+   "label": "Provisional Catalogue Note"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Stock",
+ "name": "EMR Stock Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Medical In-Charge",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "EMR System Administrator",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Store Keeper",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Pharmacist",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HIS Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

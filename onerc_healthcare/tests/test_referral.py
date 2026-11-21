@@ -38,6 +38,7 @@ from onerc_healthcare.tests.clinical_factories import (
 	users,
 	visit_status,
 )
+from onerc_healthcare.tests.stock_factories import stock_for_dispensing
 
 # Every user key of visit_factories.VISIT_USERS.
 ALL_KEYS = ("reception", "triage", "clinician", "mho", "lab", "pharmacist", "his", "mic", "hoo", "sysadmin")
@@ -390,6 +391,7 @@ class TestReferralSend(ReferralTestCase):
 		mr = frappe.get_all("Medication Request", filters={"order_group": enc, "docstatus": 1}, pluck="name")
 		self.assertEqual(len(mr), 1)
 		qty = frappe.db.get_value("Medication Request", mr[0], "total_dispensable_quantity") or 1
+		stock_for_dispensing(mr[0], qty)  # Phase 6S
 		with as_user(self.u("pharmacist")):
 			rec = frappe.get_doc(
 				{

@@ -33,6 +33,7 @@ from onerc_healthcare.constants import (
 	ROLE_OUTREACH,
 	ROLE_PHARMACIST,
 	ROLE_RECEPTIONIST,
+	ROLE_STORE_KEEPER,
 	ROLE_SYSADMIN,
 	ROLE_TRIAGE,
 	VISIT_OPEN_STATUSES,
@@ -59,6 +60,8 @@ STAFF = (
 	("outreach", "Akai", "Lotukoi", ROLE_OUTREACH),
 	# Phase 5M: labour ward
 	("midwife", "Naliaka", "Wekesa", ROLE_MIDWIFE),
+	# Phase 6S: receives goods, issues S11 requisitions, counts stock
+	("storekeeper", "Lokiru", "Ekeno", ROLE_STORE_KEEPER),
 )
 
 # Patients: fictional names typical of the Kalobeyei population (South Sudanese, Congolese, Burundian

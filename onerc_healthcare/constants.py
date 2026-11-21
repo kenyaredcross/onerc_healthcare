@@ -27,6 +27,8 @@ ROLE_OUTREACH = "Outreach Team Member"
 ROLE_MOH_API = "MOH Data Reader"
 # Phase 5M (ROL-24, D60): labour ward. Admits, keeps the partograph, records deliveries.
 ROLE_MIDWIFE = "Midwife"
+# Phase 6S (D61 stock, STO-01..03): receives goods, issues S11 requisitions, counts stock. Not clinical.
+ROLE_STORE_KEEPER = "Store Keeper"
 
 ALL_ROLES = (
 	ROLE_RECEPTIONIST,
@@ -42,6 +44,7 @@ ALL_ROLES = (
 	ROLE_OUTREACH,
 	ROLE_MOH_API,
 	ROLE_MIDWIFE,
+	ROLE_STORE_KEEPER,
 )
 # Roles created without desk access (API only).
 # Phase 4: the Outreach Team Member works only in the outreach app (/outreach), never the desk (ROL-22).
@@ -259,6 +262,7 @@ APP_MODULES = (
 	"EMR Outreach",
 	"EMR Maternity",
 	"EMR MCH",
+	"EMR Stock",  # Phase 6S
 )
 
 # Script/query reports the Phase 2 builders create (exact names; the sidebar links them)
@@ -543,6 +547,179 @@ VITAL_SIGNS_ADMISSION_FIELD = "krcs_maternity_admission"  # Vital Signs -> Mater
 # Healthcare Service Unit group seeded under each facility: "Maternity Ward - <facility code>" (+ " - <abbr>")
 MATERNITY_WARD_NAME = "Maternity Ward"
 
+
+# ---------------------------------------------------------------------------
+# Phase 6S stock contract (W0): stock card and Internal Requisition Form S11 (SDD §5.12.8, OI-20, STO-01..03).
+# Quantity only: no prices, valuation or GL (C-5). Builders import these and never edit them. Field names,
+# store names and helper signatures are in docs/STOCK_CONTRACT.md.
+# ---------------------------------------------------------------------------
+# DocTypes (module "EMR Stock")
+STOCK_RECEIPT_DOCTYPE = "Stock Receipt"  # {prefix}-GRN-.YYYY.-, goods received into the Main Store
+STOCK_RECEIPT_ITEM_DOCTYPE = "Stock Receipt Item"  # child (`items`)
+STOCK_REQUISITION_DOCTYPE = "Stock Requisition"  # {prefix}-S11-.YYYY.-, the S11
+STOCK_REQUISITION_ITEM_DOCTYPE = "Stock Requisition Item"  # child (`items`)
+STOCK_ADJUSTMENT_DOCTYPE = "Stock Adjustment"  # {prefix}-ADJ-.YYYY.-, counts and write-offs
+STOCK_ADJUSTMENT_ITEM_DOCTYPE = "Stock Adjustment Item"  # child (`items`)
+STOCK_STATUS_LOG_DOCTYPE = "Stock Status Log"  # child shared by the three (table field `log`), append-only
+STOCK_SETTINGS_DOCTYPE = "EMR Stock Settings"  # Single
+STOCK_DOCTYPES = (STOCK_RECEIPT_DOCTYPE, STOCK_REQUISITION_DOCTYPE, STOCK_ADJUSTMENT_DOCTYPE)
+
+# Stores: Warehouses seeded per facility under "{short} Stores - {abbr}" (stock.setup, stock.stores)
+STORE_TYPE_MAIN = "Main Store"  # receives from KEMSA / UNHCR / donors; issues S11s
+STORE_TYPE_PHARMACY = "Pharmacy"  # dispensing stock
+STORE_TYPE_TRANSIT = "In Transit"  # issued on an S11, not yet received
+STORE_TYPE_POINT_OF_USE = "Point of Use"  # consumes on receipt (no balance kept)
+STORE_TYPE_OUTREACH = "Outreach"  # carried by outreach teams; field dispensing deducts here
+STORE_TYPES = (
+	STORE_TYPE_MAIN,
+	STORE_TYPE_PHARMACY,
+	STORE_TYPE_TRANSIT,
+	STORE_TYPE_POINT_OF_USE,
+	STORE_TYPE_OUTREACH,
+)
+# Points of use (Warehouse.krcs_point_of_use on the Point of Use stores)
+POINT_OF_USE_LABORATORY = "Laboratory"
+POINT_OF_USE_MATERNITY = "Maternity Ward"
+POINT_OF_USE_OUTPATIENT = "Outpatient"
+POINTS_OF_USE = (POINT_OF_USE_LABORATORY, POINT_OF_USE_MATERNITY, POINT_OF_USE_OUTPATIENT)
+# Stores that keep a balance (points of use consume on receipt; In Transit holds only issued-not-received)
+STOCK_HOLDING_STORE_TYPES = (STORE_TYPE_MAIN, STORE_TYPE_PHARMACY, STORE_TYPE_OUTREACH)
+# The stores of each facility, in seed order: (label, store type, point of use). Warehouse name:
+# "<label> - <facility code> - <company abbr>", e.g. "Pharmacy - NTK - KLB" (stock.stores.store_name).
+FACILITY_STORES = (
+	(STORE_TYPE_MAIN, STORE_TYPE_MAIN, None),
+	(STORE_TYPE_PHARMACY, STORE_TYPE_PHARMACY, None),
+	(STORE_TYPE_TRANSIT, STORE_TYPE_TRANSIT, None),
+	(POINT_OF_USE_LABORATORY, STORE_TYPE_POINT_OF_USE, POINT_OF_USE_LABORATORY),
+	(POINT_OF_USE_MATERNITY, STORE_TYPE_POINT_OF_USE, POINT_OF_USE_MATERNITY),
+	(POINT_OF_USE_OUTPATIENT, STORE_TYPE_POINT_OF_USE, POINT_OF_USE_OUTPATIENT),
+	(STORE_TYPE_OUTREACH, STORE_TYPE_OUTREACH, None),
+)
+STORE_GROUP_SUFFIX = "Stores"  # the facility group: "<facility short> Stores - <abbr>"
+
+# Warehouse custom fields (W0, stock.setup)
+WAREHOUSE_FACILITY_FIELD = "krcs_facility"  # Link Healthcare Service Unit (the facility group)
+WAREHOUSE_STORE_TYPE_FIELD = "krcs_store_type"  # Select STORE_TYPES
+WAREHOUSE_POINT_OF_USE_FIELD = "krcs_point_of_use"  # Select POINTS_OF_USE (Point of Use stores only)
+# Stock Entry / Stock Reconciliation custom fields: the EMR document that posted it (Stock Card reference)
+STOCK_REFERENCE_DOCTYPE_FIELD = "krcs_reference_doctype"  # Link DocType
+STOCK_REFERENCE_NAME_FIELD = "krcs_reference_name"  # Dynamic Link
+
+# S11 destinations (Stock Requisition.point_of_use) and who requests / receives for each
+S11_DESTINATIONS = (
+	STORE_TYPE_PHARMACY,
+	POINT_OF_USE_LABORATORY,
+	POINT_OF_USE_MATERNITY,
+	POINT_OF_USE_OUTPATIENT,
+	STORE_TYPE_OUTREACH,
+)
+S11_REQUESTER_ROLES = {
+	STORE_TYPE_PHARMACY: (ROLE_PHARMACIST,),
+	POINT_OF_USE_LABORATORY: (ROLE_LAB,),
+	POINT_OF_USE_MATERNITY: (ROLE_MIDWIFE,),
+	POINT_OF_USE_OUTPATIENT: (ROLE_TRIAGE, ROLE_CLINICIAN),
+	STORE_TYPE_OUTREACH: (ROLE_MIC, ROLE_HIS),
+}
+ALL_S11_REQUESTER_ROLES = tuple(dict.fromkeys(r for roles in S11_REQUESTER_ROLES.values() for r in roles))
+S11_APPROVER_ROLES = (ROLE_MIC,)  # approve (may lower quantities) / reject; cancel an Approved S11
+S11_ISSUER_ROLES = (ROLE_STORE_KEEPER,)  # issue (may issue less than approved, with a reason)
+# Receipts (GRN)
+RECEIPT_POSTER_ROLES = (ROLE_STORE_KEEPER,)  # create and post
+RECEIPT_VOID_ROLES = (ROLE_MIC,)  # void with a reason (only if the stock has not moved on)
+# Adjustments: created and sent for approval by the Store Keeper; for the Pharmacy store also by the Pharmacist
+ADJUSTMENT_CREATOR_ROLES = (ROLE_STORE_KEEPER,)
+ADJUSTMENT_PHARMACY_CREATOR_ROLES = (ROLE_STORE_KEEPER, ROLE_PHARMACIST)
+ADJUSTMENT_APPROVER_ROLES = (ROLE_MIC,)
+# Read-only oversight of every stock document
+STOCK_READ_ROLES = (ROLE_HIS, ROLE_HEAD_OPS)
+
+# Stock Receipt.source
+RECEIPT_SOURCE_KEMSA = "KEMSA"
+RECEIPT_SOURCE_UNHCR = "UNHCR"
+RECEIPT_SOURCE_DONOR = "Donor"
+RECEIPT_SOURCE_OTHER = "Other"
+RECEIPT_SOURCES = (RECEIPT_SOURCE_KEMSA, RECEIPT_SOURCE_UNHCR, RECEIPT_SOURCE_DONOR, RECEIPT_SOURCE_OTHER)
+
+# Stock Receipt lifecycle (S1 owns stock.receipt.TRANSITIONS)
+RECEIPT_DRAFT = "Draft"
+RECEIPT_POSTED = "Posted"
+RECEIPT_VOID = "Void"
+RECEIPT_STATUSES = (RECEIPT_DRAFT, RECEIPT_POSTED, RECEIPT_VOID)
+
+# Stock Requisition (S11) lifecycle (S2 owns stock.requisition.TRANSITIONS)
+S11_DRAFT = "Draft"
+S11_REQUESTED = "Requested"
+S11_APPROVED = "Approved"
+S11_REJECTED = "Rejected"
+S11_ISSUED = "Issued"
+S11_RECEIVED = "Received"
+S11_CANCELLED = "Cancelled"
+S11_STATUSES = (S11_DRAFT, S11_REQUESTED, S11_APPROVED, S11_REJECTED, S11_ISSUED, S11_RECEIVED, S11_CANCELLED)
+S11_OPEN_STATUSES = (S11_DRAFT, S11_REQUESTED, S11_APPROVED, S11_ISSUED)
+S11_WAITING_STATUSES = (S11_REQUESTED, S11_APPROVED, S11_ISSUED)  # waiting for approval / issue / receipt
+
+# Stock Adjustment (S1 owns stock.adjustment.TRANSITIONS)
+ADJUSTMENT_OPENING_COUNT = "Opening Count"
+ADJUSTMENT_PHYSICAL_COUNT = "Physical Count"
+ADJUSTMENT_WRITE_OFF = "Write-off"
+ADJUSTMENT_TYPES = (ADJUSTMENT_OPENING_COUNT, ADJUSTMENT_PHYSICAL_COUNT, ADJUSTMENT_WRITE_OFF)
+WRITE_OFF_EXPIRED = "Expired"
+WRITE_OFF_DAMAGED = "Damaged"
+WRITE_OFF_LOST = "Lost"
+WRITE_OFF_TRANSIT_LOSS = "Transit loss"
+WRITE_OFF_REASONS = (WRITE_OFF_EXPIRED, WRITE_OFF_DAMAGED, WRITE_OFF_LOST, WRITE_OFF_TRANSIT_LOSS)
+ADJUSTMENT_DRAFT = "Draft"
+ADJUSTMENT_PENDING = "Pending Approval"
+ADJUSTMENT_POSTED = "Posted"
+ADJUSTMENT_REJECTED = "Rejected"
+ADJUSTMENT_STATUSES = (ADJUSTMENT_DRAFT, ADJUSTMENT_PENDING, ADJUSTMENT_POSTED, ADJUSTMENT_REJECTED)
+
+# Dispensing Record stock fields (W0 adds them read-only; S3 sets them)
+DISPENSING_WAREHOUSE_FIELD = "warehouse"
+DISPENSING_STOCK_ENTRY_FIELD = "stock_entry"
+DISPENSING_STOCK_STATUS_FIELD = "stock_status"
+STOCK_DEDUCTED = "Deducted"
+STOCK_NOT_DEDUCTED_SHORT = "Not deducted (short)"  # outreach sync only: the care already happened offline
+STOCK_NOT_APPLICABLE = "Not applicable"  # Not Dispensed, or a non-stock Item
+DISPENSING_STOCK_STATUSES = (STOCK_DEDUCTED, STOCK_NOT_DEDUCTED_SHORT, STOCK_NOT_APPLICABLE)
+# New Not Dispensed reason offered when the Pharmacy store is short
+NOT_DISPENSED_OUT_OF_STOCK = "Out of stock"
+
+# Items: every stock item has batches with an expiry date; the stock UOM is the issuing unit
+ITEM_GROUP_MEDICINES = (
+	"KRCS Medicines"  # the 28 catalogue medicines (pharmacy/data/medication_catalogue.json)
+)
+ITEM_GROUP_SUPPLIES = "KRCS Medical Supplies"  # provisional catalogue (OI-9), seeded by S1
+ITEM_GROUP_REAGENTS = "KRCS Laboratory Reagents"  # provisional catalogue (OI-9), seeded by S1
+STOCK_ITEM_GROUPS = (ITEM_GROUP_MEDICINES, ITEM_GROUP_SUPPLIES, ITEM_GROUP_REAGENTS)
+STOCK_ITEM_SHELF_LIFE_DAYS = (
+	730  # Item.shelf_life_in_days (mandatory with batch + expiry); batches carry their own
+)
+# Item values every Item of STOCK_ITEM_GROUPS gets (stock.setup.ensure_stock_items, pharmacy catalogue)
+STOCK_ITEM_VALUES = {
+	"is_stock_item": 1,
+	"has_batch_no": 1,
+	"has_expiry_date": 1,
+	"create_new_batch": 0,  # Batch records are created at receipt, with the printed number and expiry
+}
+
+# EMR Stock Settings defaults
+STOCK_DEFAULTS = {"expiry_alert_days": 90}
+
+# Stock Settings (ERPNext) enforced on every migrate (stock.setup.apply_stock_settings)
+ERPNEXT_STOCK_SETTINGS = {
+	"enable_serial_and_batch_no_for_item": 1,
+	"pick_serial_and_batch_based_on": "Expiry",  # FEFO; expired batches are never picked
+	"auto_create_serial_and_batch_bundle_for_outward": 1,
+	"allow_negative_stock": 0,
+	"auto_indent": 0,  # no Material Requests; our alerts report minimum levels
+	"use_serial_batch_fields": 1,  # Marley's ward_stock throws without it
+}
+
+# Script reports (S1; exact names, the Stores sidebar links them)
+REPORT_STOCK_CARD = "Stock Card"
+REPORT_STOCK_BALANCE = "Stock Balance (EMR)"
+REPORT_STOCK_ALERTS = "Stock Alerts"
 
 
 # ---------------------------------------------------------------------------

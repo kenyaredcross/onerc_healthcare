@@ -36,6 +36,7 @@ from onerc_healthcare.constants import (
 )
 from onerc_healthcare.tests.clinical_factories import as_user
 from onerc_healthcare.tests.factories import make_patient
+from onerc_healthcare.tests.stock_factories import stock_for_dispensing
 from onerc_healthcare.tests.visit_factories import make_visit, make_visit_users, make_vital_signs
 from onerc_healthcare.visit import engine
 
@@ -338,6 +339,7 @@ class ReconBuilder:
 			done = flt(frappe.db.get_value("Medication Request", mr, "krcs_qty_dispensed"))
 			quantity = total - done if part >= 1 else max(1, int(total * part))
 			values.update({"outcome": "Dispensed", "quantity": quantity})
+			stock_for_dispensing(mr, quantity)  # Phase 6S: the facility Pharmacy must hold it
 		with as_user(self.users["pharmacist"]):
 			doc = frappe.get_doc(values).insert()
 			doc.submit()

@@ -12,3 +12,4 @@ EMR Community
 EMR Outreach
 EMR Maternity
 EMR MCH
+EMR Stock

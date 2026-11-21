@@ -10,7 +10,8 @@ Called by setup/install.py on after_install and after_migrate. Idempotent, never
   restricted, ``krcs_archived`` added to clinical DocTypes, billing fields hidden from forms (BIL-04).
 - First run only (so admin edits survive): role settings, System Settings, Website Settings.
 - One-off fix-ups (marker ``krcs_security_fixups_v2``): undo the over-reach of the first version; later
-  markers v3 (Phase 2), v4 (Phase 4, no desk for outreach) and v5 (Phase 5M, Midwife role settings).
+  markers v3 (Phase 2), v4 (Phase 4, no desk for outreach), v5 (Phase 5M, Midwife role settings) and v6 (Phase 6S,
+  Store Keeper role settings and standard delete rights on the stock masters).
 """
 
 import frappe
@@ -53,6 +54,7 @@ def install() -> None:
 	apply_phase2_fixups()
 	apply_phase4_fixups()
 	apply_phase5_fixups()
+	apply_phase6_fixups()
 	lock_down_billing()
 	hide_billing_fields()
 	add_archived_fields()
@@ -214,6 +216,44 @@ def apply_phase5_fixups() -> None:
 			{**values, "two_factor_auth": values.get("two_factor_auth", 0)},
 		)
 	frappe.db.set_default(PHASE5_FIXUPS_MARKER, "1")
+
+
+PHASE6_FIXUPS_MARKER = "krcs_security_fixups_v6"
+# ERPNext stock DocTypes first customised in Phase 6S (security.matrix MASTER_MATRIX).
+PHASE6_STOCK_DOCTYPES = (
+	"Item",
+	"Warehouse",
+	"Batch",
+	"Stock Entry",
+	"Stock Ledger Entry",
+	"Stock Reconciliation",
+	"Serial and Batch Bundle",
+)
+
+
+def apply_phase6_fixups() -> None:
+	"""Phase 6S (stock): once per site, after apply_matrix.
+
+	- The new Store Keeper role gets its ROLE_SETTINGS entry (desk access, Stores home page): role settings were
+	  applied once in Phase 1, so a migrated site would never apply them.
+	- Customising the stock DocTypes copied their standard DocPerms without delete; give the standard ERPNext roles
+	  their delete back (as the v2 fix-up M7 did for the Phase 1 masters). EMR roles never get delete.
+	"""
+	if frappe.db.get_default(PHASE6_FIXUPS_MARKER):
+		return
+	from onerc_healthcare.constants import ROLE_STORE_KEEPER
+
+	if frappe.db.exists("Role", ROLE_STORE_KEEPER):
+		values = matrix.ROLE_SETTINGS[ROLE_STORE_KEEPER]
+		frappe.db.set_value(
+			"Role",
+			ROLE_STORE_KEEPER,
+			{**values, "two_factor_auth": values.get("two_factor_auth", 0)},
+		)
+	doctypes = [dt for dt in PHASE6_STOCK_DOCTYPES if doctype_exists(dt)]
+	restore_standard_delete(doctypes, exclude_roles=ALL_ROLES)
+	clear_perm_cache(doctypes)
+	frappe.db.set_default(PHASE6_FIXUPS_MARKER, "1")
 
 
 def add_archived_fields() -> None:

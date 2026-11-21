@@ -1,11 +1,12 @@
 # Copyright (c) 2026, Lennox Mwita and contributors
 # For license information, please see license.txt
-"""PROVISIONAL medication catalogue (OI-9), seeded without stock, prices or billing (C-5, SDD §5.5).
+"""PROVISIONAL medication catalogue (OI-9), seeded without prices or billing (C-5, SDD §5.5).
 
 Marley's own path is unusable here: `Medication.validate` needs a price list, and `insert_item` creates
 *stock* Items and an Item Price. So each entry of `data/medication_catalogue.json` is seeded as:
 
-1. an Item: non-stock, not sold or purchased, enabled, in the dedicated item group;
+1. an Item: a batch stock item with expiry (Phase 6S, `stock.setup.stock_item_values`; quantity only, no valuation),
+   not sold or purchased, enabled, in the dedicated item group;
 2. a Medication with no linked rows (Marley's `after_insert` / `on_update` then create nothing);
 3. one `Medication Linked Item` row written directly with `db_insert`: `is_billable=1` (Marley's hidden
    internal flag, which keeps the Item enabled when an admin later saves the Medication), `change_in_item=0`
@@ -79,9 +80,13 @@ def _root_item_group() -> str:
 
 
 def _ensure_item(data: dict, row: dict) -> str:
+	from onerc_healthcare.stock.setup import apply_stock_settings, stock_item_values
+
 	code = row["name"]
 	if frappe.db.exists("Item", code):
 		return code
+	# A fresh install seeds the catalogue before stock.setup runs: batches must be enabled first.
+	apply_stock_settings()
 	frappe.get_doc(
 		{
 			"doctype": "Item",
@@ -90,7 +95,9 @@ def _ensure_item(data: dict, row: dict) -> str:
 			"item_group": data["item_group"],
 			"stock_uom": data["stock_uom"],
 			"description": f"{code}. {data['provisional_flag']}",
-			"is_stock_item": 0,
+			# Phase 6S: dispensing deducts stock (batches with expiry, FEFO). Existing Items are converted by
+			# stock.setup.ensure_stock_items on migrate.
+			**stock_item_values(),
 			"include_item_in_manufacturing": 0,
 			"is_sales_item": 0,
 			"is_purchase_item": 0,

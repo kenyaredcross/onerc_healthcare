@@ -190,6 +190,8 @@ scheduler_events = {
 	"cron": {
 		"*/10 * * * *": ["onerc_healthcare.visit.tasks.reconcile_open_tasks"],
 	},
+	# Phase 6S: stock alerts to the facility's Store Keepers and Pharmacists (S1)
+	"daily": ["onerc_healthcare.stock.alerts.daily"],
 }
 
 permission_query_conditions = {

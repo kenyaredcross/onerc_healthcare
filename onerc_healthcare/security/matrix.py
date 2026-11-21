@@ -21,6 +21,7 @@ from onerc_healthcare.constants import (
 	ROLE_OUTREACH,
 	ROLE_PHARMACIST,
 	ROLE_RECEPTIONIST,
+	ROLE_STORE_KEEPER,
 	ROLE_SYSADMIN,
 	ROLE_TRIAGE,
 )
@@ -37,8 +38,24 @@ FACILITY_ROLES = (
 	ROLE_HIS,
 	ROLE_MIC,
 	ROLE_MIDWIFE,  # Phase 5M (ROL-24): masters read like every desk role
+	ROLE_STORE_KEEPER,  # Phase 6S: masters read like every desk role (no clinical DocType rights)
 )
 _ALL_READ = dict.fromkeys(FACILITY_ROLES, "r")
+
+# Phase 6S: roles that work with stock (S11 requesters and receivers, approver, issuer, oversight). They read the
+# stock masters their forms link to.
+STOCK_ACTORS = (
+	ROLE_STORE_KEEPER,
+	ROLE_PHARMACIST,
+	ROLE_LAB,
+	ROLE_MIDWIFE,
+	ROLE_TRIAGE,
+	ROLE_CLINICIAN,
+	ROLE_MIC,
+	ROLE_HIS,
+	ROLE_HEAD_OPS,
+)
+_STOCK_READ = dict.fromkeys(STOCK_ACTORS, "r")
 
 # Clinical and patient-level DocTypes (Phase 1 baseline). The EMR System Administrator and the Head
 # of Operations are absent from every entry: no clinical content (SDD §6.1).
@@ -157,6 +174,17 @@ MASTER_MATRIX: dict[str, dict[str, str]] = {
 	},
 	# Phase 2: Marley's create_specimen saves without ignore_permissions (B2).
 	"Specimen": {ROLE_LAB: "rwc", ROLE_MIC: "r"},
+	# Phase 6S stock masters. Item write (no create) for the catalogue keepers: a new Item from the ERPNext form
+	# would default to a sales item with a price (C-5); new catalogue Items come from the seeded lists (S1).
+	"Item": {**_STOCK_READ, ROLE_STORE_KEEPER: "rw", ROLE_HIS: "rw"},
+	"Warehouse": dict(_STOCK_READ),
+	"Batch": dict(_STOCK_READ),
+	# Postings are server-side (stock.postings, ignore_permissions); nobody creates, submits or cancels them.
+	# Read only, for the drill-down from our documents and the Stock Card.
+	**{
+		dt: {ROLE_STORE_KEEPER: "r", ROLE_MIC: "r"}
+		for dt in ("Stock Entry", "Stock Ledger Entry", "Stock Reconciliation", "Serial and Batch Bundle")
+	},
 }
 
 # EMR System Administrator: user and role management and configuration, no clinical content.
@@ -227,6 +255,8 @@ ROLE_SETTINGS: dict[str, dict] = {
 	ROLE_HEAD_OPS: {"desk_access": 1, "home_page": "app/patient-visit"},
 	# Phase 5M: the Maternity workspace may replace this list route later (integrator).
 	ROLE_MIDWIFE: {"desk_access": 1, "home_page": "app/maternity-admission"},
+	# Phase 6S: the Stores workspace (the integrator adds it with the desk area).
+	ROLE_STORE_KEEPER: {"desk_access": 1, "home_page": "app/stores"},
 	ROLE_SYSADMIN: {"desk_access": 1, "home_page": "app/user", "two_factor_auth": 1},
 	# No desk access (SDD §6.1): the outreach app (Phase 4) is the only entry point.
 	ROLE_OUTREACH: {"desk_access": 0},

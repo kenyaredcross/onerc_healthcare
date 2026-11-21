@@ -43,6 +43,7 @@ from onerc_healthcare.pharmacy.dispensing import (
 from onerc_healthcare.pharmacy.tasks import is_pharmacy_complete
 from onerc_healthcare.tests.base import EMRTestCase
 from onerc_healthcare.tests.factories import get_facility, make_patient, make_user
+from onerc_healthcare.tests.stock_factories import dispensed_item, stock_for_dispensing
 from onerc_healthcare.tests.visit_factories import make_visit, make_visit_users
 from onerc_healthcare.visit import engine, tasks
 from onerc_healthcare.visit.patients import InactivePatientError
@@ -119,7 +120,13 @@ class PharmacyTestCase(EMRTestCase):
 		)
 		return encounter
 
+	# Phase 6S: dispense() first stocks the facility Pharmacy with what it dispenses (S3 blocks short dispensing).
+	# A test of the shortage block sets this to False and stocks the store itself.
+	auto_stock = True
+
 	def dispense(self, mr: str, qty=None, outcome="Dispensed", final=0, submit=True, user="pharmacist", **kw):
+		if self.auto_stock and outcome == "Dispensed":
+			stock_for_dispensing(mr, qty, item=dispensed_item(kw))
 		with self.as_user(user):
 			doc = frappe.get_doc(
 				{
@@ -148,8 +155,9 @@ class PharmacyTestCase(EMRTestCase):
 
 
 class TestCatalogue(PharmacyTestCase):
-	def test_catalogue_seeded_non_stock_without_prices(self):
-		"""OI-9 / C-5: every catalogue medicine is an enabled non-stock Item with no Item Price."""
+	def test_catalogue_seeded_without_prices(self):
+		"""OI-9 / C-5: every catalogue medicine is an enabled Item with no Item Price; since Phase 6S a batch stock
+		item with expiry (quantity only), never a sales item."""
 		data = catalogue.load_catalogue()
 		names = [m["name"] for m in data["medications"]]
 		self.assertGreaterEqual(len(names), 20)
@@ -161,9 +169,29 @@ class TestCatalogue(PharmacyTestCase):
 			self.assertTrue(med, name)
 			self.assertEqual((med.is_orderable, med.disabled), (1, 0), name)
 			item = frappe.db.get_value(
-				"Item", name, ["is_stock_item", "disabled", "is_sales_item", "item_group"], as_dict=True
+				"Item",
+				name,
+				[
+					"is_stock_item",
+					"has_batch_no",
+					"has_expiry_date",
+					"disabled",
+					"is_sales_item",
+					"item_group",
+				],
+				as_dict=True,
 			)
-			self.assertEqual((item.is_stock_item, item.disabled, item.is_sales_item), (0, 0, 0), name)
+			self.assertEqual(
+				(
+					item.is_stock_item,
+					item.has_batch_no,
+					item.has_expiry_date,
+					item.disabled,
+					item.is_sales_item,
+				),
+				(1, 1, 1, 0, 0),
+				name,
+			)
 			self.assertEqual(item.item_group, data["item_group"])
 			row = frappe.db.get_value(
 				"Medication Linked Item",
@@ -173,7 +201,6 @@ class TestCatalogue(PharmacyTestCase):
 			)
 			self.assertEqual((row.item, row.is_billable, row.change_in_item), (name, 1, 0), name)
 		self.assertFalse(frappe.db.exists("Item Price", {"item_code": ["in", names]}))
-		self.assertFalse(frappe.db.exists("Bin", {"item_code": ["in", names]}))
 
 	def test_catalogue_seed_is_idempotent(self):
 		before = (
@@ -199,7 +226,7 @@ class TestCatalogue(PharmacyTestCase):
 		"""Marley's Medication.on_update must not create an Item Price or disable the Item (C-5)."""
 		frappe.get_doc("Medication", PARA).save(ignore_permissions=True)
 		self.assertEqual(frappe.db.get_value("Item", PARA, "disabled"), 0)
-		self.assertEqual(frappe.db.get_value("Item", PARA, "is_stock_item"), 0)
+		self.assertEqual(frappe.db.get_value("Item", PARA, ["is_stock_item", "has_batch_no"]), (1, 1))
 		self.assertFalse(frappe.db.exists("Item Price", {"item_code": PARA}))
 
 	def test_clinician_can_pick_catalogue_items_in_drug_row(self):

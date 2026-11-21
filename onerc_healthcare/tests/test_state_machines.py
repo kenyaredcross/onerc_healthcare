@@ -85,6 +85,7 @@ from onerc_healthcare.tests.sm_helpers import (
 	violations,
 	visit_state,
 )
+from onerc_healthcare.tests.stock_factories import dispensed_item, stock_for_dispensing
 from onerc_healthcare.tests.test_lab import HB, MRDT, LabTestCase
 from onerc_healthcare.tests.visit_factories import make_submitted_encounter, make_visit, make_vital_signs
 from onerc_healthcare.visit import engine, tasks
@@ -174,6 +175,8 @@ class SMCase(EMRTestCase):
 		)
 
 	def dispense(self, mr: str, qty=None, outcome="Dispensed", final=0, user="pharmacist", **kw):
+		if outcome == "Dispensed":
+			stock_for_dispensing(mr, qty, item=dispensed_item(kw))  # Phase 6S
 		with as_user(self.users[user]):
 			doc = frappe.get_doc(
 				{
@@ -1314,6 +1317,7 @@ class TestMarleyScenarios(LabTestCase):
 			return complete_consultation(encounter, reason=reason, no_diagnosis_reason="T- auditor")
 
 	def dispense(self, mr: str, qty=None, user="pharmacist", **kw):
+		stock_for_dispensing(mr, qty, item=dispensed_item(kw))  # Phase 6S
 		with as_user(self.users[user]):
 			doc = frappe.get_doc(
 				{

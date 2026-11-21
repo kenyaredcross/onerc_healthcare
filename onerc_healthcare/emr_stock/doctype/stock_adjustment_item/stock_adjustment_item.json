@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-21 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item",
+  "item_name",
+  "uom",
+  "batch",
+  "batch_no",
+  "expiry_date",
+  "column_break_qty",
+  "current_qty",
+  "counted_qty",
+  "qty",
+  "reason"
+ ],
+ "fields": [
+  {
+   "columns": 3,
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "item.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fetch_from": "item.stock_uom",
+   "fieldname": "uom",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "UOM",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "description": "An existing batch (Physical Count, Write-off).",
+   "fieldname": "batch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Batch",
+   "options": "Batch"
+  },
+  {
+   "description": "Opening Count of a batch not yet in the system: the number as printed.",
+   "fieldname": "batch_no",
+   "fieldtype": "Data",
+   "label": "Batch No. (new)"
+  },
+  {
+   "description": "Opening Count of a new batch.",
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Expiry Date"
+  },
+  {
+   "fieldname": "column_break_qty",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 1,
+   "description": "Balance of the batch in the store when the adjustment was sent for approval.",
+   "fieldname": "current_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Current Qty",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "description": "Counts only.",
+   "fieldname": "counted_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Counted Qty"
+  },
+  {
+   "columns": 1,
+   "description": "Write-off only.",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty Written Off",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR Stock",
+ "name": "Stock Adjustment Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

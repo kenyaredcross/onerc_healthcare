@@ -45,6 +45,7 @@ from onerc_healthcare.tests.base import EMRTestCase
 from onerc_healthcare.tests.clinical_factories import LAB_TEST, as_user
 from onerc_healthcare.tests.factories import get_facility, make_patient
 from onerc_healthcare.tests.outreach_factories import make_catchment, make_session, outreach_users
+from onerc_healthcare.tests.stock_factories import stock_outreach
 from onerc_healthcare.tests.visit_factories import get_triage_level
 
 MRDT = "Malaria Rapid Diagnostic Test"
@@ -165,6 +166,9 @@ class SyncCase(EMRTestCase):
 		}
 
 	def drug(self, medication=PARACETAMOL, dosage="BID", period="5 Day", dispensed=None) -> dict:
+		if dispensed and isinstance(dispensed, dict):
+			# Phase 6S: field dispensing deducts from the session facility's Outreach store (S3)
+			stock_outreach(self.facility, medication, dispensed.get("quantity"))
 		return {
 			"line_id": random_string(4),
 			"medication": medication,

@@ -241,6 +241,11 @@ def _install_workstreams() -> None:
 	pharmacy_setup.install()
 	frontdesk_setup.install()
 	privacy_setup.install()
+	# Phase 6S (W0): stock settings, perpetual inventory off, stores per facility, medicines as batch stock items.
+	# After pharmacy (its catalogue creates the medicine Items), before security (matrix over stock DocTypes).
+	from onerc_healthcare.stock import setup as stock_setup
+
+	stock_setup.install()
 	# Security last among the workstreams: it applies perms/archive fields over everything that exists.
 	security_setup.install()
 	coding_setup.install()

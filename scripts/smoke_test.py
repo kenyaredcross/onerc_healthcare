@@ -380,6 +380,42 @@ def phase3_checks(a, clients: dict, visit: str) -> None:
 	check("14b. Generating a submitted run is refused", not r.ok, f"HTTP {r.status_code}")
 
 
+def stock_store_over_http(
+	admin: "Client", facility: str, store_type: str, item: str, qty: float
+) -> tuple[bool, str]:
+	"""Phase 6S: put `qty` of `item` into the facility's `store_type` store (a new batch expiring in a year, rate 0,
+	quantity only) with a Material Receipt, as Administrator. Returns (ok, detail)."""
+	r = admin.get(
+		"/api/resource/Warehouse",
+		filters=[["krcs_facility", "=", facility], ["krcs_store_type", "=", store_type]],
+		fields=["name", "company"],
+	)
+	rows = r.json().get("data", []) if r.ok else []
+	if not rows:
+		return False, f"no {store_type} store for {facility}: {err(r)}"
+	store, company = rows[0]["name"], rows[0]["company"]
+	expiry = date(date.today().year + 1, date.today().month, min(date.today().day, 28)).isoformat()
+	batch = f"SMOKE-{rand(8)}"
+	r = admin.post("/api/resource/Batch", {"batch_id": batch, "item": item, "expiry_date": expiry})
+	if not r.ok:
+		return False, f"batch: {err(r)}"
+	row = {
+		"item_code": item,
+		"qty": qty,
+		"t_warehouse": store,
+		"batch_no": batch,
+		"use_serial_batch_fields": 1,
+		"basic_rate": 0,
+		"allow_zero_valuation_rate": 1,
+		"set_basic_rate_manually": 1,
+	}
+	r = admin.post(
+		"/api/resource/Stock Entry",
+		{"stock_entry_type": "Material Receipt", "company": company, "items": [row], "docstatus": 1},
+	)
+	return r.ok, (f"{qty} {item} into {store}" if r.ok else f"stock entry: {err(r)}")
+
+
 def phase4_checks(a, admin: "Client", clients: dict, existing_unhcr: str) -> None:
 	"""Steps 15-22: an outreach device simulated over HTTP (Phase 4, docs/OUTREACH_PROTOCOL.md)."""
 	import base64
@@ -534,6 +570,12 @@ def phase4_checks(a, admin: "Client", clients: dict, existing_unhcr: str) -> Non
 			"depends_on": list(depends),
 			"payload": payload,
 		}
+
+	# Phase 6S: field dispensing deducts from the facility's Outreach store; stock it first (Administrator, as the
+	# smoke test has no Store Keeper flow yet). The sync never fails on stock either way.
+	if med.get("name"):
+		ok, detail = stock_store_over_http(admin, a.facility, "Outreach", med.get("item") or med["name"], 10)
+		check("19-. Administrator stocks the facility Outreach store", ok, detail)
 
 	reg = envelope(
 		"patient.register",
