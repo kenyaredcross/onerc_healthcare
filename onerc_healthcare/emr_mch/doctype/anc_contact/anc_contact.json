@@ -1,0 +1,476 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-11-21 10:00:00.000000",
+ "custom": 0,
+ "description": "One antenatal clinic contact (CON-14, provisional OI-8; WHO 2016, 8 contacts). The pregnancy is the mother's open ANC Pregnancy (set by the server).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "patient",
+  "patient_name",
+  "visit",
+  "encounter",
+  "facility",
+  "column_break_head",
+  "pregnancy",
+  "contact_date",
+  "contact_number",
+  "gestation",
+  "examination_section",
+  "weight_kg",
+  "bp_systolic",
+  "bp_diastolic",
+  "haemoglobin",
+  "column_break_exam",
+  "fundal_height_cm",
+  "presentation",
+  "foetal_heart_rate",
+  "foetal_movement",
+  "column_break_exam_2",
+  "urine_protein",
+  "urine_glucose",
+  "preventive_section",
+  "td_dose",
+  "iptp_dose",
+  "column_break_prev",
+  "iron_folate",
+  "deworming",
+  "llin_given",
+  "danger_section",
+  "ds_vaginal_bleeding",
+  "ds_severe_headache",
+  "ds_blurred_vision",
+  "column_break_danger_3",
+  "ds_convulsions",
+  "ds_fever",
+  "ds_reduced_foetal_movement",
+  "column_break_danger_6",
+  "ds_severe_abdominal_pain",
+  "ds_leaking_liquor",
+  "ds_swelling",
+  "danger_sign_notes",
+  "plan_section",
+  "counselling",
+  "plan",
+  "column_break_plan",
+  "referred",
+  "next_visit_date",
+  "recorded_by",
+  "addendum_section",
+  "addendum"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "default": "ANCV-.YYYY.-",
+   "options": "ANCV-.YYYY.-",
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "visit",
+   "fieldtype": "Link",
+   "label": "Patient Visit",
+   "options": "Patient Visit",
+   "search_index": 1,
+   "set_only_once": 1,
+   "reqd": 1,
+   "description": "The open visit of this patient during which it was recorded."
+  },
+  {
+   "fieldname": "encounter",
+   "fieldtype": "Link",
+   "label": "Consultation",
+   "options": "Patient Encounter",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set by the server when recorded from a consultation."
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "read_only": 1,
+   "description": "Set by the server from the visit."
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pregnancy",
+   "fieldtype": "Link",
+   "label": "Pregnancy",
+   "options": "ANC Pregnancy",
+   "search_index": 1,
+   "read_only": 1,
+   "description": "The mother's open pregnancy (set by the server; book it first)."
+  },
+  {
+   "fieldname": "contact_date",
+   "fieldtype": "Date",
+   "label": "Contact Date",
+   "default": "Today",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "contact_number",
+   "fieldtype": "Int",
+   "label": "Contact Number",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "gestation",
+   "fieldtype": "Data",
+   "label": "Gestation",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "examination_section",
+   "fieldtype": "Section Break",
+   "label": "Examination"
+  },
+  {
+   "fieldname": "weight_kg",
+   "fieldtype": "Float",
+   "label": "Weight (kg)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "bp_systolic",
+   "fieldtype": "Int",
+   "label": "BP Systolic (mmHg)"
+  },
+  {
+   "fieldname": "bp_diastolic",
+   "fieldtype": "Int",
+   "label": "BP Diastolic (mmHg)"
+  },
+  {
+   "fieldname": "haemoglobin",
+   "fieldtype": "Float",
+   "label": "Hb (g/dL)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "column_break_exam",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fundal_height_cm",
+   "fieldtype": "Float",
+   "label": "Fundal Height (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "presentation",
+   "fieldtype": "Select",
+   "label": "Presentation",
+   "options": "\nCephalic\nBreech\nTransverse\nOblique\nNot determined"
+  },
+  {
+   "fieldname": "foetal_heart_rate",
+   "fieldtype": "Int",
+   "label": "Foetal Heart Rate (/min)"
+  },
+  {
+   "fieldname": "foetal_movement",
+   "fieldtype": "Select",
+   "label": "Foetal Movement",
+   "options": "\nPresent\nReduced\nAbsent\nNot assessed"
+  },
+  {
+   "fieldname": "column_break_exam_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "urine_protein",
+   "fieldtype": "Select",
+   "label": "Urine Protein",
+   "options": "\nNil\nTrace\n+\n++\n+++"
+  },
+  {
+   "fieldname": "urine_glucose",
+   "fieldtype": "Select",
+   "label": "Urine Glucose",
+   "options": "\nNil\nTrace\n+\n++\n+++"
+  },
+  {
+   "fieldname": "preventive_section",
+   "fieldtype": "Section Break",
+   "label": "Preventive Care"
+  },
+  {
+   "fieldname": "td_dose",
+   "fieldtype": "Select",
+   "label": "Td (tetanus-diphtheria)",
+   "options": "\nTd1\nTd2\nTd3\nTd4\nTd5\nNot due"
+  },
+  {
+   "fieldname": "iptp_dose",
+   "fieldtype": "Select",
+   "label": "IPTp (SP)",
+   "options": "\nIPTp1\nIPTp2\nIPTp3\nIPTp4\nIPTp5\nNot given"
+  },
+  {
+   "fieldname": "column_break_prev",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "iron_folate",
+   "fieldtype": "Check",
+   "label": "Iron and Folate Given"
+  },
+  {
+   "fieldname": "deworming",
+   "fieldtype": "Check",
+   "label": "Dewormed"
+  },
+  {
+   "fieldname": "llin_given",
+   "fieldtype": "Check",
+   "label": "Mosquito Net (LLIN) Given"
+  },
+  {
+   "fieldname": "danger_section",
+   "fieldtype": "Section Break",
+   "label": "Danger Signs"
+  },
+  {
+   "fieldname": "ds_vaginal_bleeding",
+   "fieldtype": "Check",
+   "label": "Vaginal bleeding"
+  },
+  {
+   "fieldname": "ds_severe_headache",
+   "fieldtype": "Check",
+   "label": "Severe headache"
+  },
+  {
+   "fieldname": "ds_blurred_vision",
+   "fieldtype": "Check",
+   "label": "Blurred vision"
+  },
+  {
+   "fieldname": "column_break_danger_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ds_convulsions",
+   "fieldtype": "Check",
+   "label": "Convulsions"
+  },
+  {
+   "fieldname": "ds_fever",
+   "fieldtype": "Check",
+   "label": "Fever"
+  },
+  {
+   "fieldname": "ds_reduced_foetal_movement",
+   "fieldtype": "Check",
+   "label": "Reduced foetal movement"
+  },
+  {
+   "fieldname": "column_break_danger_6",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ds_severe_abdominal_pain",
+   "fieldtype": "Check",
+   "label": "Severe abdominal pain"
+  },
+  {
+   "fieldname": "ds_leaking_liquor",
+   "fieldtype": "Check",
+   "label": "Leaking liquor"
+  },
+  {
+   "fieldname": "ds_swelling",
+   "fieldtype": "Check",
+   "label": "Swelling of face or hands"
+  },
+  {
+   "fieldname": "danger_sign_notes",
+   "fieldtype": "Small Text",
+   "label": "Danger Sign Notes"
+  },
+  {
+   "fieldname": "plan_section",
+   "fieldtype": "Section Break",
+   "label": "Counselling and Plan"
+  },
+  {
+   "fieldname": "counselling",
+   "fieldtype": "Small Text",
+   "label": "Counselling Given"
+  },
+  {
+   "fieldname": "plan",
+   "fieldtype": "Small Text",
+   "label": "Plan"
+  },
+  {
+   "fieldname": "column_break_plan",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "referred",
+   "fieldtype": "Check",
+   "label": "Referred"
+  },
+  {
+   "fieldname": "next_visit_date",
+   "fieldtype": "Date",
+   "label": "Next Visit"
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "label": "Recorded By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "addendum_section",
+   "fieldtype": "Section Break",
+   "label": "Addendum",
+   "collapsible": 1,
+   "depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "fieldname": "addendum",
+   "fieldtype": "Text",
+   "label": "Addendum",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "description": "Corrections after submission: timestamped, signed entries (Add Addendum). Never edited."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-11-21 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR MCH",
+ "name": "ANC Contact",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Clinical Officer",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Midwife",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Medical In-Charge",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Mental Health Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HIS Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 0
+}

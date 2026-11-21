@@ -55,6 +55,10 @@ doc_events = {
 		],
 		"on_submit": "onerc_healthcare.visit.events.vital_signs_on_submit",
 	},
+	# MCH (W0): submitting the mother's Delivery Record closes her open ANC Pregnancy (MCH-A)
+	"Delivery Record": {
+		"on_submit": "onerc_healthcare.mch.anc.close_on_delivery",
+	},
 	"User": {
 		"validate": "onerc_healthcare.security.user_guard.user_validate",
 	},

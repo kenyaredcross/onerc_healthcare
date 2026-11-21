@@ -144,6 +144,9 @@ from onerc_healthcare.constants import (
 	DISPENSING_DOCTYPE,
 	ENCOUNTER_DOCTYPE,
 	MATERNITY_DISCHARGE_OUTCOMES,
+	MCH_RECORD_DOCTYPES,
+	PNC_SUBJECT_BABY,
+	PNC_SUBJECT_MOTHER,
 	REFERRAL_DOCTYPE,
 	SERVICE_DELIVERED_DOCTYPE,
 	SERVICE_TYPE_DOCTYPE,
@@ -174,6 +177,7 @@ SOURCE_SERVICES = "Service Delivered"
 SOURCE_COMMUNITY = "Community Activity"
 SOURCE_DELIVERY = "Delivery"  # Phase 5M (M3): reporting/maternity.py
 SOURCE_MATERNITY_ADMISSION = "Maternity Admission"  # Phase 5M (M3): reporting/maternity.py
+SOURCE_MCH = "MCH Records"  # MCH (MCH-A): reporting/mch.py, MOH 717 B07-B09
 
 SEX_MALE = "Male"
 SEX_FEMALE = "Female"
@@ -282,11 +286,17 @@ RULE_SCHEMAS: dict[str, dict] = {
 		"measure": _choice("admissions", "discharges", "bed_days", "stay_days"),
 		"outcomes": _names(*MATERNITY_DISCHARGE_OUTCOMES),
 	},
+	SOURCE_MCH: {
+		"record_types": _names(*MCH_RECORD_DOCTYPES),
+		"unit": _choice("records", "visits", "patients"),
+		"pnc_subjects": _names(PNC_SUBJECT_MOTHER, PNC_SUBJECT_BABY),
+	},
 }
 REQUIRED_KEYS = {
 	SOURCE_REFERRALS: ("direction",),
 	SOURCE_OUTCOME: ("outcomes",),
 	SOURCE_MATERNITY_ADMISSION: ("measure",),
+	SOURCE_MCH: ("record_types",),
 }
 
 
@@ -326,6 +336,10 @@ def validate_rule(source_type: str, rule, disaggregation: str | None = None) -> 
 		from onerc_healthcare.reporting import maternity
 
 		errors += maternity.rule_errors(source_type, rule, disaggregation)
+	if source_type == SOURCE_MCH:
+		from onerc_healthcare.reporting import mch
+
+		errors += mch.rule_errors(rule, disaggregation)
 	return errors
 
 
@@ -838,6 +852,13 @@ def evaluate_maternity_admission(ctx: SourceContext, elements: list[ElementSpec]
 	from onerc_healthcare.reporting import maternity
 
 	return maternity.evaluate_maternity_admission(ctx, elements)
+
+
+def evaluate_mch(ctx: SourceContext, elements: list[ElementSpec]) -> dict[CellKey, int]:
+	"""MCH (MCH-A): `reporting.mch.evaluate` (MOH 717 B07 CWC, B08 ANC, B09 PNC attendances)."""
+	from onerc_healthcare.reporting import mch
+
+	return mch.evaluate(ctx, elements)
 
 
 def install() -> None:

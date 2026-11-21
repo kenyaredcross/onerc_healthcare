@@ -202,11 +202,17 @@
    "label": "Child welfare clinic (CWC) attendances",
    "section": "B. Special clinics",
    "sort_order": 10,
-   "source_type": null,
-   "rule": null,
+   "source_type": "MCH Records",
+   "rule": {
+    "record_types": [
+     "Immunisation",
+     "Growth Monitoring"
+    ],
+    "unit": "visits"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: MCH visit types are not captured (MCH module, Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -214,11 +220,16 @@
    "label": "Antenatal clinic (ANC) attendances",
    "section": "B. Special clinics",
    "sort_order": 11,
-   "source_type": null,
-   "rule": null,
+   "source_type": "MCH Records",
+   "rule": {
+    "record_types": [
+     "ANC Contact"
+    ],
+    "unit": "records"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: MCH visit types are not captured (MCH module, Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {
@@ -226,11 +237,16 @@
    "label": "Postnatal clinic (PNC) attendances",
    "section": "B. Special clinics",
    "sort_order": 12,
-   "source_type": null,
-   "rule": null,
+   "source_type": "MCH Records",
+   "rule": {
+    "record_types": [
+     "PNC Visit"
+    ],
+    "unit": "records"
+   },
    "disaggregation": "None",
-   "availability": "Gap",
-   "gap_note": "Gap — Wave 2 / OI-5: MCH visit types are not captured (MCH module, Wave 2)",
+   "availability": "Available",
+   "gap_note": null,
    "dhis2_uid": null
   },
   {

@@ -1,0 +1,423 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-11-21 10:00:00.000000",
+ "custom": 0,
+ "description": "A child's measurements at one visit with WHO Child Growth Standards z-scores (CON-17, provisional OI-8). Z-scores are calculated by the server (MCH-B); blank means not calculable.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "patient",
+  "patient_name",
+  "visit",
+  "encounter",
+  "facility",
+  "column_break_head",
+  "measured_on",
+  "sex",
+  "age_days",
+  "age_label",
+  "dob_estimated",
+  "measurements_section",
+  "weight_kg",
+  "length_height_cm",
+  "measurement_position",
+  "column_break_meas",
+  "muac_cm",
+  "head_circumference_cm",
+  "oedema",
+  "zscore_section",
+  "wfa_z",
+  "lhfa_z",
+  "wflh_z",
+  "column_break_z",
+  "underweight",
+  "stunting",
+  "wasting",
+  "zscore_note",
+  "plan_section",
+  "counselling",
+  "notes",
+  "column_break_plan",
+  "referred",
+  "next_visit_date",
+  "recorded_by",
+  "addendum_section",
+  "addendum"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "default": "GRM-.YYYY.-",
+   "options": "GRM-.YYYY.-",
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "visit",
+   "fieldtype": "Link",
+   "label": "Patient Visit",
+   "options": "Patient Visit",
+   "search_index": 1,
+   "set_only_once": 1,
+   "reqd": 1,
+   "description": "The open visit of this patient during which it was recorded."
+  },
+  {
+   "fieldname": "encounter",
+   "fieldtype": "Link",
+   "label": "Consultation",
+   "options": "Patient Encounter",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set by the server when recorded from a consultation."
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "read_only": 1,
+   "description": "Set by the server from the visit."
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "measured_on",
+   "fieldtype": "Date",
+   "label": "Measured On",
+   "default": "Today",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sex",
+   "fieldtype": "Data",
+   "label": "Sex",
+   "fetch_from": "patient.sex",
+   "read_only": 1
+  },
+  {
+   "fieldname": "age_days",
+   "fieldtype": "Int",
+   "label": "Age (days)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "age_label",
+   "fieldtype": "Data",
+   "label": "Age",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "dob_estimated",
+   "fieldtype": "Check",
+   "label": "Date of Birth Estimated",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Copied from the patient: z-scores are approximate."
+  },
+  {
+   "fieldname": "measurements_section",
+   "fieldtype": "Section Break",
+   "label": "Measurements"
+  },
+  {
+   "fieldname": "weight_kg",
+   "fieldtype": "Float",
+   "label": "Weight (kg)",
+   "precision": "2",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "length_height_cm",
+   "fieldtype": "Float",
+   "label": "Length / Height (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "measurement_position",
+   "fieldtype": "Select",
+   "label": "Measured",
+   "options": "\nLying (length)\nStanding (height)"
+  },
+  {
+   "fieldname": "column_break_meas",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "muac_cm",
+   "fieldtype": "Float",
+   "label": "MUAC (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "head_circumference_cm",
+   "fieldtype": "Float",
+   "label": "Head Circumference (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "oedema",
+   "fieldtype": "Select",
+   "label": "Bilateral Pitting Oedema",
+   "options": "None\n+\n++\n+++",
+   "default": "None"
+  },
+  {
+   "fieldname": "zscore_section",
+   "fieldtype": "Section Break",
+   "label": "WHO Z-scores (calculated)"
+  },
+  {
+   "fieldname": "wfa_z",
+   "fieldtype": "Data",
+   "label": "Weight-for-Age Z",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "lhfa_z",
+   "fieldtype": "Data",
+   "label": "Length/Height-for-Age Z",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "wflh_z",
+   "fieldtype": "Data",
+   "label": "Weight-for-Length/Height Z",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_z",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "underweight",
+   "fieldtype": "Select",
+   "label": "Weight for Age",
+   "options": "\nNormal\nModerate underweight\nSevere underweight",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "stunting",
+   "fieldtype": "Select",
+   "label": "Length/Height for Age",
+   "options": "\nNormal\nModerate stunting\nSevere stunting",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "wasting",
+   "fieldtype": "Select",
+   "label": "Acute Malnutrition",
+   "options": "\nNormal\nModerate acute malnutrition\nSevere acute malnutrition",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "zscore_note",
+   "fieldtype": "Small Text",
+   "label": "Calculation Note",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "plan_section",
+   "fieldtype": "Section Break",
+   "label": "Counselling and Plan"
+  },
+  {
+   "fieldname": "counselling",
+   "fieldtype": "Small Text",
+   "label": "Counselling Given"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "column_break_plan",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "referred",
+   "fieldtype": "Check",
+   "label": "Referred"
+  },
+  {
+   "fieldname": "next_visit_date",
+   "fieldtype": "Date",
+   "label": "Next Visit"
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "label": "Recorded By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "addendum_section",
+   "fieldtype": "Section Break",
+   "label": "Addendum",
+   "collapsible": 1,
+   "depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "fieldname": "addendum",
+   "fieldtype": "Text",
+   "label": "Addendum",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "description": "Corrections after submission: timestamped, signed entries (Add Addendum). Never edited."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-11-21 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR MCH",
+ "name": "Growth Monitoring",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Clinical Officer",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Midwife",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Medical In-Charge",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Triage Nurse",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Mental Health Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HIS Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 0
+}

@@ -1,0 +1,477 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-11-21 10:00:00.000000",
+ "custom": 0,
+ "description": "Postnatal check of a mother or a baby (CON-15, provisional OI-8). Recorded during an open visit, or on the ward against the mother's Maternity Admission (the admitting visit is closed).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "patient",
+  "patient_name",
+  "visit",
+  "encounter",
+  "facility",
+  "maternity_admission",
+  "column_break_head",
+  "subject",
+  "mother",
+  "delivery_record",
+  "pnc_date",
+  "timing",
+  "days_after_delivery",
+  "mother_section",
+  "m_bp_systolic",
+  "m_bp_diastolic",
+  "m_temperature",
+  "m_pulse",
+  "column_break_mother",
+  "m_breasts",
+  "m_uterus",
+  "m_lochia",
+  "column_break_mother_2",
+  "m_perineum",
+  "m_cs_wound",
+  "m_mood",
+  "fp_section",
+  "fp_counselled",
+  "column_break_fp",
+  "fp_method",
+  "m_danger_signs",
+  "baby_section",
+  "b_temperature",
+  "b_weight_kg",
+  "column_break_baby",
+  "b_cord",
+  "b_feeding",
+  "column_break_baby_2",
+  "b_jaundice",
+  "b_eyes",
+  "b_danger_signs",
+  "plan_section",
+  "notes",
+  "column_break_plan",
+  "referred",
+  "next_visit_date",
+  "recorded_by",
+  "addendum_section",
+  "addendum"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "default": "PNC-.YYYY.-",
+   "options": "PNC-.YYYY.-",
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Patient Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "visit",
+   "fieldtype": "Link",
+   "label": "Patient Visit",
+   "options": "Patient Visit",
+   "search_index": 1,
+   "set_only_once": 1,
+   "description": "The open visit of this patient during which it was recorded."
+  },
+  {
+   "fieldname": "encounter",
+   "fieldtype": "Link",
+   "label": "Consultation",
+   "options": "Patient Encounter",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set by the server when recorded from a consultation."
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "read_only": 1,
+   "description": "Set by the server from the visit."
+  },
+  {
+   "fieldname": "maternity_admission",
+   "fieldtype": "Link",
+   "label": "Maternity Admission",
+   "options": "Maternity Admission",
+   "set_only_once": 1,
+   "description": "On the ward: the mother's open admission (instead of a visit)."
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Select",
+   "label": "Check Of",
+   "options": "Mother\nBaby",
+   "default": "Mother",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "mother",
+   "fieldtype": "Link",
+   "label": "Mother",
+   "options": "Patient",
+   "read_only": 1,
+   "search_index": 1,
+   "description": "Set by the server: the patient, or the baby's mother."
+  },
+  {
+   "fieldname": "delivery_record",
+   "fieldtype": "Link",
+   "label": "Delivery Record",
+   "options": "Delivery Record",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "pnc_date",
+   "fieldtype": "Date",
+   "label": "Date",
+   "default": "Today",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "timing",
+   "fieldtype": "Select",
+   "label": "Timing",
+   "options": "\nWithin 48 hours\n1 to 2 weeks\n4 to 6 weeks\nOther",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "days_after_delivery",
+   "fieldtype": "Int",
+   "label": "Days After Delivery",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "mother_section",
+   "fieldtype": "Section Break",
+   "label": "Mother",
+   "depends_on": "eval:doc.subject=='Mother'"
+  },
+  {
+   "fieldname": "m_bp_systolic",
+   "fieldtype": "Int",
+   "label": "BP Systolic (mmHg)"
+  },
+  {
+   "fieldname": "m_bp_diastolic",
+   "fieldtype": "Int",
+   "label": "BP Diastolic (mmHg)"
+  },
+  {
+   "fieldname": "m_temperature",
+   "fieldtype": "Float",
+   "label": "Temperature (°C)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "m_pulse",
+   "fieldtype": "Int",
+   "label": "Pulse (/min)"
+  },
+  {
+   "fieldname": "column_break_mother",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "m_breasts",
+   "fieldtype": "Select",
+   "label": "Breasts",
+   "options": "\nNormal\nEngorged\nCracked nipples\nMastitis"
+  },
+  {
+   "fieldname": "m_uterus",
+   "fieldtype": "Select",
+   "label": "Uterus",
+   "options": "\nWell contracted\nNot well contracted\nTender"
+  },
+  {
+   "fieldname": "m_lochia",
+   "fieldtype": "Select",
+   "label": "Lochia",
+   "options": "\nNormal\nFoul smelling\nExcessive"
+  },
+  {
+   "fieldname": "column_break_mother_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "m_perineum",
+   "fieldtype": "Select",
+   "label": "Perineum",
+   "options": "\nHealed\nHealing\nInfected\nBroken down\nNot applicable"
+  },
+  {
+   "fieldname": "m_cs_wound",
+   "fieldtype": "Select",
+   "label": "Caesarean Wound",
+   "options": "\nHealed\nHealing\nInfected\nNot applicable"
+  },
+  {
+   "fieldname": "m_mood",
+   "fieldtype": "Select",
+   "label": "Mood",
+   "options": "\nNormal\nLow mood\nDepression suspected"
+  },
+  {
+   "fieldname": "fp_section",
+   "fieldtype": "Section Break",
+   "label": "Family Planning",
+   "depends_on": "eval:doc.subject=='Mother'"
+  },
+  {
+   "fieldname": "fp_counselled",
+   "fieldtype": "Check",
+   "label": "Family Planning Counselled"
+  },
+  {
+   "fieldname": "column_break_fp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fp_method",
+   "fieldtype": "Select",
+   "label": "Method Started",
+   "options": "\nNone\nLactational amenorrhoea\nCondoms\nPills\nInjectable\nImplant\nIUCD\nTubal ligation\nOther"
+  },
+  {
+   "fieldname": "m_danger_signs",
+   "fieldtype": "Small Text",
+   "label": "Danger Signs (Mother)",
+   "depends_on": "eval:doc.subject=='Mother'"
+  },
+  {
+   "fieldname": "baby_section",
+   "fieldtype": "Section Break",
+   "label": "Baby",
+   "depends_on": "eval:doc.subject=='Baby'"
+  },
+  {
+   "fieldname": "b_temperature",
+   "fieldtype": "Float",
+   "label": "Temperature (°C)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "b_weight_kg",
+   "fieldtype": "Float",
+   "label": "Weight (kg)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_baby",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "b_cord",
+   "fieldtype": "Select",
+   "label": "Cord",
+   "options": "\nClean and dry\nInfected\nBleeding"
+  },
+  {
+   "fieldname": "b_feeding",
+   "fieldtype": "Select",
+   "label": "Feeding",
+   "options": "\nExclusive breastfeeding\nMixed feeding\nReplacement feeding\nPoor feeding"
+  },
+  {
+   "fieldname": "column_break_baby_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "b_jaundice",
+   "fieldtype": "Select",
+   "label": "Jaundice",
+   "options": "\nNone\nMild\nSevere"
+  },
+  {
+   "fieldname": "b_eyes",
+   "fieldtype": "Select",
+   "label": "Eyes",
+   "options": "\nNormal\nDischarge"
+  },
+  {
+   "fieldname": "b_danger_signs",
+   "fieldtype": "Small Text",
+   "label": "Danger Signs (Baby)"
+  },
+  {
+   "fieldname": "plan_section",
+   "fieldtype": "Section Break",
+   "label": "Notes and Plan"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "column_break_plan",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "referred",
+   "fieldtype": "Check",
+   "label": "Referred"
+  },
+  {
+   "fieldname": "next_visit_date",
+   "fieldtype": "Date",
+   "label": "Next Visit"
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "label": "Recorded By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "addendum_section",
+   "fieldtype": "Section Break",
+   "label": "Addendum",
+   "collapsible": 1,
+   "depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "fieldname": "addendum",
+   "fieldtype": "Text",
+   "label": "Addendum",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "description": "Corrections after submission: timestamped, signed entries (Add Addendum). Never edited."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-11-21 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR MCH",
+ "name": "PNC Visit",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Clinical Officer",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Midwife",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Medical In-Charge",
+   "share": 0,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Mental Health Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HIS Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 0
+}

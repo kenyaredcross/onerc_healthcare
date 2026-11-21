@@ -1,0 +1,395 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-11-21 10:00:00.000000",
+ "custom": 0,
+ "description": "One pregnancy followed in the antenatal clinic (CON-14, provisional OI-8). One open per mother; closed automatically when her Delivery Record is submitted (MCH-A).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "patient",
+  "patient_name",
+  "facility",
+  "column_break_head",
+  "status",
+  "booking_date",
+  "booking_visit",
+  "pregnancy_section",
+  "lmp",
+  "edd_basis",
+  "edd",
+  "column_break_pregnancy",
+  "gravida",
+  "para",
+  "gestation",
+  "booking_tests_section",
+  "blood_group",
+  "rhesus",
+  "haemoglobin",
+  "column_break_tests",
+  "hiv_status",
+  "syphilis",
+  "hepatitis_b",
+  "column_break_tests_2",
+  "height_cm",
+  "muac_cm",
+  "risk_section",
+  "risk_factors",
+  "remarks",
+  "closure_section",
+  "closed_reason",
+  "closed_on",
+  "closed_by",
+  "column_break_closure",
+  "delivery_record",
+  "closure_note",
+  "recorded_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "default": "ANC-.YYYY.-",
+   "options": "ANC-.YYYY.-",
+   "hidden": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1,
+   "description": "Set per operation in EMR Naming Settings (D19)."
+  },
+  {
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Mother",
+   "options": "Patient",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "patient_name",
+   "fieldtype": "Data",
+   "label": "Mother's Name",
+   "fetch_from": "patient.patient_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "facility",
+   "fieldtype": "Link",
+   "label": "Facility",
+   "options": "Healthcare Service Unit",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nClosed",
+   "default": "Open",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "booking_date",
+   "fieldtype": "Date",
+   "label": "Booking Date",
+   "default": "Today",
+   "reqd": 1
+  },
+  {
+   "fieldname": "booking_visit",
+   "fieldtype": "Link",
+   "label": "Booking Visit",
+   "options": "Patient Visit",
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "pregnancy_section",
+   "fieldtype": "Section Break",
+   "label": "Pregnancy"
+  },
+  {
+   "fieldname": "lmp",
+   "fieldtype": "Date",
+   "label": "LMP"
+  },
+  {
+   "fieldname": "edd_basis",
+   "fieldtype": "Select",
+   "label": "EDD Basis",
+   "options": "LMP\nUltrasound\nClinical estimate",
+   "default": "LMP",
+   "description": "LMP: the EDD is LMP + 280 days. Ultrasound / Clinical estimate: the EDD is typed."
+  },
+  {
+   "fieldname": "edd",
+   "fieldtype": "Date",
+   "label": "EDD",
+   "in_list_view": 1,
+   "read_only_depends_on": "eval:(doc.edd_basis || 'LMP') == 'LMP' && doc.lmp"
+  },
+  {
+   "fieldname": "column_break_pregnancy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gravida",
+   "fieldtype": "Int",
+   "label": "Gravida",
+   "description": "Every pregnancy including this one."
+  },
+  {
+   "fieldname": "para",
+   "fieldtype": "Data",
+   "label": "Para",
+   "description": "Earlier births (+ abortions), e.g. 2+1."
+  },
+  {
+   "fieldname": "gestation",
+   "fieldtype": "Data",
+   "label": "Gestation Today",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "booking_tests_section",
+   "fieldtype": "Section Break",
+   "label": "Booking Tests"
+  },
+  {
+   "fieldname": "blood_group",
+   "fieldtype": "Select",
+   "label": "Blood Group",
+   "options": "\nA\nB\nAB\nO"
+  },
+  {
+   "fieldname": "rhesus",
+   "fieldtype": "Select",
+   "label": "Rhesus",
+   "options": "\nPositive\nNegative"
+  },
+  {
+   "fieldname": "haemoglobin",
+   "fieldtype": "Float",
+   "label": "Hb (g/dL)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "column_break_tests",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "hiv_status",
+   "fieldtype": "Select",
+   "label": "HIV",
+   "options": "\nNegative\nPositive\nKnown positive\nNot tested"
+  },
+  {
+   "fieldname": "syphilis",
+   "fieldtype": "Select",
+   "label": "Syphilis",
+   "options": "\nNon-reactive\nReactive\nNot tested"
+  },
+  {
+   "fieldname": "hepatitis_b",
+   "fieldtype": "Select",
+   "label": "Hepatitis B",
+   "options": "\nNegative\nPositive\nNot tested"
+  },
+  {
+   "fieldname": "column_break_tests_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "height_cm",
+   "fieldtype": "Float",
+   "label": "Height (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "muac_cm",
+   "fieldtype": "Float",
+   "label": "MUAC (cm)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "risk_section",
+   "fieldtype": "Section Break",
+   "label": "Risk Factors and Remarks"
+  },
+  {
+   "fieldname": "risk_factors",
+   "fieldtype": "Small Text",
+   "label": "Risk Factors",
+   "description": "e.g. previous caesarean, age under 18 or over 35, grand multipara, previous stillbirth."
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "closure_section",
+   "fieldtype": "Section Break",
+   "label": "Closure",
+   "collapsible": 1,
+   "depends_on": "eval:doc.status=='Closed'"
+  },
+  {
+   "fieldname": "closed_reason",
+   "fieldtype": "Select",
+   "label": "Closed Because",
+   "options": "\nDelivered\nPregnancy ended\nTransferred out",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "closed_on",
+   "fieldtype": "Date",
+   "label": "Closed On",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "closed_by",
+   "fieldtype": "Link",
+   "label": "Closed By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_closure",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "delivery_record",
+   "fieldtype": "Link",
+   "label": "Delivery Record",
+   "options": "Delivery Record",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "closure_note",
+   "fieldtype": "Small Text",
+   "label": "Closure Note",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "label": "Booked By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2026-11-21 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR MCH",
+ "name": "ANC Pregnancy",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Clinical Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Midwife",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Medical In-Charge",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Mental Health Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HIS Officer",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "patient_name",
+ "track_changes": 1
+}

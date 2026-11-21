@@ -172,6 +172,12 @@ CLINICAL_DOCTYPES = (
 	"Maternity Admission",
 	"Partograph",
 	"Delivery Record",
+	# MCH (W0 contract)
+	"ANC Pregnancy",
+	"ANC Contact",
+	"PNC Visit",
+	"Immunisation",
+	"Growth Monitoring",
 )
 
 VISIT_DOCTYPE = "Patient Visit"
@@ -230,6 +236,11 @@ ACCESS_LOGGED_DOCTYPES = (
 	"Maternity Admission",  # Phase 5M
 	"Partograph",  # Phase 5M
 	"Delivery Record",  # Phase 5M
+	"ANC Pregnancy",  # MCH
+	"ANC Contact",  # MCH
+	"PNC Visit",  # MCH
+	"Immunisation",  # MCH
+	"Growth Monitoring",  # MCH
 )
 
 # Modules of this app (our own DocTypes live in these; security setup leaves their JSON perms alone)
@@ -247,6 +258,7 @@ APP_MODULES = (
 	"EMR Community",
 	"EMR Outreach",
 	"EMR Maternity",
+	"EMR MCH",
 )
 
 # Script/query reports the Phase 2 builders create (exact names; the sidebar links them)
@@ -530,3 +542,68 @@ VITAL_SIGNS_ADMISSION_FIELD = "krcs_maternity_admission"  # Vital Signs -> Mater
 
 # Healthcare Service Unit group seeded under each facility: "Maternity Ward - <facility code>" (+ " - <abbr>")
 MATERNITY_WARD_NAME = "Maternity Ward"
+
+
+
+# ---------------------------------------------------------------------------
+# MCH contract (W0): maternal and child health records (BRD FR-14, SDD §5.3, CON-14..17, D62). Provisional
+# until the MCH In-Charge confirms the fields (OI-8). Builders import these and never edit them. Field names
+# and rules are in docs/MCH_CONTRACT.md.
+# ---------------------------------------------------------------------------
+# DocTypes (module "EMR MCH")
+ANC_PREGNANCY_DOCTYPE = "ANC Pregnancy"  # {prefix}-ANC-.YYYY.-, one open per mother (not submittable)
+ANC_CONTACT_DOCTYPE = "ANC Contact"  # {prefix}-ANCV-.YYYY.-, submittable, one per visit
+PNC_VISIT_DOCTYPE = "PNC Visit"  # {prefix}-PNC-.YYYY.-, submittable, one per visit (or admission) and subject
+IMMUNISATION_DOCTYPE = "Immunisation"  # {prefix}-IMM-.YYYY.-, submittable, one per visit
+IMMUNISATION_DOSE_DOCTYPE = "Immunisation Dose"  # child of Immunisation (`doses`)
+KEPI_SCHEDULE_DOCTYPE = "KEPI Vaccine Schedule"  # master, named by `dose_label`
+GROWTH_MONITORING_DOCTYPE = "Growth Monitoring"  # {prefix}-GRM-.YYYY.-, submittable, one per visit
+
+# The per-visit, submittable MCH records (no cancel; corrections by addendum)
+MCH_RECORD_DOCTYPES = (
+	ANC_CONTACT_DOCTYPE,
+	PNC_VISIT_DOCTYPE,
+	IMMUNISATION_DOCTYPE,
+	GROWTH_MONITORING_DOCTYPE,
+)
+
+# ANC Pregnancy.status / closed_reason
+PREGNANCY_OPEN = "Open"
+PREGNANCY_CLOSED = "Closed"
+PREGNANCY_DELIVERED = "Delivered"  # set when the mother's Delivery Record is submitted
+PREGNANCY_ENDED = "Pregnancy ended"  # miscarriage or abortion
+PREGNANCY_TRANSFERRED = "Transferred out"
+PREGNANCY_CLOSE_REASONS = (PREGNANCY_DELIVERED, PREGNANCY_ENDED, PREGNANCY_TRANSFERRED)
+
+# PNC Visit.subject / timing
+PNC_SUBJECT_MOTHER = "Mother"
+PNC_SUBJECT_BABY = "Baby"
+PNC_TIMINGS = ("Within 48 hours", "1 to 2 weeks", "4 to 6 weeks", "Other")
+
+# Immunisation Dose.status, and the status of each dose in a child's schedule (mch.immunisation.schedule)
+DOSE_GIVEN = "Given"
+DOSE_NOT_GIVEN = "Not given"
+SCHEDULE_GIVEN = "Given"
+SCHEDULE_DUE = "Due"  # due today or within the due window, not yet late
+SCHEDULE_OVERDUE = "Overdue"  # past the due age (+ grace), still before the latest age
+SCHEDULE_UPCOMING = "Upcoming"
+SCHEDULE_MISSED = "Missed"  # past the latest age, never given
+SCHEDULE_STATUSES = (SCHEDULE_GIVEN, SCHEDULE_DUE, SCHEDULE_OVERDUE, SCHEDULE_UPCOMING, SCHEDULE_MISSED)
+
+# Growth Monitoring classifications (WHO Child Growth Standards; read-only Selects set by mch.growth)
+GROWTH_NORMAL = "Normal"
+UNDERWEIGHT_MODERATE = "Moderate underweight"  # WFA < -2
+UNDERWEIGHT_SEVERE = "Severe underweight"  # WFA < -3
+STUNTING_MODERATE = "Moderate stunting"  # LHFA < -2
+STUNTING_SEVERE = "Severe stunting"  # LHFA < -3
+WASTING_MAM = "Moderate acute malnutrition"  # WFLH < -2 or MUAC 11.5-12.5 cm (6-59 months)
+WASTING_SAM = "Severe acute malnutrition"  # WFLH < -3, MUAC < 11.5 cm (6-59 months) or bilateral oedema
+GROWTH_MAX_AGE_DAYS = 1856  # WHO 0-5 year tables end at 60 months (1856 days); growth records stop there
+
+# Who records (DocType JSON permissions follow these; see docs/MCH_CONTRACT.md §1)
+MCH_ROLES = (ROLE_CLINICIAN, ROLE_MIDWIFE, ROLE_MIC)  # every MCH record
+CHILD_MCH_ROLES = (*MCH_ROLES, ROLE_TRIAGE)  # Immunisation and Growth Monitoring
+MCH_READ_ROLES = (ROLE_MHO, ROLE_HIS)
+
+# Script report (MCH-B)
+REPORT_DUE_IMMUNISATIONS = "Due Immunisations"

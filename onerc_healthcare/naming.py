@@ -59,6 +59,12 @@ DEFAULT_RULES = (
 	("Maternity Admission", "{prefix}-MAT-.YYYY.-"),
 	("Partograph", "{prefix}-PTG-.YYYY.-"),
 	("Delivery Record", "{prefix}-DEL-.YYYY.-"),
+	# MCH record types (same rule)
+	("ANC Pregnancy", "{prefix}-ANC-.YYYY.-"),
+	("ANC Contact", "{prefix}-ANCV-.YYYY.-"),
+	("PNC Visit", "{prefix}-PNC-.YYYY.-"),
+	("Immunisation", "{prefix}-IMM-.YYYY.-"),
+	("Growth Monitoring", "{prefix}-GRM-.YYYY.-"),
 )
 
 # Marley's Emergency Record names provisional patients with this series directly

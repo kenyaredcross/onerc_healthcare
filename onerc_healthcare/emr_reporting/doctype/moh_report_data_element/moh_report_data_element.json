@@ -68,7 +68,7 @@
    "fieldname": "source_type",
    "fieldtype": "Select",
    "label": "Source",
-   "options": "\nDiagnosis Category\nVisit Attendance\nLaboratory Tests\nPrescriptions\nDispensing\nReferrals\nVisit Outcome\nService Delivered\nCommunity Activity\nDelivery\nMaternity Admission",
+   "options": "\nDiagnosis Category\nVisit Attendance\nLaboratory Tests\nPrescriptions\nDispensing\nReferrals\nVisit Outcome\nService Delivered\nCommunity Activity\nDelivery\nMaternity Admission\nMCH Records",
    "in_list_view": 1,
    "columns": 2,
    "mandatory_depends_on": "eval:doc.availability=='Available'"
@@ -105,7 +105,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-16 15:00:00.000000",
+ "modified": "2026-11-21 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "EMR Reporting",
  "name": "MOH Report Data Element",

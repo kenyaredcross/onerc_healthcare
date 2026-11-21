@@ -1,0 +1,91 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-21 10:00:00.000000",
+ "custom": 0,
+ "description": "One vaccine dose given (or not given, with the reason) at an Immunisation.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "vaccine",
+  "antigen",
+  "status",
+  "reason_not_given",
+  "batch_number",
+  "site",
+  "given_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "vaccine",
+   "fieldtype": "Link",
+   "label": "Vaccine Dose",
+   "options": "KEPI Vaccine Schedule",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "antigen",
+   "fieldtype": "Data",
+   "label": "Antigen",
+   "fetch_from": "vaccine.antigen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Given\nNot given",
+   "default": "Given",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "reason_not_given",
+   "fieldtype": "Data",
+   "label": "Reason Not Given",
+   "in_list_view": 1,
+   "columns": 2,
+   "mandatory_depends_on": "eval:doc.status=='Not given'"
+  },
+  {
+   "fieldname": "batch_number",
+   "fieldtype": "Data",
+   "label": "Batch Number",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "site",
+   "fieldtype": "Select",
+   "label": "Site",
+   "options": "\nLeft upper arm\nRight upper arm\nLeft thigh\nRight thigh\nOral\nOther",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "given_by",
+   "fieldtype": "Link",
+   "label": "Given By",
+   "options": "User",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-21 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "EMR MCH",
+ "name": "Immunisation Dose",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

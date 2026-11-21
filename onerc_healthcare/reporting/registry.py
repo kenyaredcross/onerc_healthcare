@@ -51,6 +51,7 @@ SOURCE_TYPES: dict[str, str] = {
 	"Community Activity": "onerc_healthcare.reporting.workload.evaluate_community",  # R4
 	"Delivery": "onerc_healthcare.reporting.workload.evaluate_delivery",  # M3 (reporting/maternity.py)
 	"Maternity Admission": "onerc_healthcare.reporting.workload.evaluate_maternity_admission",  # M3
+	"MCH Records": "onerc_healthcare.reporting.workload.evaluate_mch",  # MCH-A (reporting/mch.py)
 }
 
 

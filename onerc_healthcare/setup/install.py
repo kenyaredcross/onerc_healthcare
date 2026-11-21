@@ -264,6 +264,10 @@ def _install_workstreams() -> None:
 	from onerc_healthcare.maternity import setup as maternity_setup
 
 	maternity_setup.install()
+	# MCH (W0): KEPI vaccine schedule seed (MCH-B fills mch/data/kepi_schedule.json)
+	from onerc_healthcare.mch import setup as mch_setup
+
+	mch_setup.install()
 	ensure_report_indexes()
 	ensure_naming_settings()
 	desk_sidebar.install()
