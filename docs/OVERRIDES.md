@@ -137,6 +137,8 @@ Our JavaScript is loaded **in addition to** Marley's.
 | Patient Encounter | `clinical/patient_encounter.js` | Consultation buttons (Send Lab Orders, Complete, Refer, Addendum), the lab results and history panels, and the drug query on our non-stock catalogue. Hides Marley's Refer, create-order and delete-note buttons and the Submit, Cancel and Amend buttons. |
 | Service Request | `lab/service_request.js` | Lab order view. |
 | Medication Request | `pharmacy/medication_request.js` | Dispense status, Dispense button, Hold / Stop / Resume, and stock and billing UI hidden. Marley's Status buttons are removed because they would bypass a hold. |
+| Patient (MCH, D62) | `mch/growth_chart.js`, `mch/forms.js` | A Maternal and Child Health dashboard section: open pregnancy, immunisation status pills, weight-for-age chart (inline SVG). Read-only; the data comes from `mch.forms.patient_summary`, `mch.immunisation.schedule` and `mch.growth.chart_data`, each access-logged. |
+| Patient Encounter (MCH, D62) | `mch/forms.js` | An "MCH" button group on a draft consultation in the MCH clinic (`mch.forms.encounter_actions`). |
 
 ---
 

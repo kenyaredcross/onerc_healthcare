@@ -428,3 +428,71 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
 - **MOH 717 (provisional, OI-5):** K01–K08 come from Delivery Records, and J01–J04 from admissions.
   - **J05 (average stay) and J06 (bed occupancy)** stay Gap, because the report engine stores whole counts. Total stay days are captured as `stay_days`.
   - **Breech deliveries** fall in no K line; this is a question for the HIS Officers.
+
+**D62. Maternal and child health records (MCH), 2026-11-21.** BRD FR-14, SDD §5.3, tracker CON-14..17. The user chose MCH as the next clinical-services piece and asked to build it now and confirm with KRCS later. **Everything is provisional until the MCH In-Charge confirms the fields (OI-8).** (D61 is reserved for the stock work, Phase 6S.)
+- **Sources:**
+  - **Fields:** the Kenya MOH Mother & Child Health Handbook (MOH 216) and WHO 2016 ANC (8 contacts).
+  - **Immunisation schedule:** KEPI.
+  - **Growth:** the WHO Child Growth Standards 0–5 years. The official expanded LMS tables are bundled offline in `mch/data/`, each recording its source URL and retrieval date.
+- **Records (module EMR MCH):**
+
+  | Record | What it is | Number |
+  |---|---|---|
+  | ANC Pregnancy | One open per mother; closed automatically as Delivered when her Delivery Record is submitted, or by hand as "Pregnancy ended" or "Transferred out" | `ANC-` |
+  | ANC Contact | Antenatal contact | `ANCV-` |
+  | PNC Visit | Postnatal check of the mother or the baby; on the ward it is recorded against the Maternity Admission | `PNC-` |
+  | Immunisation | Doses given at a visit | `IMM-` |
+  | KEPI Vaccine Schedule | The schedule master: 25 doses, seeded once and never overwritten | |
+  | Growth Monitoring | Measurements with WHO z-scores | `GRM-` |
+- **Rules for every record** (`mch/common.py`):
+  - made during an **open visit** of the same patient;
+  - **one per visit**;
+  - facility, consultation link and recorder are **set by the server**;
+  - **submitted with no cancel**; a correction is a signed addendum, and the Medical In-Charge archives a record made in error.
+- **Who:**
+  - Clinical Officer, Midwife and Medical In-Charge record every type;
+  - the **Triage Nurse** also records Immunisation and Growth Monitoring (measured at the child welfare desk);
+  - the Mental Health Officer and HIS Officer read.
+  - No MCH Nurse role yet; it can follow OI-8.
+- **Immunisation:**
+  - a dose already given is refused;
+  - a dose more than 14 days early, or sooner than the minimum interval, is refused;
+  - each dose's status is Given, Due (up to 28 days past due), Overdue, Upcoming or Missed (past the latest age);
+  - the **Due Immunisations** report lists the children due or overdue.
+- **Growth:**
+  - WFA, LHFA and WFL/WFH z-scores, with WHO's SD23 rule and the ±0.7 cm position correction;
+  - classed as underweight, stunting and MAM/SAM (by WFLH, by MUAC from 6 months, or by oedema);
+  - an estimated date of birth is noted;
+  - records stop at 1,856 days.
+- **Desk:**
+  - an "MCH" button group on open visits and on draft MCH consultations;
+  - an MCH panel on the Patient form (open pregnancy, immunisation status, weight-for-age chart);
+  - the Maternity admit dialog prefills LMP, gravida and para from the open pregnancy;
+  - an MCH dropdown in the Outpatient sidebar.
+- **MOH 717 (provisional, OI-5):**
+
+  | Row | Counts |
+  |---|---|
+  | B07 CWC | Child visits with an Immunisation or Growth Monitoring, one per visit |
+  | B08 ANC | ANC Contacts |
+  | B09 PNC | PNC Visits, mothers and babies (ward checks included) |
+
+  They come from the new "MCH Records" source.
+- **Review and audit S6 (`tests/test_state_machines_mch.py`), seven defects fixed:**
+  - **DEFECT-MCH-1:** facility and consultation were taken from the client. They now always come from the visit or the admission.
+  - **DEFECT-MCH-2:** an addendum could be typed into a draft and submitted. It now goes through Add Addendum only.
+  - **DEFECT-MCH-3:** the recorder could be rewritten on a draft save. It is now kept.
+  - **DEFECT-MCH-4:** the uniqueness checks did not use locking reads. They now do.
+  - **DEFECT-MCH-5:** Immunisation locked the visit before the patient. It now locks Patient → Visit, as registration and the maternity admit do.
+  - **DEFECT-MCH-6:** there were no desk buttons for Close Pregnancy, Add Addendum or Archive. `mch/record_actions.js` adds them.
+  - **DEFECT-MCH-7:** the Patient-panel reads were not access-logged. They now are (D44).
+- **Provisional values to confirm (OI-8):**
+  - **KEPI:**
+    - BCG has no upper age;
+    - OPV 0 latest at 14 days;
+    - 28-day intervals;
+    - Rota latest at 24 months;
+    - MR 1 at 9 months, MR 2 at 18 months;
+    - Vitamin A from 9 months then 6-monthly to 59 months. Kenya's 6-month Vitamin A dose is not seeded.
+  - **ANC/PNC plausible ranges.**
+  - **Whether ward PNC checks count in B09.**
