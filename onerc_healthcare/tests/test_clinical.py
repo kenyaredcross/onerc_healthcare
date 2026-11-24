@@ -38,6 +38,7 @@ from onerc_healthcare.tests.clinical_factories import (
 	add_lab_row,
 	as_user,
 	chapter_x_code,
+	fill_mh_note,
 	routed_visit,
 	start,
 	users,
@@ -105,6 +106,7 @@ class ClinicalTestCase(EMRTestCase):
 		return visit.name, start(visit.name, self.u(user))
 
 	def complete(self, encounter: str, user: str = "clinician", **kw):
+		fill_mh_note(encounter)  # D63
 		with as_user(self.u(user)):
 			return consultation.complete_consultation(encounter, **kw)
 

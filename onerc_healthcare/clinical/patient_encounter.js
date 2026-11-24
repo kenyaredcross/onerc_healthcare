@@ -26,6 +26,7 @@ frappe.ui.form.on("Patient Encounter", {
 	refresh(frm) {
 		krcs_hide_marley_actions(frm);
 		krcs_set_drug_query(frm);
+		krcs_mh_refresh(frm);
 		if (frm.is_new()) return;
 		const draft = frm.doc.docstatus === 0;
 		const can_consult = frappe.user.has_role(["Clinical Officer", "Mental Health Officer"]);
@@ -57,7 +58,66 @@ frappe.ui.form.on("Patient Encounter", {
 	onload_post_render(frm) {
 		krcs_hide_marley_actions(frm);
 	},
+
+	krcs_mh_suicide_risk: krcs_mh_refresh,
+	krcs_mh_harm_to_others: krcs_mh_refresh,
+	krcs_mh_phq9: krcs_mh_refresh,
+	krcs_mh_gad7: krcs_mh_refresh,
 });
+
+// ------------------------------------------------------------------ Mental Health note (FR-13, D63)
+
+// Bands match clinical/mh_note.py SCORES; the server validates the score.
+const KRCS_MH_BANDS = {
+	krcs_mh_phq9: [
+		27,
+		[
+			[0, "Minimal"],
+			[5, "Mild"],
+			[10, "Moderate"],
+			[15, "Moderately severe"],
+			[20, "Severe"],
+		],
+	],
+	krcs_mh_gad7: [
+		21,
+		[
+			[0, "Minimal"],
+			[5, "Mild"],
+			[10, "Moderate"],
+			[15, "Severe"],
+		],
+	],
+};
+
+function krcs_mh_refresh(frm) {
+	const high =
+		frm.doc.krcs_department !== "Mental Health"
+			? []
+			: [
+					["krcs_mh_suicide_risk", __("Suicide Risk")],
+					["krcs_mh_harm_to_others", __("Risk of Harm to Others")],
+			  ]
+					.filter(([f]) => frm.doc[f] === "High")
+					.map(([, label]) => esc(label));
+	// Only clear an intro this function set (other scripts may set their own).
+	if (high.length || frm.krcs_mh_intro) {
+		frm.set_intro(high.length ? `<b>${esc(__("High risk"))}</b>: ${high.join(", ")}` : "", "red");
+		frm.krcs_mh_intro = high.length > 0;
+	}
+	if (frm.doc.krcs_department !== "Mental Health") return;
+	Object.entries(KRCS_MH_BANDS).forEach(([field, [max, bands]]) => {
+		const control = frm.fields_dict[field];
+		if (!control) return;
+		frm.krcs_mh_base_desc = frm.krcs_mh_base_desc || {};
+		if (!(field in frm.krcs_mh_base_desc)) frm.krcs_mh_base_desc[field] = control.df.description || "";
+		const text = String(frm.doc[field] == null ? "" : frm.doc[field]).trim();
+		const score = /^\d+$/.test(text) ? parseInt(text, 10) : null;
+		const band = score !== null && score <= max ? bands.filter(([low]) => score >= low).pop()[1] : null;
+		const base = esc(frm.krcs_mh_base_desc[field]);
+		control.set_description(band ? `<b>${esc(__(band))}</b> (${esc(score)}). ${base}` : base);
+	});
+}
 
 // ------------------------------------------------------------------ queries
 

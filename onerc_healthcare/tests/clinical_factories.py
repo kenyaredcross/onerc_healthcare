@@ -143,17 +143,40 @@ def visit_status(visit: str) -> str:
 	return frappe.db.get_value(VISIT_DOCTYPE, visit, "status")
 
 
+# D63: a Mental Health consultation completes only with the risk ratings and mood (clinical/mh_note.py).
+MINIMUM_MH_NOTE = {
+	"krcs_mh_suicide_risk": "None identified",
+	"krcs_mh_harm_to_others": "None identified",
+	"krcs_mh_mood": "T- euthymic",
+}
+
+
+def fill_mh_note(encounter: str, **values) -> None:
+	"""Give a draft Mental Health encounter the minimum note (plus `values`) so it can be completed. Does nothing
+	for other departments or a note that is already filled in."""
+	doc = frappe.get_doc(ENCOUNTER_DOCTYPE, encounter)
+	if doc.docstatus != 0 or doc.get("krcs_department") != "Mental Health":
+		return
+	missing = {k: v for k, v in MINIMUM_MH_NOTE.items() if not doc.get(k)}
+	if not (missing or values):
+		return
+	doc.update({**missing, **values})
+	doc.save(ignore_permissions=True)
+
+
 __all__ = [
 	"LAB_TEST",
 	"LAB_TEST_2",
 	"LEAF_CODE",
 	"LEAF_CODE_2",
+	"MINIMUM_MH_NOTE",
 	"PARENT_CODE",
 	"add_diagnosis",
 	"add_drug_row",
 	"add_lab_row",
 	"as_user",
 	"chapter_x_code",
+	"fill_mh_note",
 	"get_test_item",
 	"make_submitted_encounter",
 	"routed_visit",

@@ -20,7 +20,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
-from onerc_healthcare.clinical import diagnosis
+from onerc_healthcare.clinical import diagnosis, mh_note
 from onerc_healthcare.clinical.practitioner import get_or_create, strip_user_permission
 from onerc_healthcare.clinical.utils import CONSULTING_ROLES, active_encounter_for_visit, has_any_role
 from onerc_healthcare.constants import (
@@ -97,6 +97,21 @@ def encounter_validate(doc, method=None) -> None:
 		)
 	if not doc.is_new() and doc.has_value_changed(ENCOUNTER_VISIT_FIELD):
 		frappe.throw(_("The visit of a consultation cannot be changed."), EncounterGuardError)
+	# DEFECT-MH-1: the clinic of a consultation is fixed once it exists. Changing it would clear a Mental Health
+	# note, skip its completion rules and drop its sensitive logging and Midwife hiding (D63, D44).
+	before = None if doc.is_new() else doc.get_doc_before_save()
+	if (
+		before
+		and before.get("krcs_department")
+		and doc.get("krcs_department") != before.get("krcs_department")
+	):
+		frappe.throw(
+			_(
+				"The clinic of a consultation cannot be changed. Refer the patient to the other clinic instead."
+			),
+			EncounterGuardError,
+			title=_("Not Allowed"),
+		)
 	other = active_encounter_for_visit(visit, exclude=None if doc.is_new() else doc.name)
 	if other:
 		frappe.throw(
@@ -111,6 +126,7 @@ def encounter_validate(doc, method=None) -> None:
 			)
 	diagnosis.validate_diagnoses(doc)
 	diagnosis.rebuild_codification(doc)
+	mh_note.validate(doc)
 
 
 def encounter_before_submit(doc, method=None) -> None:
@@ -121,6 +137,7 @@ def encounter_before_submit(doc, method=None) -> None:
 			title=_("Not Allowed"),
 		)
 	diagnosis.assert_completable(doc)
+	mh_note.assert_complete(doc)
 
 
 def encounter_before_cancel(doc, method=None) -> None:

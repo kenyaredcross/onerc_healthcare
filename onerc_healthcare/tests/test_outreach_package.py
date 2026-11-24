@@ -33,6 +33,7 @@ from onerc_healthcare.tests.clinical_factories import (
 	LEAF_CODE_2,
 	add_diagnosis,
 	chapter_x_code,
+	fill_mh_note,
 	get_test_item,
 	routed_visit,
 	start,
@@ -100,6 +101,7 @@ class PackageCase(EMRTestCase):
 		add_diagnosis(enc, code)
 		if drug:
 			add_drug(enc, drug)
+		fill_mh_note(enc)  # D63
 		with as_user(user):
 			complete_consultation(enc)
 		close(visit.name)

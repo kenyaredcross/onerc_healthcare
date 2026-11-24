@@ -473,6 +473,22 @@ def _complete_visit(spec: dict, patient: str, users: dict, facility: str) -> str
 	doc = frappe.get_doc("Patient Encounter", encounter)
 	for code, primary in spec["diagnoses"]:
 		doc.append("krcs_diagnoses", {"code": f"{code}-ICD-11", "is_primary": primary, "case_type": "New"})
+	if department == "Mental Health":  # D63: the structured note (fictional)
+		doc.update(
+			{
+				"krcs_mh_visit_type": "New assessment",
+				"krcs_mh_referral_source": "Community health worker",
+				"krcs_mh_onset_duration": "About 3 months",
+				"krcs_mh_mood": "Low",
+				"krcs_mh_affect": "Restricted",
+				"krcs_mh_insight": "Partial",
+				"krcs_mh_suicide_risk": "Low",
+				"krcs_mh_harm_to_others": "None identified",
+				"krcs_mh_phq9": "14",
+				"krcs_mh_interventions": "Psychoeducation; counselling sessions weekly",
+				"krcs_mh_follow_up_date": add_days(nowdate(), 7),
+			}
+		)
 	doc.save()
 	complete_consultation(encounter)
 	if spec.get("service"):

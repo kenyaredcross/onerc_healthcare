@@ -215,7 +215,9 @@ class ReconBuilder:
 		self, encounter: str, outcome: str | None = None, reason: str | None = None, user: str = "clinician"
 	) -> None:
 		from onerc_healthcare.clinical.consultation import complete_consultation
+		from onerc_healthcare.tests.clinical_factories import fill_mh_note
 
+		fill_mh_note(self.encounters[encounter])  # D63
 		with as_user(self.users[user]):
 			complete_consultation(self.encounters[encounter], reason=reason, outcome=outcome)
 

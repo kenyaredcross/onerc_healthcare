@@ -24,7 +24,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, format_datetime, now_datetime, nowdate, nowtime
 
-from onerc_healthcare.clinical import diagnosis, practitioner
+from onerc_healthcare.clinical import diagnosis, mh_note, practitioner
 from onerc_healthcare.clinical.utils import (
 	CONSULTING_ROLES,
 	LAB_WITHDRAWN_FIELD,
@@ -281,6 +281,7 @@ def submit_encounter(doc) -> list[str]:
 	Used by `complete_consultation` and by the Referral `send` action.
 	"""
 	diagnosis.assert_completable(doc)
+	mh_note.assert_complete(doc)
 	unsent = unsent_lab_rows(doc)
 	if unsent:
 		frappe.throw(

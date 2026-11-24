@@ -67,7 +67,7 @@ from onerc_healthcare.registration.identifiers import (
 )
 from onerc_healthcare.tests import sm_helpers as sm
 from onerc_healthcare.tests.base import EMRTestCase
-from onerc_healthcare.tests.clinical_factories import add_diagnosis, add_lab_row, routed_visit
+from onerc_healthcare.tests.clinical_factories import add_diagnosis, add_lab_row, fill_mh_note, routed_visit
 from onerc_healthcare.tests.factories import get_facility, make_patient, make_user
 from onerc_healthcare.tests.sm_helpers import (
 	ADMIN,
@@ -166,6 +166,7 @@ class SMCase(EMRTestCase):
 		doc.save(ignore_permissions=True)
 
 	def complete(self, encounter: str, reason: str | None = None, user: str = "clinician") -> dict:
+		fill_mh_note(encounter)  # D63
 		with as_user(self.users[user]):
 			return complete_consultation(encounter, reason=reason, no_diagnosis_reason="T- auditor")
 
@@ -1313,6 +1314,7 @@ class TestMarleyScenarios(LabTestCase):
 			).insert(ignore_permissions=True)
 
 	def complete(self, encounter: str, reason: str | None = None, user: str = "clinician") -> dict:
+		fill_mh_note(encounter)  # D63
 		with as_user(self.users[user]):
 			return complete_consultation(encounter, reason=reason, no_diagnosis_reason="T- auditor")
 

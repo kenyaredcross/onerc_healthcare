@@ -4,6 +4,8 @@
 
 - Consultation fields on Marley's Patient Encounter (FR-10, FR-11): visit link, clinical notes, ICD-11
   diagnosis table, addendum and the lab-results / history panels; `krcs_withdrawn` on Lab Prescription.
+- Mental Health consultation note (FR-13, provisional D63): `krcs_mh_*` fields shown on Mental Health
+  encounters only, between the clinical notes and the diagnoses.
 - Property setters on Patient Encounter, created only when missing (an admin's later change is kept):
   default and hidden appointment type, read-only practitioner, and the Marley parts the EMR does not use
   hidden (orders-on-save, free-text diagnosis, procedures, therapies, insurance, treatment plans).
@@ -20,6 +22,7 @@ from onerc_healthcare.clinical.practitioner import strip_all_user_permissions
 from onerc_healthcare.clinical.utils import LAB_WITHDRAWN_FIELD
 from onerc_healthcare.constants import (
 	DEFAULT_APPOINTMENT_TYPE,
+	DEPT_MENTAL_HEALTH,
 	ENCOUNTER_DIAGNOSIS_DOCTYPE,
 	ENCOUNTER_DOCTYPE,
 	ENCOUNTER_VISIT_FIELD,
@@ -27,6 +30,135 @@ from onerc_healthcare.constants import (
 )
 
 MODULE = "EMR Clinical"
+
+# Mental Health consultation note (FR-13, provisional format D63 pending OI-7): Dadaab Mental Health
+# Admission Form headings (SDD §5.12.4) plus a standard outpatient psychiatric assessment. Shown only on a
+# Mental Health encounter; rules in clinical/mh_note.py. None is allow_on_submit: corrections are addenda.
+MH_DEPENDS_ON = f"eval:doc.krcs_department=='{DEPT_MENTAL_HEALTH}'"
+RISK_LEVELS = "\nNone identified\nLow\nModerate\nHigh"
+INSIGHT_LEVELS = "\nGood\nPartial\nPoor"
+
+
+def _mh_fields(*specs: tuple) -> list[dict]:
+	"""(fieldname, label, fieldtype, extra) specs chained by insert_after, starting after the exam findings."""
+	fields, after = [], "krcs_examination_findings"
+	for fieldname, label, fieldtype, extra in specs:
+		df = {
+			"fieldname": fieldname,
+			"fieldtype": fieldtype,
+			"insert_after": after,
+			"depends_on": MH_DEPENDS_ON,
+			"print_hide": 1,  # DEFECT-MH-3: the note stays out of print formats until OI-7 decides (D63)
+		}
+		if label:
+			df["label"] = label
+		df.update(extra)
+		fields.append(df)
+		after = fieldname
+	return fields
+
+
+MH_NOTE_FIELDS = _mh_fields(
+	("krcs_mh_section", "Mental Health Assessment", "Section Break", {}),
+	(
+		"krcs_mh_visit_type",
+		"Visit Type",
+		"Select",
+		{"options": "\nNew assessment\nFollow-up review"},
+	),
+	(
+		"krcs_mh_referral_source",
+		"Referral Source",
+		"Select",
+		{
+			"options": "\nSelf\nFamily\nCommunity health worker\nClinician\nSchool\nPolice or court\nOther",
+		},
+	),
+	("krcs_mh_onset_duration", "Onset and Duration", "Data", {}),
+	("krcs_mh_assessment_column", None, "Column Break", {}),
+	(
+		"krcs_mh_past_psychiatric",
+		"Past Psychiatric and Medical History",
+		"Small Text",
+		{"description": "Previous episodes, admissions and treatment; medical history"},
+	),
+	("krcs_mh_substance_use", "Substance Use", "Small Text", {}),
+	(
+		"krcs_mh_personal_social",
+		"Personal, Family and Social History",
+		"Small Text",
+		{"description": "Including displacement and trauma"},
+	),
+	("krcs_mh_mse_section", "Mental State Examination", "Section Break", {}),
+	("krcs_mh_appearance_behaviour", "Appearance and Behaviour", "Small Text", {}),
+	("krcs_mh_speech", "Speech", "Small Text", {}),
+	(
+		"krcs_mh_mood",
+		"Mood",
+		"Data",
+		{"description": "Required to complete the consultation"},
+	),
+	("krcs_mh_affect", "Affect", "Data", {}),
+	("krcs_mh_thought_form", "Thought Form", "Small Text", {}),
+	("krcs_mh_mse_column", None, "Column Break", {}),
+	("krcs_mh_thought_content", "Thought Content", "Small Text", {}),
+	("krcs_mh_perception", "Perception", "Small Text", {}),
+	("krcs_mh_cognition", "Cognition", "Small Text", {}),
+	("krcs_mh_insight", "Insight", "Select", {"options": INSIGHT_LEVELS}),
+	("krcs_mh_judgement", "Judgement", "Select", {"options": INSIGHT_LEVELS}),
+	("krcs_mh_risk_section", "Risk Assessment", "Section Break", {}),
+	(
+		"krcs_mh_suicide_risk",
+		"Suicide Risk",
+		"Select",
+		{"options": RISK_LEVELS, "description": "Required to complete the consultation"},
+	),
+	("krcs_mh_recent_self_harm", "Recent Self-Harm", "Check", {}),
+	(
+		"krcs_mh_harm_to_others",
+		"Risk of Harm to Others",
+		"Select",
+		{"options": RISK_LEVELS, "description": "Required to complete the consultation"},
+	),
+	("krcs_mh_risk_column", None, "Column Break", {}),
+	("krcs_mh_risk_notes", "Risk Notes", "Small Text", {}),
+	(
+		"krcs_mh_safety_plan",
+		"Safety Plan",
+		"Small Text",
+		{"description": "Required when a risk is High or there is recent self-harm"},
+	),
+	("krcs_mh_screening_section", "Screening Scores (optional)", "Section Break", {}),
+	(
+		"krcs_mh_phq9",
+		"PHQ-9 Score",
+		"Data",
+		{
+			"description": "0 to 27; leave blank if not done. 0-4 minimal, 5-9 mild, 10-14 moderate, "
+			"15-19 moderately severe, 20-27 severe",
+		},
+	),
+	("krcs_mh_screening_column", None, "Column Break", {}),
+	(
+		"krcs_mh_gad7",
+		"GAD-7 Score",
+		"Data",
+		{
+			"description": "0 to 21; leave blank if not done. 0-4 minimal, 5-9 mild, 10-14 moderate, "
+			"15-21 severe",
+		},
+	),
+	("krcs_mh_plan_section", "Formulation and Plan", "Section Break", {}),
+	("krcs_mh_formulation", "Formulation", "Small Text", {}),
+	(
+		"krcs_mh_interventions",
+		"Interventions",
+		"Small Text",
+		{"description": "Psychoeducation, counselling, medication, referral"},
+	),
+	("krcs_mh_plan_column", None, "Column Break", {}),
+	("krcs_mh_follow_up_date", "Follow-up Date", "Date", {}),
+)
 
 ENCOUNTER_CUSTOM_FIELDS = {
 	ENCOUNTER_DOCTYPE: [
@@ -80,11 +212,12 @@ ENCOUNTER_CUSTOM_FIELDS = {
 			"fieldtype": "Text",
 			"insert_after": "krcs_clinical_column",
 		},
+		*MH_NOTE_FIELDS,
 		{
 			"fieldname": "krcs_diagnosis_section",
 			"label": "Diagnosis (ICD-11)",
 			"fieldtype": "Section Break",
-			"insert_after": "krcs_examination_findings",
+			"insert_after": MH_NOTE_FIELDS[-1]["fieldname"],
 		},
 		{
 			"fieldname": "krcs_diagnoses",
