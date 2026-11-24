@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../app/AppContext";
+import SignOutButton from "../components/SignOut";
 import { Alert, Page, errorText } from "../components/ui";
 import { ApiError } from "../lib/api";
 import { downloadPackage, type DownloadProgress } from "../lib/package";
@@ -49,7 +50,7 @@ export default function DownloadScreen() {
 
   const pct = progress && progress.total ? Math.round((progress.loaded / progress.total) * 100) : 0;
   return (
-    <Page title="Download package" back={hasPackage ? "/" : undefined}>
+    <Page title="Download package" back={hasPackage ? "/" : undefined} actions={hasPackage ? undefined : <SignOutButton />}>
       <p className="text-slate-700">
         The package holds the reference lists (diagnoses, medicines, lab tests, places) and the patients of the session's catchment area. It is
         stored encrypted on this device.

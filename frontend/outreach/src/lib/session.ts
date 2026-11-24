@@ -12,6 +12,7 @@ import {
   callMethod,
   fetchBoot,
   login,
+  logout,
   outreachMethod,
   setCsrfToken,
   type DeviceCredentials,
@@ -415,6 +416,34 @@ export async function resetDevice(): Promise<void> {
   }
   await wipeAll(["device_id"]);
   lock();
+}
+
+/**
+ * Sign out while the device is being set up (choose session, set PIN, download): end the online session
+ * and cancel the half-finished setup, so another user can sign in. Nothing has been recorded yet; if
+ * anything is waiting to be synced (or a visit is unfinished) it is refused and nothing is deleted.
+ * The device id is kept. A grant already issued by "enrol" stays on the server until the session ends or
+ * the HIS Officer revokes it; its secret is gone from this device. Works offline too (the server cookie
+ * then simply expires).
+ */
+export async function signOutDuringSetup(): Promise<void> {
+  const pending = await pendingOutboxCount();
+  if (pending > 0) {
+    throw new Error(`${pending} record(s) on this device are not synced yet. Sync them before signing out.`);
+  }
+  const drafts = await (await db()).count("drafts");
+  if (drafts > 0) {
+    throw new Error(`${drafts} unfinished visit(s) are on this device. Finish or discard them first.`);
+  }
+  if (await getProfile()) await wipeAll(["device_id"]);
+  try {
+    await logout();
+  } catch {
+    // offline, or the server session already ended: the device side is cleared either way
+  }
+  mem.onlineUser = null;
+  setCsrfToken(null);
+  lock(); // forgets the keys and notifies the app
 }
 
 /**

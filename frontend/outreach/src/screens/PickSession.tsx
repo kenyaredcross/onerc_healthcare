@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../app/AppContext";
+import SignOutButton from "../components/SignOut";
 import { Alert, Field, Page, Spinner, TextInput, errorText } from "../components/ui";
 import { ApiError } from "../lib/api";
 import type { OutreachSessionSummary } from "../lib/protocol";
@@ -42,7 +43,7 @@ export default function PickSessionScreen() {
   }
 
   return (
-    <Page title="Choose your outreach session">
+    <Page title="Choose your outreach session" actions={<SignOutButton />}>
       {signedInOnline ? <p className="text-slate-700">Signed in as {signedInOnline.full_name || signedInOnline.name}.</p> : null}
       <Field label="Name of this device" hint="Shown to the HIS Officer, e.g. 'Tablet 3 (Kalobeyei)'." htmlFor="label">
         <TextInput id="label" value={label} onChange={(e) => setLabel(e.target.value)} />

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../app/AppContext";
+import SignOutButton from "../components/SignOut";
 import { Alert, Field, Page, TextInput, errorText } from "../components/ui";
 import { setPin } from "../lib/session";
 
@@ -33,7 +34,7 @@ export default function SetPinScreen() {
   }
 
   return (
-    <Page title="Set your PIN">
+    <Page title="Set your PIN" actions={<SignOutButton />}>
       <Alert>
         The PIN unlocks this app offline and protects the patient records on this device. Use at least {min} digits and do not share it. The PIN
         only protects this app: the tablet's own encryption and screen lock must also be on.

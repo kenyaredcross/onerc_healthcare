@@ -161,6 +161,11 @@ export function fetchBoot(): Promise<BootInfo> {
   return callMethod<BootInfo>("onerc_healthcare.www.outreach.get_boot");
 }
 
+/** End the online (cookie) session on the server. */
+export async function logout(): Promise<void> {
+  await callMethod<unknown>("logout", { method: "POST" });
+}
+
 export async function login(usr: string, pwd: string): Promise<{ full_name?: string }> {
   // /api/method/login answers at the top level, not inside `message`
   let res: Response;

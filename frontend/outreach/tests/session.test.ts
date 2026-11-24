@@ -17,8 +17,10 @@ import {
   recoverKey,
   renew,
   requireKeys,
+  onlineUser,
   setPin,
   signInOnline,
+  signOutDuringSetup,
   unlock,
 } from "../src/lib/session";
 import { formatSiteTime } from "../src/lib/time";
@@ -227,5 +229,47 @@ describe("device session (OUT-07/08, NFR-18)", () => {
     expect(getKeys()).not.toBeNull();
     lock();
     expect(getKeys()).toBeNull();
+  });
+
+  it("sign out while choosing the session: ends the online session, back to sign-in", async () => {
+    const s = server();
+    await signInOnline("nurse@krcs.test", "pw");
+    expect(onlineUser()).not.toBeNull();
+    await signOutDuringSetup();
+    const logout = s.calls.filter((c) => c.path === "logout");
+    expect(logout).toHaveLength(1);
+    expect(logout[0]!.method).toBe("POST");
+    expect(logout[0]!.headers["X-Frappe-CSRF-Token"]).toBe("csrf-1");
+    expect(onlineUser()).toBeNull();
+    expect(await lockState()).toBe("new");
+  });
+
+  it("sign out before the PIN is set: cancels the enrolment, keeps the device id", async () => {
+    server();
+    const deviceId = await getDeviceId();
+    await signInOnline("nurse@krcs.test", "pw");
+    await enrolNew(SESSION, "Tablet 1");
+    expect(await lockState()).toBe("needs-pin");
+    await signOutDuringSetup();
+    expect(await getProfile()).toBeUndefined();
+    expect(await getMeta("secure:secret")).toBeUndefined();
+    expect(getKeys()).toBeNull();
+    expect(await lockState()).toBe("new");
+    expect(await getDeviceId()).toBe(deviceId);
+  });
+
+  it("sign out works offline (the server cannot be reached): the device side is cleared", async () => {
+    mockServer({});
+    await signOutDuringSetup();
+    expect(onlineUser()).toBeNull();
+    expect(await lockState()).toBe("new");
+  });
+
+  it("sign out is refused while a record waits to be synced; nothing is deleted", async () => {
+    await enrolled();
+    const uuid = await addActivity();
+    await expect(signOutDuringSetup()).rejects.toThrow(/not synced yet/);
+    expect(await getProfile()).toBeTruthy();
+    expect((await listItems(requireKeys())).map((i) => i.row.client_uuid)).toContain(uuid);
   });
 });
