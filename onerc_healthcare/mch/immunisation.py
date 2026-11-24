@@ -15,7 +15,8 @@
 | Not given | needs ``reason_not_given`` |
 | Given | ``given_by`` set by the server (the user who first saved the row as Given); refused when the vaccine is already Given on another submitted, not archived Immunisation of the child; refused when more than `EARLY_DAYS` (14) before the due age, or sooner than ``min_interval_days`` after the previous Given dose of the antigen (the message gives the date it can be given) |
 
-The Patient row is locked (after the visit, lock order D41) so two drafts cannot both submit the same dose.
+The Patient row is locked first (lock order Patient -> Visit, as in registration and the maternity admit) and the
+child's given doses are read with a locking read, so two drafts cannot both submit the same dose.
 
 **Schedule** (`schedule`, and `schedule_rows` for many children at once, used by the Due Immunisations report):
 ``due_date = max(dob + due_age_days, previous dose of the antigen + min_interval_days)``. The previous dose is
@@ -169,10 +170,11 @@ def _previous_rows(rows: list) -> dict[str, frappe._dict | None]:
 def immunisation_validate(doc) -> None:
 	if common.guard_draft(doc):
 		return
+	# Lock order Patient -> Visit, as in registration and the maternity admit (DEFECT-MCH-5).
+	child = _child(doc.patient, for_update=True)
 	common.check_visit(doc)
 	common.guard_one_per_visit(doc)
 	common.set_recorded_by(doc)
-	child = _child(doc.patient, for_update=True)
 	_check_given_on(doc, child)
 	_check_doses(doc, child)
 
@@ -190,8 +192,8 @@ def immunisation_before_update_after_submit(doc) -> None:
 
 
 def _child(patient: str, for_update: bool = False) -> frappe._dict:
-	"""The Patient's dob, sex and estimated-dob flag (locked when `for_update`: lock order Visit, then
-	Patient)."""
+	"""The Patient's dob, sex and estimated-dob flag (locked when `for_update`: lock order Patient, then
+	Visit)."""
 	child = frappe.db.get_value(
 		"Patient",
 		patient,
@@ -248,7 +250,7 @@ def _check_doses(doc, child) -> None:
 	before = doc.get_doc_before_save()
 	given_by_before = {d.name: d.given_by for d in (before.get("doses") if before else [])}
 	given_on = getdate(doc.given_on)
-	others = _given_doses([child.name], exclude=doc.name).get(child.name, {})
+	others = _given_doses([child.name], exclude=doc.name, for_update=True).get(child.name, {})  # DEFECT-MCH-4
 	in_record = {d.vaccine: d for d in doc.doses if d.status == DOSE_GIVEN}
 	seen = set()
 	for d in doc.doses:
@@ -337,7 +339,9 @@ def not_archived_sql(alias: str) -> str:
 	return "1 = 1"
 
 
-def _given_doses(patients: list[str], exclude: str | None = None) -> dict[str, dict[str, tuple]]:
+def _given_doses(
+	patients: list[str], exclude: str | None = None, for_update: bool = False
+) -> dict[str, dict[str, tuple]]:
 	"""{patient: {vaccine: (given_on, immunisation)}}: the earliest Given dose of each vaccine on a
 	submitted, not archived Immunisation (one query for every patient)."""
 	if not patients:
@@ -351,6 +355,7 @@ def _given_doses(patients: list[str], exclude: str | None = None) -> dict[str, d
 			AND dose.status = %(given)s AND imm.docstatus = 1 AND {not_archived_sql("imm")}
 			AND imm.patient IN %(patients)s AND imm.name != %(exclude)s
 		ORDER BY imm.given_on ASC, imm.creation ASC
+		{"FOR UPDATE" if for_update else ""}
 		""",
 		{
 			"parenttype": IMMUNISATION_DOCTYPE,
@@ -441,4 +446,11 @@ def schedule(patient: str, on: str | None = None) -> list[dict]:
 	)
 	if not child or not child.dob:
 		return []
-	return schedule_rows([child], getdate(on or today())).get(child.name, [])
+	rows = schedule_rows([child], getdate(on or today())).get(child.name, [])
+	if rows:  # DEFECT-MCH-7: the panel read of the child's immunisation history is access-logged (D44)
+		from onerc_healthcare.privacy import access_log
+
+		access_log.log_access(
+			access_log.ACTION_READ_API, IMMUNISATION_DOCTYPE, None, patient=patient, detail="schedule"
+		)
+	return rows

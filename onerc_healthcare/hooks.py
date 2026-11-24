@@ -145,6 +145,12 @@ doctype_js = {
 	"Patient Encounter": ["clinical/patient_encounter.js", "mch/forms.js"],  # MCH button group (MCH visits)
 	"Service Request": "lab/service_request.js",
 	"Medication Request": "pharmacy/medication_request.js",
+	# MCH record forms: Add Addendum, Archive, Close Pregnancy (DEFECT-MCH-6)
+	"ANC Pregnancy": "mch/record_actions.js",
+	"ANC Contact": "mch/record_actions.js",
+	"PNC Visit": "mch/record_actions.js",
+	"Immunisation": "mch/record_actions.js",
+	"Growth Monitoring": "mch/record_actions.js",
 }
 
 # Marley endpoints that insert/submit with ignore_permissions and no permission check (Phase 2 audit A3).

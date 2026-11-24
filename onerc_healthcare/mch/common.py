@@ -6,7 +6,8 @@ edit them). See docs/MCH_CONTRACT.md §4.
 Every record in `MCH_RECORD_DOCTYPES` (ANC Contact, PNC Visit, Immunisation, Growth Monitoring):
 - is made during an **open visit of the same patient** (`check_visit`, on insert only; a draft may be
   submitted after the visit closes). PNC Visit may instead name the mother's open Maternity Admission;
-- is **one per visit** (`guard_one_per_visit`), checked under a lock on the visit (lock order D41: Visit first);
+- is **one per visit** (`guard_one_per_visit`), checked with a locking read under a lock on the visit (a record that also locks the Patient takes the Patient
+  first, as registration and the maternity admit do);
 - gets `facility` from the visit, `encounter` from the visit's consultation (server-set, never typed: a
   Triage Nurse cannot read encounters, so the browser must not validate that link), `recorded_by` = the
   user who inserted it;
@@ -50,8 +51,8 @@ class MCHRecordError(frappe.ValidationError):
 def check_visit(doc, required: bool = True) -> dict | None:
 	"""Load `doc.visit` (locked) and check it belongs to `doc.patient` and, for a new record, is open.
 
-	Sets `doc.facility` from the visit and `doc.encounter` from the visit's consultation (when the record has
-	those fields and they are empty). Returns the visit row ({name, patient, facility, status, encounter,
+	Sets `doc.facility` from the visit and `doc.encounter` from the visit's consultation on every save, whatever
+	the client sent (DEFECT-MCH-1). Returns the visit row ({name, patient, facility, status, encounter,
 	current_department}) or None when there is no visit and `required` is False."""
 	if not doc.get("visit"):
 		if required:
@@ -80,24 +81,28 @@ def check_visit(doc, required: bool = True) -> dict | None:
 			MCHRecordError,
 			title=_("Visit Closed"),
 		)
-	if doc.meta.has_field("facility") and not doc.get("facility"):
+	# DEFECT-MCH-1: never the client's values. The visit's facility and consultation are the only truth.
+	if doc.meta.has_field("facility"):
 		doc.facility = visit.facility
-	if doc.meta.has_field("encounter") and not doc.get("encounter") and visit.encounter:
-		doc.encounter = visit.encounter
+	if doc.meta.has_field("encounter"):
+		doc.encounter = visit.encounter or None
 	return visit
 
 
 def guard_one_per_visit(doc, keys: tuple[str, ...] = ("visit",)) -> None:
 	"""Refuse a second record of `doc.doctype` with the same `keys` values (drafts and submitted records count;
 	archived ones do not). Call after `check_visit` so the visit row is locked."""
-	filters = {k: doc.get(k) for k in keys}
-	if any(v in (None, "") for v in filters.values()):
+	values = {k: doc.get(k) for k in keys}
+	if any(v in (None, "") for v in values.values()):
 		return
-	filters["docstatus"] = ("<", 2)
-	filters["name"] = ("!=", doc.name or "")
+	# DEFECT-MCH-4: a locking read after the visit lock (D41), so a racing second record sees the first.
+	conds = [f"`{k}` = %({k})s" for k in keys] + ["docstatus < 2", "name != %(krcs_self)s"]
 	if frappe.get_meta(doc.doctype).has_field(ARCHIVED_FIELD):
-		filters[ARCHIVED_FIELD] = 0
-	other = frappe.get_all(doc.doctype, filters=filters, pluck="name", limit=1)
+		conds.append(f"IFNULL(`{ARCHIVED_FIELD}`, 0) = 0")
+	other = frappe.db.sql_list(
+		f"SELECT name FROM `tab{doc.doctype}` WHERE {' AND '.join(conds)} LIMIT 1 FOR UPDATE",
+		{**values, "krcs_self": doc.name or ""},
+	)
 	if other:
 		frappe.throw(
 			_("{0} {1} is already recorded for this visit. Open it instead.").format(
@@ -109,8 +114,10 @@ def guard_one_per_visit(doc, keys: tuple[str, ...] = ("visit",)) -> None:
 
 
 def set_recorded_by(doc) -> None:
-	if doc.is_new() or not doc.get("recorded_by"):
-		doc.recorded_by = frappe.session.user
+	"""The user who inserted the record; a later save keeps the stored value whatever the client sent
+	(DEFECT-MCH-3)."""
+	before = None if doc.is_new() else doc.get_doc_before_save()
+	doc.recorded_by = (before.get("recorded_by") if before else None) or frappe.session.user
 
 
 def age_in_days(dob, on) -> int | None:
@@ -165,6 +172,12 @@ def guard_draft(doc) -> bool:
 
 
 def before_submit(doc) -> None:
+	# DEFECT-MCH-2: a draft never carries an addendum, so one arriving with the submit was typed in.
+	if doc.get(ADDENDUM_FIELD) and not doc.flags.krcs_addendum:
+		frappe.throw(
+			_("The addendum is for corrections after submit. Use Notes while the record is a draft."),
+			MCHRecordError,
+		)
 	if cint(doc.get(ARCHIVED_FIELD)):
 		frappe.throw(
 			_("{0} is archived and cannot be submitted.").format(doc.name),

@@ -167,8 +167,8 @@ def _check_admission(doc) -> None:
 			common.MCHRecordError,
 			title=_("Wrong Subject"),
 		)
-	if doc.is_new() or not doc.get("facility"):
-		doc.facility = adm.facility
+	doc.facility = adm.facility  # DEFECT-MCH-1: never the client's value
+	doc.encounter = None  # a ward check has no outpatient consultation
 
 
 def _set_mother(doc, pnc_date) -> None:

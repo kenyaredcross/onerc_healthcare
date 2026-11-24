@@ -410,6 +410,12 @@ def chart_data(patient: str) -> dict:
 		fields=["name", "age_days", "weight_kg", "measured_on"],
 		order_by="measured_on asc, creation asc",
 	)
+	if points:  # DEFECT-MCH-7: the panel read of the child's measurements is access-logged (D44)
+		from onerc_healthcare.privacy import access_log
+
+		access_log.log_access(
+			access_log.ACTION_READ_API, GROWTH_MONITORING_DOCTYPE, None, patient=patient, detail="chart_data"
+		)
 	return {
 		"sex": child.sex,
 		"dob": child.dob,

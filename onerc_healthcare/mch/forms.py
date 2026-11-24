@@ -151,4 +151,14 @@ def patient_summary(patient: str) -> dict:
 			n = frappe.db.count(doctype, {"patient": patient, "docstatus": 1, ARCHIVED_FIELD: 0})
 			if n:
 				out["counts"][doctype] = n
+	if out["pregnancy"]:  # DEFECT-MCH-7: the pregnancy's dates are patient data read through the API (D44)
+		from onerc_healthcare.privacy import access_log
+
+		access_log.log_access(
+			access_log.ACTION_READ_API,
+			ANC_PREGNANCY_DOCTYPE,
+			out["pregnancy"].name,
+			patient=patient,
+			detail="patient_summary",
+		)
 	return out
