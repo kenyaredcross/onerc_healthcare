@@ -59,6 +59,7 @@ def install() -> None:
 	hide_billing_fields()
 	add_archived_fields()
 	apply_session_security()
+	apply_two_factor_off()
 	apply_log_retention()
 
 
@@ -380,6 +381,22 @@ def apply_session_security() -> None:
 	for field, value in matrix.WEBSITE_SETTINGS.items():
 		frappe.db.set_single_value("Website Settings", field, value)
 	frappe.db.set_default(SYSTEM_SETTINGS_MARKER, "1")
+
+
+TWO_FACTOR_OFF_MARKER = "krcs_security_fixups_v7"
+
+
+def apply_two_factor_off() -> None:
+	"""D64 (user, 2026-11-24): turn two-factor sign-in off once on sites set up with it (D16). The OTP-app
+	setup emails a QR code at first sign-in, which fails with "setup default outgoing email account" because
+	no email account is configured. Runs once; a System Manager may switch it back on later."""
+	if frappe.db.get_default(TWO_FACTOR_OFF_MARKER):
+		return
+	frappe.db.set_single_value("System Settings", "enable_two_factor_auth", 0)
+	for role in ("All", *matrix.ROLE_SETTINGS):
+		if frappe.db.exists("Role", role):
+			frappe.db.set_value("Role", role, "two_factor_auth", 0)
+	frappe.db.set_default(TWO_FACTOR_OFF_MARKER, "1")
 
 
 # ---------------------------------------------------------------------------

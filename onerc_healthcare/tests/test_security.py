@@ -452,13 +452,12 @@ class TestSessionSecurity(EMRTestCase):
 		hours, _minutes = frappe.db.get_single_value("System Settings", "session_expiry").split(":")
 		self.assertLessEqual(int(hours), 12)
 
-	def test_two_factor_for_admin_and_his_only(self):
-		"""SDD §6.3: 2FA for the System Administrator and HIS Officer, available to all."""
-		self.assertEqual(frappe.db.get_single_value("System Settings", "enable_two_factor_auth"), 1)
-		for role in ALL_ROLES:
-			expected = 1 if role in (ROLE_SYSADMIN, ROLE_HIS) else 0
-			self.assertEqual(frappe.db.get_value("Role", role, "two_factor_auth"), expected, role)
-		self.assertEqual(frappe.db.get_value("Role", "All", "two_factor_auth"), 0)
+	def test_two_factor_off(self):
+		"""D64 (user, 2026-11-24): two-factor sign-in is off (no outgoing email account for the OTP setup)."""
+		self.assertEqual(frappe.db.get_single_value("System Settings", "enable_two_factor_auth"), 0)
+		for role in (*ALL_ROLES, "All"):
+			if frappe.db.exists("Role", role):
+				self.assertEqual(frappe.db.get_value("Role", role, "two_factor_auth"), 0, role)
 
 	def test_no_self_signup(self):
 		"""NFR-8: no anonymous or self-created accounts."""

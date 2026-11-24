@@ -250,14 +250,14 @@ ROLE_SETTINGS: dict[str, dict] = {
 	ROLE_MHO: {"desk_access": 1, "home_page": "app/patient-encounter"},
 	ROLE_LAB: {"desk_access": 1, "home_page": "app/sample-collection"},
 	ROLE_PHARMACIST: {"desk_access": 1, "home_page": "app/medication-request"},
-	ROLE_HIS: {"desk_access": 1, "home_page": "app/patient", "two_factor_auth": 1},
+	ROLE_HIS: {"desk_access": 1, "home_page": "app/patient"},
 	ROLE_MIC: {"desk_access": 1, "home_page": "app/patient"},
 	ROLE_HEAD_OPS: {"desk_access": 1, "home_page": "app/patient-visit"},
 	# Phase 5M: the Maternity workspace may replace this list route later (integrator).
 	ROLE_MIDWIFE: {"desk_access": 1, "home_page": "app/maternity-admission"},
 	# Phase 6S: the Stores workspace (the integrator adds it with the desk area).
 	ROLE_STORE_KEEPER: {"desk_access": 1, "home_page": "app/stores"},
-	ROLE_SYSADMIN: {"desk_access": 1, "home_page": "app/user", "two_factor_auth": 1},
+	ROLE_SYSADMIN: {"desk_access": 1, "home_page": "app/user"},
 	# No desk access (SDD §6.1): the outreach app (Phase 4) is the only entry point.
 	ROLE_OUTREACH: {"desk_access": 0},
 }
@@ -269,7 +269,9 @@ SYSTEM_SETTINGS = {
 	"allow_consecutive_login_attempts": 5,
 	"allow_login_after_fail": 900,  # seconds locked out after 5 failures
 	"session_expiry": "08:00",  # idle expiry (hh:mm); the Medical In-Charge may change it
-	"enable_two_factor_auth": 1,
+	# D64 (user, 2026-11-24): two-factor sign-in is off. Its OTP-app setup emails a QR code, and no outgoing
+	# email account exists. Re-enable here (and per role) once an email account is configured.
+	"enable_two_factor_auth": 0,
 	"two_factor_method": "OTP App",
 	"allow_guests_to_upload_files": 0,
 }

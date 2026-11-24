@@ -521,3 +521,11 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
   - the screening tools (PHQ-9 and GAD-7; others such as AUDIT or PCL-5?);
   - whether the note shows in the history panel and print formats (it does not yet);
   - whether Mental Health consultations stay open to the Clinical Officer (D28).
+
+**D64. Two-factor sign-in off, 2026-11-24 (user).** This revises D16, which required 2FA for the HIS Officer and the EMR System Administrator.
+- **Why:** signing in failed with "Please setup default outgoing email account". The OTP-app setup emails a QR code on first sign-in, and no outgoing email account is configured.
+- **What changed:**
+  - `enable_two_factor_auth` is 0, and no role has `two_factor_auth`.
+  - On new sites this comes from `security.matrix.SYSTEM_SETTINGS` and `ROLE_SETTINGS`.
+  - On existing sites the one-time fix-up `krcs_security_fixups_v7` (`security.setup.apply_two_factor_off`) applies it.
+- **To restore:** configure an outgoing email account (or use SMS), then a System Manager switches it back on in System Settings and on the two roles. Before go-live this needs a decision, because SDD §6.3 and NFR-5 expect it.

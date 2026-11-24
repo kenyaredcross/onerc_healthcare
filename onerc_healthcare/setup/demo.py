@@ -43,8 +43,7 @@ from onerc_healthcare.setup.operations import get_facilities, get_operation
 DEMO_PASSWORD = "Kalobeyei-Demo#2026"
 DOMAIN = "krcs-demo.test"
 
-# (key, first, last, role). HIS Officer and EMR System Administrator have 2FA (D16): they need an
-# authenticator app on first login.
+# (key, first, last, role). Two-factor sign-in is off (D64), so every demo user signs in with the password.
 STAFF = (
 	("reception", "Achieng", "Otieno", ROLE_RECEPTIONIST),
 	("triage", "Ekai", "Lokwang", ROLE_TRIAGE),
