@@ -19,6 +19,7 @@ This guide is for outreach team members, the HIS Officer and the Medical In-Char
    - The app now works offline for **7 days**.
    - It locks after 15 minutes idle; unlock it with the PIN.
    - After 5 wrong PINs, sign in online again. Your records are kept.
+4. **Wrong account, or no session listed?** Use **Sign out** (top right) on the session, PIN or download screen, and tap it again to confirm. It cancels the setup of this tablet so the right person can sign in. Sign out is refused if anything on the tablet is not yet synced, so nothing is lost.
 
 ## In the field (offline)
 - **Find a patient** by name or identifier, or **register** a new one:
