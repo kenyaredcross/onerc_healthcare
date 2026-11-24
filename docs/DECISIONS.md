@@ -496,3 +496,28 @@ Numbered rulings. Add new ones at the end; never renumber. Requirement IDs refer
     - Vitamin A from 9 months then 6-monthly to 59 months. Kenya's 6-month Vitamin A dose is not seeded.
   - **ANC/PNC plausible ranges.**
   - **Whether ward PNC checks count in B09.**
+
+**D63. Mental Health consultation note, 2026-11-24.** BRD FR-13, SDD §5.3, tracker CON-13. Built now on a **provisional format**, to be confirmed with the Mental Health Officer (OI-7).
+- **Where:** a structured section on the Mental Health consultation itself (Patient Encounter `krcs_mh_*` custom fields, `clinical/setup.py`, logic in `clinical/mh_note.py`), not a separate record.
+  - It inherits the encounter's sensitive access logging (D44), its hiding from Midwife-only readers and its exclusion from outreach.
+  - Other departments never carry the fields: the server clears them.
+- **Format** (from the Dadaab Mental Health Admission Form headings, SDD §5.12.4, plus a standard outpatient psychiatric assessment):
+
+  | Section | Contents |
+  |---|---|
+  | Assessment | Visit type, referral source, onset, past psychiatric and medical history, substance use, personal and social history (displacement, trauma) |
+  | Mental state examination | Appearance and behaviour, speech, mood, affect, thought form and content, perception, cognition, insight, judgement |
+  | Risk | Suicide risk and harm to others (None identified / Low / Moderate / High), recent self-harm, notes, safety plan |
+  | Screening scores (optional) | PHQ-9 (0–27) and GAD-7 (0–21), stored so that blank differs from 0 |
+  | Plan | Formulation, interventions, follow-up date |
+- **Completing the consultation** needs the two risk ratings and the mood. A **safety plan** is required when either risk is High or recent self-harm is ticked. A red "High risk" headline shows on the form.
+- **Corrections after completion** use the encounter addendum (D29).
+- **Review fixes:**
+  - **DEFECT-MH-1:** the clinic (`krcs_department`) of an existing consultation could be changed through the API, which cleared the note, skipped its rules and dropped its sensitivity. It can no longer change; refer the patient instead.
+  - **DEFECT-MH-2:** an oversized score caused a server error. It is now a validation message.
+  - **DEFECT-MH-3:** the note fields printed. They are now `print_hide`.
+- **Still to confirm (OI-7):**
+  - the required fields, the safety-plan trigger and the option lists;
+  - the screening tools (PHQ-9 and GAD-7; others such as AUDIT or PCL-5?);
+  - whether the note shows in the history panel and print formats (it does not yet);
+  - whether Mental Health consultations stay open to the Clinical Officer (D28).
